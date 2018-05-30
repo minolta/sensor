@@ -8,11 +8,19 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+#include <ESP8266httpUpdate.h>
+
 #include "Timer.h"
-const char *ssid = "pksy";         //กำหนด SSID (อย่าลืมแก้เป็นของตัวเอง)
-const char *password = "04qwerty"; //กำหนด Password(อย่าลืมแก้เป็นของตัวเอง)
+#include <max6675.h>
+const char *ssid = "Sirifarm";       //กำหนด SSID (อย่าลืมแก้เป็นของตัวเอง)
+const char *password = "0932154741"; //กำหนด Password(อย่าลืมแก้เป็นของตัวเอง)
+
+const char *ssid1 = "pksy";         //กำหนด SSID (อย่าลืมแก้เป็นของตัวเอง)
+const char *password1 = "04qwerty"; //กำหนด Password(อย่าลืมแก้เป็นของตัวเอง)
 //const char *ssid = "Sirifarm";       //กำหนด SSID (อย่าลืมแก้เป็นของตัวเอง)
 //const char *password = "0932154741"; //กำหนด Password(อย่าลืมแก้เป็นของตัวเอง)
+const char *host = "endpoint.pixka.me:5002";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 ESP8266WebServer server(80);
@@ -37,7 +45,16 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 int countsend = 0;
 uint32_t delayMS;
 float pfDew, pfHum, pfTemp, pfVcc;
+float a0value;
+float rawvalue = 0;
 
+int ktcSO = 12;
+int ktcCS = 13;
+int ktcCLK = 14;
+
+MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
+ESP8266WiFiMulti WiFiMulti;
+float ktypevalue = 0;
 void readDHT()
 {
     count++;
@@ -76,14 +93,88 @@ void readDHT()
     // tempC = sensors.getTempC(t);
 }
 
-void sendDht()
+void sendA0()
+{
+
+    if (rawvalue < 100)
+    {
+        Serial.println("Error value A0");
+        return;
+    }
+    StaticJsonBuffer<300> JSONbuffer;
+    JsonObject &JSONencoder = JSONbuffer.createObject();
+    JSONencoder["rawvalue"] = rawvalue;
+    JSONencoder["pressurevalue"] = a0value;
+    //pressurevalue
+    // JSONencoder["t"] = pfTemp;
+    // JSONencoder["h"] = pfHum;
+    JsonObject &pidevice = JSONencoder.createNestedObject("device");
+    pidevice["mac"] = WiFi.macAddress();
+
+    char JSONmessageBuffer[300];
+    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+    Serial.println(JSONmessageBuffer);
+    // put your main code here, to run repeatedly:
+    HTTPClient http; //Declare object of class HTTPClient
+
+    http.begin("http://endpoint.pixka.me:5002/pressure/add"); //Specify request destination
+    http.addHeader("Content-Type", "application/json");       //Specify content-type header
+
+    int httpCode = http.POST(JSONmessageBuffer); //Send the request
+    String payload = http.getString();           //Get the response payload
+    Serial.print(" Http Code:");
+    Serial.println(httpCode); //Print HTTP return code
+    Serial.print(" Play load:");
+    Serial.println(payload); //Print request response payload
+
+    http.end(); //Close connection
+}
+
+void sendKtype()
 {
     StaticJsonBuffer<300> JSONbuffer;
     JsonObject &JSONencoder = JSONbuffer.createObject();
     JSONencoder["mac"] = WiFi.macAddress();
     // JSONencoder["t"] = pfTemp;
     // JSONencoder["h"] = pfHum;
+    JsonObject &dht = JSONencoder.createNestedObject("ds18value");
+    dht["t"] = ktypevalue;
+
+    JsonObject &sensor = dht.createNestedObject("ds18sensor");
+    sensor["name"] = WiFi.macAddress();
+    sensor["callname"] = WiFi.macAddress();
+
+    char JSONmessageBuffer[300];
+    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+    Serial.println(JSONmessageBuffer);
+    // put your main code here, to run repeatedly:
+    HTTPClient http; //Declare object of class HTTPClient
+
+    http.begin("http://endpoint.pixka.me:5002/ds18value/add"); //Specify request destination
+    http.addHeader("Content-Type", "application/json");        //Specify content-type header
+
+    int httpCode = http.POST(JSONmessageBuffer); //Send the request
+    String payload = http.getString();           //Get the response payload
+    Serial.print(" Http Code:");
+    Serial.println(httpCode); //Print HTTP return code
+    Serial.print(" Play load:");
+    Serial.println(payload); //Print request response payload
+
+    http.end(); //Close connection
+}
+void sendDht()
+{
+    if (pfTemp == 0 || pfHum == 0)
+    {
+        return;
+    }
+    StaticJsonBuffer<300> JSONbuffer;
+    JsonObject &JSONencoder = JSONbuffer.createObject();
+    JSONencoder["mac"] = WiFi.macAddress();
+    // JSONencoder["t"] = pfTemp;
+    // JSONencoder["h"] = pfHum;
     JsonObject &dht = JSONencoder.createNestedObject("dhtvalue");
+
     dht["t"] = pfTemp;
     dht["h"] = pfHum;
 
@@ -93,8 +184,8 @@ void sendDht()
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
-    http.begin("http://endpoint.pixka.me:5002/dht/add");   //Specify request destination
-    http.addHeader("Content-Type", "application/json"); //Specify content-type header
+    http.begin("http://endpoint.pixka.me:5002/dht/add"); //Specify request destination
+    http.addHeader("Content-Type", "application/json");  //Specify content-type header
 
     int httpCode = http.POST(JSONmessageBuffer); //Send the request
     String payload = http.getString();           //Get the response payload
@@ -124,8 +215,8 @@ void checkin()
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
-    http.begin("http://endpoint.pixka.me:5002/checkin");   //Specify request destination
-    http.addHeader("Content-Type", "application/json"); //Specify content-type header
+    http.begin("http://endpoint.pixka.me:5002/checkin"); //Specify request destination
+    http.addHeader("Content-Type", "application/json");  //Specify content-type header
 
     int httpCode = http.POST(JSONmessageBuffer); //Send the request
     String payload = http.getString();           //Get the response payload
@@ -144,7 +235,6 @@ void writeResponse(WiFiClient &client, JsonObject &json)
     client.println("Access-Control-Allow-Origin: *");
     client.println("Connection: close");
     client.println();
-
     json.prettyPrintTo(client);
 }
 bool readRequest(WiFiClient &client)
@@ -225,6 +315,14 @@ void runCommand()
     Serial.println("Set port " + s + " to " + set);
     digitalWrite(s.toInt(), set.toInt());
 }
+
+void readKtype()
+{
+    float DC = ktc.readCelsius();
+    ktypevalue = DC;
+    Serial.print("K type value ");
+    Serial.println(DC);
+}
 void readA0()
 {
     int sensorValue = analogRead(A0);
@@ -232,9 +330,12 @@ void readA0()
     Serial.print(sensorValue); // print out the value you read:
 
     float volts = 3.30 * (float)sensorValue / 1023.00;
+    float psi = (volts - 1.45) * 10;
     Serial.print(" , Voltage = ");
     Serial.print(volts, 2);
     Serial.println(" V");
+    a0value = psi;
+    rawvalue = sensorValue;
 }
 void DHTtoJSON()
 {
@@ -266,9 +367,48 @@ void senddata()
     checkin();
     readDHT();
     sendDht();
+    sendA0();
+    sendKtype();
     digitalWrite(LED_BUILTIN, HIGH);
+    // readKtype();
 }
 
+void connect()
+{
+    int waitforconnect = 0;
+    Serial.print("Connecting to ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);           //เชื่อมต่อกับ AP
+    while (WiFi.status() != WL_CONNECTED) //รอการเชื่อมต่อ
+    {
+        delay(500);
+        Serial.print(".");
+        waitforconnect++;
+
+        if (waitforconnect >= 20)
+        {
+            break;
+        }
+    }
+    waitforconnect = 0;
+    Serial.print("Connecting to ");
+    Serial.println(ssid1);
+    WiFi.begin(ssid1, password1);         //เชื่อมต่อกับ AP
+    while (WiFi.status() != WL_CONNECTED) //รอการเชื่อมต่อ
+    {
+        delay(500);
+        Serial.print(".");
+        waitforconnect++;
+
+        if (waitforconnect >= 20)
+        {
+            break;
+        }
+    }
+
+    Serial.println("");
+    Serial.println("WiFi connected"); //แสดงข้อความเชื่อมต่อสำเร็จ
+}
 void setup()
 {
     pinMode(LED_BUILTIN, OUTPUT);
@@ -279,16 +419,16 @@ void setup()
     Serial.begin(9600);
     Serial.println();
     Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-    WiFi.begin(ssid, password);           //เชื่อมต่อกับ AP
-    while (WiFi.status() != WL_CONNECTED) //รอการเชื่อมต่อ
+
+    // connect();
+    WiFiMulti.addAP("Sirifarm", "0932154741");
+    WiFiMulti.addAP("pksy", "04qwerty");
+
+    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
         delay(500);
         Serial.print(".");
     }
-    Serial.println("");
-    Serial.println("WiFi connected"); //แสดงข้อความเชื่อมต่อสำเร็จ
 
     server.on("/dht", DHTtoJSON);
     server.on("/command", runCommand);
@@ -320,7 +460,8 @@ void loop()
     }
 
     readA0();
-    delay(1000); 
+    readKtype();
+    delay(1000);
 
     //delay(30000); //Send a request every 30 seconds
     countsend++;
