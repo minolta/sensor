@@ -330,7 +330,7 @@ void readA0()
     Serial.print(sensorValue); // print out the value you read:
 
     float volts = 3.30 * (float)sensorValue / 1023.00;
-    float psi = (volts - 1.45) * 10;
+    float psi = (volts - 1.5) * 10;
     Serial.print(" , Voltage = ");
     Serial.print(volts, 2);
     Serial.println(" V");
@@ -361,14 +361,32 @@ void DHTtoJSON()
     */
     //writeResponse(client, json);
 }
+void PressuretoJSON()
+{
+    digitalWrite(LED_BUILTIN, LOW);
+    readA0();
+    digitalWrite(LED_BUILTIN, HIGH);
+
+    StaticJsonBuffer<300> jsonBuffer;
+    JsonObject &root = jsonBuffer.createObject();
+    //root["mac"] = WiFi.macAddress();
+    root["rawvalue"] = rawvalue;
+    root["pressurevalue"] = a0value;
+    JsonObject &device =  root.createNestedObject("device");
+    device["mac"]=WiFi.macAddress();
+
+    char jsonChar[200];
+    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    server.send(200, "application/json", jsonChar);
+}
 void senddata()
 {
     digitalWrite(LED_BUILTIN, LOW);
     checkin();
-    readDHT();
-    sendDht();
-    sendA0();
-    sendKtype();
+    //readDHT();
+    //sendDht();
+    //sendA0();
+    //sendKtype();
     digitalWrite(LED_BUILTIN, HIGH);
     // readKtype();
 }
@@ -431,6 +449,7 @@ void setup()
     }
 
     server.on("/dht", DHTtoJSON);
+    server.on("/pressure", PressuretoJSON);
     server.on("/command", runCommand);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
@@ -459,8 +478,8 @@ void loop()
         Serial.println("Error in WiFi connection");
     }
 
-    readA0();
-    readKtype();
+    // readA0();
+    // readKtype();
     delay(1000);
 
     //delay(30000); //Send a request every 30 seconds
