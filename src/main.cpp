@@ -1,7 +1,5 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
@@ -26,9 +24,6 @@ int count = 0;
 ESP8266WebServer server(80);
 #define ONE_WIRE_BUS D4
 uint8_t deviceCount = 0;
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
-
 float tempC;
 Timer t;
 #define DHTPIN D2 // Pin which is connected to the DHT sensor.
@@ -441,6 +436,7 @@ void setup()
     // connect();
     WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("pksy", "04qwerty");
+    WiFiMulti.addAP("SP","04qwerty");
 
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
