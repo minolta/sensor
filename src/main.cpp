@@ -11,13 +11,7 @@
 
 #include "Timer.h"
 #include <max6675.h>
-const char *ssid = "Sirifarm";       //กำหนด SSID (อย่าลืมแก้เป็นของตัวเอง)
-const char *password = "0932154741"; //กำหนด Password(อย่าลืมแก้เป็นของตัวเอง)
 
-const char *ssid1 = "pksy";         //กำหนด SSID (อย่าลืมแก้เป็นของตัวเอง)
-const char *password1 = "04qwerty"; //กำหนด Password(อย่าลืมแก้เป็นของตัวเอง)
-//const char *ssid = "Sirifarm";       //กำหนด SSID (อย่าลืมแก้เป็นของตัวเอง)
-//const char *password = "0932154741"; //กำหนด Password(อย่าลืมแก้เป็นของตัวเอง)
 const char *host = "endpoint.pixka.me:5002";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
@@ -265,34 +259,6 @@ JsonObject &prepareResponse(JsonBuffer &jsonBuffer)
 }
 void httpService()
 {
-    /*
-    WiFiClient client = server.available();
-    if (client)
-    {
-        String req = client.readStringUntil('\r');
-        Serial.println("Req:"+req);
-      
-        bool success = readRequest(client);
-        if (success)
-        {
-
-            String req = client.readStringUntil('\r');
-            Serial.println("Req:"+req);
-            delay(1000);
-
-            digitalWrite(LED_BUILTIN, LOW);
-            readDHT();
-            digitalWrite(LED_BUILTIN, HIGH);
-
-            StaticJsonBuffer<500> jsonBuffer;
-            JsonObject &json = prepareResponse(jsonBuffer);
-            writeResponse(client, json);
-        }
-       
-        delay(1);
-        client.stop();
-    }
-    */
 }
 void runCommand()
 {
@@ -311,12 +277,13 @@ void runCommand()
     digitalWrite(s.toInt(), set.toInt());
 }
 
-void readKtype()
+float readKtype()
 {
     float DC = ktc.readCelsius();
     ktypevalue = DC;
     Serial.print("K type value ");
     Serial.println(DC);
+    return DC;
 }
 void readA0()
 {
@@ -343,18 +310,6 @@ void DHTtoJSON()
     char jsonChar[100];
     json.printTo((char *)jsonChar, json.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
-    /*
-    String message;
-    for (int i = 0; i < server.args(); i++)
-    {
-
-        message += "Arg n" + (String)i + " –> "; //Include the current iteration value
-        message += server.argName(i) + ": ";      //Get the name of the parameter
-        message += server.arg(i) + "\n";          //Get the value of the parameter
-    }
-    Serial.println("Arg: "+message);
-    */
-    //writeResponse(client, json);
 }
 void PressuretoJSON()
 {
@@ -367,12 +322,44 @@ void PressuretoJSON()
     //root["mac"] = WiFi.macAddress();
     root["rawvalue"] = rawvalue;
     root["pressurevalue"] = a0value;
-    JsonObject &device =  root.createNestedObject("device");
-    device["mac"]=WiFi.macAddress();
+    JsonObject &device = root.createNestedObject("device");
+    device["mac"] = WiFi.macAddress();
 
     char jsonChar[200];
     root.printTo((char *)jsonChar, root.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
+}
+void KtypetoJSON()
+{
+
+    StaticJsonBuffer<500> jsonBuffer;
+    JsonObject &root = jsonBuffer.createObject();
+    //root["mac"] = WiFi.macAddress();
+    root["mac"] = WiFi.macAddress();
+    root["pressurevalue"] = a0value;
+    JsonObject &ds18value = root.createNestedObject("ds18value");
+    ds18value["t"] = readKtype();
+
+    JsonObject &pidevice = ds18value.createNestedObject("pidevice");
+    pidevice["mac"] = WiFi.macAddress();
+
+    JsonObject &ds18sensor = ds18value.createNestedObject("ds18sensor");
+    ds18sensor["name"] = WiFi.macAddress();
+    ds18sensor["callname "] = WiFi.macAddress();
+
+    JsonObject &device = root.createNestedObject("device");
+    device["mac"] = WiFi.macAddress();
+
+    char jsonChar[400];
+    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    server.send(200, "application/json", jsonChar);
+}
+void info()
+{
+    Serial.print("Mac:");
+    Serial.println(WiFi.macAddress());
+    Serial.print("IP:");
+    Serial.println(WiFi.localIP());
 }
 void senddata()
 {
@@ -388,45 +375,12 @@ void senddata()
 
 void connect()
 {
-    int waitforconnect = 0;
-    Serial.print("Connecting to ");
-    Serial.println(ssid);
-    WiFi.begin(ssid, password);           //เชื่อมต่อกับ AP
-    while (WiFi.status() != WL_CONNECTED) //รอการเชื่อมต่อ
-    {
-        delay(500);
-        Serial.print(".");
-        waitforconnect++;
-
-        if (waitforconnect >= 20)
-        {
-            break;
-        }
-    }
-    waitforconnect = 0;
-    Serial.print("Connecting to ");
-    Serial.println(ssid1);
-    WiFi.begin(ssid1, password1);         //เชื่อมต่อกับ AP
-    while (WiFi.status() != WL_CONNECTED) //รอการเชื่อมต่อ
-    {
-        delay(500);
-        Serial.print(".");
-        waitforconnect++;
-
-        if (waitforconnect >= 20)
-        {
-            break;
-        }
-    }
-
-    Serial.println("");
-    Serial.println("WiFi connected"); //แสดงข้อความเชื่อมต่อสำเร็จ
 }
 void setup()
 {
     pinMode(LED_BUILTIN, OUTPUT);
-    pinMode(D6, OUTPUT);
-    pinMode(D5, OUTPUT);
+    //pinMode(D6, OUTPUT);
+    //pinMode(D5, OUTPUT);
     pinMode(D1, OUTPUT);
     pinMode(D3, OUTPUT);
     Serial.begin(9600);
@@ -436,7 +390,7 @@ void setup()
     // connect();
     WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("pksy", "04qwerty");
-    WiFiMulti.addAP("SP","04qwerty");
+    WiFiMulti.addAP("SP", "04qwerty");
 
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
@@ -447,6 +401,8 @@ void setup()
     server.on("/dht", DHTtoJSON);
     server.on("/pressure", PressuretoJSON);
     server.on("/command", runCommand);
+    server.on("/ktype", KtypetoJSON);
+    server.on("/info", info);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
@@ -476,8 +432,8 @@ void loop()
 
     // readA0();
     // readKtype();
-    delay(1000);
+    //delay(1000);
 
     //delay(30000); //Send a request every 30 seconds
-    countsend++;
+    // countsend++;
 }
