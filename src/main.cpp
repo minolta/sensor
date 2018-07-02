@@ -13,6 +13,8 @@
 #include <max6675.h>
 
 const char *host = "endpoint.pixka.me:5002";
+const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
+const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 ESP8266WebServer server(80);
@@ -335,22 +337,22 @@ void KtypetoJSON()
     StaticJsonBuffer<500> jsonBuffer;
     JsonObject &root = jsonBuffer.createObject();
     //root["mac"] = WiFi.macAddress();
-    root["mac"] = WiFi.macAddress();
-    root["pressurevalue"] = a0value;
-    JsonObject &ds18value = root.createNestedObject("ds18value");
-    ds18value["t"] = readKtype();
+    // root["mac"] = WiFi.macAddress();
+    //root["pressurevalue"] = a0value;
+    // JsonObject &ds18value = root.createNestedObject("ds18value");
+    root["t"] = readKtype();
 
-    JsonObject &pidevice = ds18value.createNestedObject("pidevice");
+    JsonObject &pidevice = root.createNestedObject("pidevice");
     pidevice["mac"] = WiFi.macAddress();
 
-    JsonObject &ds18sensor = ds18value.createNestedObject("ds18sensor");
+    JsonObject &ds18sensor = root.createNestedObject("ds18sensor");
     ds18sensor["name"] = WiFi.macAddress();
     ds18sensor["callname "] = WiFi.macAddress();
 
     JsonObject &device = root.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
 
-    char jsonChar[400];
+    char jsonChar[500];
     root.printTo((char *)jsonChar, root.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
 }
@@ -361,6 +363,23 @@ void info()
     Serial.print("IP:");
     Serial.println(WiFi.localIP());
 }
+void ota()
+{
+
+    t_httpUpdate_return ret = ESPhttpUpdate.update("endpoint.pixka.me", 5002, "/espupdate", version );
+    switch (ret)
+    {
+    case HTTP_UPDATE_FAILED:
+        Serial.println("[update] Update failed.");
+        break;
+    case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("[update] Update no Update.");
+        break;
+    case HTTP_UPDATE_OK:
+        Serial.println("[update] Update ok."); // may not called we reboot the ESP
+        break;
+    }
+}
 void senddata()
 {
     digitalWrite(LED_BUILTIN, LOW);
@@ -369,7 +388,9 @@ void senddata()
     //sendDht();
     //sendA0();
     //sendKtype();
+    ota();
     digitalWrite(LED_BUILTIN, HIGH);
+
     // readKtype();
 }
 
