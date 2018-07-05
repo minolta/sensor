@@ -362,6 +362,21 @@ void info()
     Serial.println(WiFi.macAddress());
     Serial.print("IP:");
     Serial.println(WiFi.localIP());
+    Serial.print("Version:");
+    Serial.println(version);
+    
+    StaticJsonBuffer<500> jsonBuffer;
+    JsonObject &root = jsonBuffer.createObject();
+    //root["mac"] = WiFi.macAddress();
+    // root["mac"] = WiFi.macAddress();
+    //root["pressurevalue"] = a0value;
+    // JsonObject &ds18value = root.createNestedObject("ds18value");
+    root["mac"] = WiFi.macAddress();
+    root["IP"] = WiFi.localIP().toString();
+    root["version"] = version;
+    char jsonChar[500];
+    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    server.send(200, "application/json", jsonChar);
 }
 void ota()
 {
