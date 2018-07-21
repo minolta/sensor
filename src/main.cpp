@@ -3,6 +3,7 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
+
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
@@ -293,8 +294,11 @@ void readA0()
     Serial.print("ADC 10 bit = ");
     Serial.print(sensorValue); // print out the value you read:
 
+    // (3.6 * val) / 4095;
     float volts = 3.30 * (float)sensorValue / 1023.00;
-    float psi = (volts - 1.5) * 10;
+    //  float psi = (volts - 0.5) * 42.5; //172/psi
+    // float psi = (volts - 0.433) * 3.75; // 15 psi
+    float psi = (volts - 0.48) * 37.5; // 15 psi
     Serial.print(" , Voltage = ");
     Serial.print(volts, 2);
     Serial.println(" V");
@@ -364,7 +368,7 @@ void info()
     Serial.println(WiFi.localIP());
     Serial.print("Version:");
     Serial.println(version);
-    
+
     StaticJsonBuffer<500> jsonBuffer;
     JsonObject &root = jsonBuffer.createObject();
     //root["mac"] = WiFi.macAddress();
@@ -381,7 +385,7 @@ void info()
 void ota()
 {
 
-    t_httpUpdate_return ret = ESPhttpUpdate.update("endpoint.pixka.me", 5002, "/espupdate", version );
+    t_httpUpdate_return ret = ESPhttpUpdate.update("endpoint.pixka.me", 5002, "/espupdate", version);
     switch (ret)
     {
     case HTTP_UPDATE_FAILED:
