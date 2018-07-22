@@ -296,9 +296,9 @@ void readA0()
 
     // (3.6 * val) / 4095;
     float volts = 3.30 * (float)sensorValue / 1023.00;
-    //  float psi = (volts - 0.5) * 42.5; //172/psi
+    float psi = (volts - 0.532) * 42.5; //172/psi
     // float psi = (volts - 0.433) * 3.75; // 15 psi
-    float psi = (volts - 0.48) * 37.5; // 15 psi
+    //float psi = (volts - 0.48) * 37.5; // 15 psi
     Serial.print(" , Voltage = ");
     Serial.print(volts, 2);
     Serial.println(" V");
