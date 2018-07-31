@@ -290,7 +290,19 @@ float readKtype()
 }
 void readA0()
 {
-    int sensorValue = analogRead(A0);
+    int sensorValue = 0;
+    
+
+    //อ่าน 16 ครั้งเพื่อให้ ละเอียดขึ้น
+    for(int i=0;i<16;i++)
+    {
+        sensorValue += analogRead(A0);
+    }
+    
+    sensorValue /= 16;
+
+
+
     Serial.print("ADC 10 bit = ");
     Serial.print(sensorValue); // print out the value you read:
 
