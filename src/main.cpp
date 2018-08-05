@@ -291,29 +291,32 @@ float readKtype()
 void readA0()
 {
     int sensorValue = 0;
-    
 
     //อ่าน 16 ครั้งเพื่อให้ ละเอียดขึ้น
-    for(int i=0;i<16;i++)
+    for (int i = 0; i < 16; i++)
     {
         sensorValue += analogRead(A0);
     }
-    
+
     sensorValue /= 16;
-
-
 
     Serial.print("ADC 10 bit = ");
     Serial.print(sensorValue); // print out the value you read:
 
     // (3.6 * val) / 4095;
-    float volts = 3.30 * (float)sensorValue / 1023.00;
+    // float volts = 3.30 * (float)sensorValue / 1023.00;
+    float volts = 3.02 * (float)sensorValue / 1023.00;
+    float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
+    float pressure_psi = pressure_kPa * 0.14503773773020923;
+
     float psi = (volts - 0.532) * 42.5; //172/psi
     // float psi = (volts - 0.433) * 3.75; // 15 psi
     //float psi = (volts - 0.48) * 37.5; // 15 psi
     Serial.print(" , Voltage = ");
     Serial.print(volts, 2);
-    Serial.println(" V");
+    Serial.print(" V");
+    Serial.print(", PSI:");
+    Serial.println(pressure_psi);
     a0value = psi;
     rawvalue = sensorValue;
 }
