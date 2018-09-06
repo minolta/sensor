@@ -13,6 +13,9 @@
 #include "Timer.h"
 #include <max6675.h>
 
+#include "KAnalog.h"
+
+
 const char *host = "endpoint.pixka.me:5002";
 const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
@@ -23,6 +26,7 @@ ESP8266WebServer server(80);
 uint8_t deviceCount = 0;
 float tempC;
 Timer t;
+KAnalog analog;
 #define DHTPIN D2 // Pin which is connected to the DHT sensor.
 
 // Uncomment the type of sensor in use:
@@ -260,9 +264,10 @@ JsonObject &prepareResponse(JsonBuffer &jsonBuffer)
     root["h"] = pfHum;
     return root;
 }
-void httpService()
-{
-}
+/**
+ * 
+ * Run command คือการเปิด port ที่ส่งมา
+ * */
 void runCommand()
 {
     String s = server.arg("port");
@@ -290,33 +295,30 @@ float readKtype()
 }
 void readA0()
 {
-    int sensorValue = 0;
-
-    //อ่าน 16 ครั้งเพื่อให้ ละเอียดขึ้น
-    for (int i = 0; i < 16; i++)
-    {
-        sensorValue += analogRead(A0);
-    }
-
-    sensorValue /= 16;
+    int sensorValue = analog.readA0();
 
     Serial.print("ADC 10 bit = ");
     Serial.print(sensorValue); // print out the value you read:
 
     // (3.6 * val) / 4095;
     // float volts = 3.30 * (float)sensorValue / 1023.00;
-    float volts = 3.02 * (float)sensorValue / 1023.00;
+    
+    /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
 
-    float psi = (volts - 0.532) * 42.5; //172/psi
+    float psi = (volts - 0.50) * 42.5; //172/psi
+    */
     // float psi = (volts - 0.433) * 3.75; // 15 psi
     //float psi = (volts - 0.48) * 37.5; // 15 psi
+    
+    float volts = analog.readVolts();
+    float psi = analog.readPsi(0.50,42.5);
     Serial.print(" , Voltage = ");
     Serial.print(volts, 2);
     Serial.print(" V");
     Serial.print(", PSI:");
-    Serial.println(pressure_psi);
+    Serial.println(psi);
     a0value = psi;
     rawvalue = sensorValue;
 }
