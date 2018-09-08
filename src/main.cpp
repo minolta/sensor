@@ -15,7 +15,6 @@
 
 #include "KAnalog.h"
 
-
 const char *host = "endpoint.pixka.me:5002";
 const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
@@ -302,7 +301,7 @@ void readA0()
 
     // (3.6 * val) / 4095;
     // float volts = 3.30 * (float)sensorValue / 1023.00;
-    
+
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
@@ -311,9 +310,12 @@ void readA0()
     */
     // float psi = (volts - 0.433) * 3.75; // 15 psi
     //float psi = (volts - 0.48) * 37.5; // 15 psi
-    
+
     float volts = analog.readVolts();
-    float psi = analog.readPsi(0.50,42.5);
+    // 42.5 = 172 psi  37.5 = 150 psi
+    float psi = analog.readPsi(0.55, 37.5);
+    if (psi < 0)
+        psi = 0;
     Serial.print(" , Voltage = ");
     Serial.print(volts, 2);
     Serial.print(" V");
@@ -327,7 +329,6 @@ void DHTtoJSON()
     digitalWrite(LED_BUILTIN, LOW);
     readDHT();
     digitalWrite(LED_BUILTIN, HIGH);
-
     StaticJsonBuffer<300> jsonBuffer;
     JsonObject &json = prepareResponse(jsonBuffer);
     char jsonChar[100];
@@ -339,7 +340,6 @@ void PressuretoJSON()
     digitalWrite(LED_BUILTIN, LOW);
     readA0();
     digitalWrite(LED_BUILTIN, HIGH);
-
     StaticJsonBuffer<300> jsonBuffer;
     JsonObject &root = jsonBuffer.createObject();
     //root["mac"] = WiFi.macAddress();
@@ -347,7 +347,6 @@ void PressuretoJSON()
     root["pressurevalue"] = a0value;
     JsonObject &device = root.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
-
     char jsonChar[200];
     root.printTo((char *)jsonChar, root.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
