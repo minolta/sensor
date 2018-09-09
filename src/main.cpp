@@ -154,7 +154,6 @@ void sendKtype()
     Serial.println(httpCode); //Print HTTP return code
     Serial.print(" Play load:");
     Serial.println(payload); //Print request response payload
-
     http.end(); //Close connection
 }
 void sendDht()
@@ -294,10 +293,10 @@ float readKtype()
 }
 void readA0()
 {
-    int sensorValue = analog.readA0();
+ //   int sensorValue = analog.readA0();
 
     Serial.print("ADC 10 bit = ");
-    Serial.print(sensorValue); // print out the value you read:
+ //   Serial.print(sensorValue); // print out the value you read:
 
     // (3.6 * val) / 4095;
     // float volts = 3.30 * (float)sensorValue / 1023.00;
@@ -311,18 +310,18 @@ void readA0()
     // float psi = (volts - 0.433) * 3.75; // 15 psi
     //float psi = (volts - 0.48) * 37.5; // 15 psi
 
-    float volts = analog.readVolts();
+  //  float volts = analog.readVolts();
     // 42.5 = 172 psi  37.5 = 150 psi
-    float psi = analog.readPsi(0.55, 37.5);
+    float psi = analog.readPsi(0.50, 37.5);
     if (psi < 0)
         psi = 0;
     Serial.print(" , Voltage = ");
-    Serial.print(volts, 2);
+   // Serial.print(volts, 2);
     Serial.print(" V");
     Serial.print(", PSI:");
     Serial.println(psi);
     a0value = psi;
-    rawvalue = sensorValue;
+   // rawvalue = sensorValue;
 }
 void DHTtoJSON()
 {

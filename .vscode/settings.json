@@ -6,6 +6,12 @@
     "files.associations": {
         "array": "cpp",
         "initializer_list": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "deque": "cpp",
+        "list": "cpp",
+        "unordered_map": "cpp",
+        "vector": "cpp",
+        "functional": "cpp",
+        "type_traits": "cpp"
     }
 }

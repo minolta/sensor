@@ -18,7 +18,7 @@ float KAnalog::readPsi(float vinit, float step)
 {
     float volts = readVolts();
     float psi = (volts - vinit) * step;
-    psi = fliter(psi); //หาค่าเฉลีย 
+    psi = fliter(psi); //หาค่าเฉลีย
     return psi;
 }
 
@@ -38,9 +38,12 @@ float KAnalog::fliter(float v)
     for (int j = 0; j < 16; j++)
     {
         t = t + av[j];
+        //  Serial.println(av[j]);
     }
+    v = t/16;
 
-    return t / 16;
+    Serial.println(v);
+    return v;
 }
 //สำหรับดูว่าค่าต่างกันมากหรือเปล่าถ้าต่างมาก return 1 ถ้าไม่ return 0
 int KAnalog::checkOldvalue(float old, float newvalue, long tr)
@@ -66,11 +69,11 @@ float KAnalog::readVolts(void)
 {
 
     float volts = 0;
-    for (int i = 0; i < 16; i++)
-    {
-        float value = readA0();
-        //  Serial.println(value);
-        volts = volts + (3.30 * value / 1023.00);
-    }
-    return volts / 16;
+    //for (int i = 0; i < 16; i++)
+    // {
+    float value = readA0();
+    //  Serial.println(value);
+    volts = (3.30 * value / 1023.00);
+    //}
+    return volts ;
 }
