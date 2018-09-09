@@ -312,7 +312,7 @@ void readA0()
 
   //  float volts = analog.readVolts();
     // 42.5 = 172 psi  37.5 = 150 psi
-    float psi = analog.readPsi(0.50, 37.5);
+    float psi = analog.readPsi(0.52, 37.5);
     if (psi < 0)
         psi = 0;
     Serial.print(" , Voltage = ");
