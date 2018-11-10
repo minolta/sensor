@@ -14,7 +14,7 @@
 #include <max6675.h>
 
 #include "KAnalog.h"
-
+#define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
 const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
@@ -26,7 +26,7 @@ uint8_t deviceCount = 0;
 float tempC;
 Timer t;
 KAnalog analog;
-#define DHTPIN D2 // Pin which is connected to the DHT sensor.
+#define DHTPIN 2 // Pin which is connected to the DHT sensor.
 
 // Uncomment the type of sensor in use:
 //#define DHTTYPE           DHT11     // DHT 11
@@ -158,6 +158,7 @@ void sendKtype()
 }
 void sendDht()
 {
+    readDHT();
     if (pfTemp == 0 || pfHum == 0)
     {
         return;
@@ -326,9 +327,9 @@ void readA0()
 }
 void DHTtoJSON()
 {
-    digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(b_led, LOW);
     readDHT();
-    digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(b_led, HIGH);
     StaticJsonBuffer<300> jsonBuffer;
     JsonObject &json = prepareResponse(jsonBuffer);
     char jsonChar[100];
@@ -436,11 +437,13 @@ void connect()
 }
 void setup()
 {
-    pinMode(LED_BUILTIN, OUTPUT);
+
+    pinMode(b_led, OUTPUT); //On Board LED
+    // pinMode(LED_BUILTIN, OUTPUT);
     //pinMode(D6, OUTPUT);
     //pinMode(D5, OUTPUT);
-    pinMode(D1, OUTPUT);
-    pinMode(D3, OUTPUT);
+    // pinMode(D1, OUTPUT);
+    //  pinMode(D3, OUTPUT);
     Serial.begin(9600);
     Serial.println();
     Serial.println();
@@ -488,11 +491,10 @@ void loop()
         Serial.println("Error in WiFi connection");
     }
 
-    digitalWrite(D3, 0);
-    // readA0();
-    // readKtype();
-    //delay(1000);
-
-    //delay(30000); //Send a request every 30 seconds
-    // countsend++;
+    digitalWrite(b_led, 0);
+   
+    delay(1000);
+    digitalWrite(b_led, 1);
+    delay(1000);
+   
 }
