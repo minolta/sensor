@@ -21,12 +21,12 @@ const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 ESP8266WebServer server(80);
-#define ONE_WIRE_BUS D4
+//#define ONE_WIRE_BUS D4
 uint8_t deviceCount = 0;
 float tempC;
 Timer t;
 KAnalog analog;
-#define DHTPIN 2 // Pin which is connected to the DHT sensor.
+#define DHTPIN D3 // Pin which is connected to the DHT sensor.
 
 // Uncomment the type of sensor in use:
 //#define DHTTYPE           DHT11     // DHT 11
@@ -420,14 +420,14 @@ void ota()
 }
 void senddata()
 {
-    digitalWrite(D3, 1);
+    digitalWrite(b_led, 1);
     checkin();
     //readDHT();
     //sendDht();
     //sendA0();
     //sendKtype();
     ota();
-    digitalWrite(D3, 0);
+    digitalWrite(b_led, 0);
 
     // readKtype();
 }
@@ -474,7 +474,13 @@ void setup()
     dht.begin();
     t.every(60000, senddata);
 }
-
+void inden()
+{
+    digitalWrite(b_led, 0);
+    delay(500);
+    digitalWrite(b_led, 1);
+    delay(500);
+}
 void loop()
 {
 
@@ -483,18 +489,14 @@ void loop()
 
         t.update();
         server.handleClient();
+        digitalWrite(b_led, 0);
+        delay(500);
+        digitalWrite(b_led, 1);
+        delay(500);
         // httpService();
     }
     else
     {
-
         Serial.println("Error in WiFi connection");
     }
-
-    digitalWrite(b_led, 0);
-   
-    delay(1000);
-    digitalWrite(b_led, 1);
-    delay(1000);
-   
 }
