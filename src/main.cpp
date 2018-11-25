@@ -179,9 +179,9 @@ void sendDht()
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
-    http.begin("http://endpoint.pixka.me:5002/dht/add"); //Specify request destination
+    http.begin("http://endpoint.pixka.me:8081/dht/add"); //Specify request destination
     http.addHeader("Content-Type", "application/json");  //Specify content-type header
-
+    http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
     int httpCode = http.POST(JSONmessageBuffer); //Send the request
     String payload = http.getString();           //Get the response payload
     Serial.print(" Http Code:");
@@ -210,8 +210,9 @@ void checkin()
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
-    http.begin("http://endpoint.pixka.me:5002/checkin"); //Specify request destination
+    http.begin("http://endpoint.pixka.me:8081/checkin"); //Specify request destination
     http.addHeader("Content-Type", "application/json");  //Specify content-type header
+    http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
 
     int httpCode = http.POST(JSONmessageBuffer); //Send the request
     String payload = http.getString();           //Get the response payload
