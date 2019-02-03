@@ -12,8 +12,9 @@
 
 #include "Timer.h"
 #include <max6675.h>
-
+#include <Ticker.h>
 #include "KAnalog.h"
+#include <Q2HX711.h>
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
 const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
@@ -27,7 +28,10 @@ float tempC;
 Timer t;
 KAnalog analog;
 #define DHTPIN D3 // Pin which is connected to the DHT sensor.
-
+#define cccc D6;
+const byte hx711_data_pin = D1;
+const byte hx711_clock_pin = D2;
+Q2HX711 hx711(hx711_data_pin, hx711_clock_pin);
 // Uncomment the type of sensor in use:
 //#define DHTTYPE           DHT11     // DHT 11
 #define DHTTYPE DHT22 // DHT 22 (AM2302)
@@ -50,6 +54,8 @@ int ktcCLK = 14;
 MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
 ESP8266WiFiMulti WiFiMulti;
 float ktypevalue = 0;
+Ticker flipper;
+
 void readDHT()
 {
     count++;
@@ -88,6 +94,16 @@ void readDHT()
     // tempC = sensors.getTempC(t);
 }
 
+void read40()
+{
+    float v = hx711.read() / 100.0;
+    StaticJsonBuffer<300> jsonBuffer;
+    JsonObject &root = jsonBuffer.createObject();
+    root["value"] = v;
+    char jsonChar[100];
+    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    server.send(200, "application/json", jsonChar);
+}
 void sendA0()
 {
 
@@ -273,6 +289,7 @@ void runCommand()
     String s = server.arg("port");
     Serial.println("Port:" + s);
     String set = server.arg("set");
+    digitalWrite(s.toInt(), set.toInt());
     StaticJsonBuffer<300> jb;
     JsonObject &json = jb.createObject();
     json["add"] = "ok";
@@ -282,7 +299,6 @@ void runCommand()
     json.printTo((char *)jsonChar, json.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
     Serial.println("Set port " + s + " to " + set);
-    digitalWrite(s.toInt(), set.toInt());
 }
 
 float readKtype()
@@ -355,7 +371,7 @@ void PressuretoJSON()
 }
 void KtypetoJSON()
 {
-    digitalWrite(D3, 1);
+    //  digitalWrite(D3, 1);
     StaticJsonBuffer<500> jsonBuffer;
     JsonObject &root = jsonBuffer.createObject();
     //root["mac"] = WiFi.macAddress();
@@ -378,7 +394,7 @@ void KtypetoJSON()
     root.printTo((char *)jsonChar, root.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
     // server.close();
-    digitalWrite(D3, 0);
+    //  digitalWrite(D3, 0);
 }
 void info()
 {
@@ -432,7 +448,11 @@ void senddata()
 
     // readKtype();
 }
-
+void inden()
+{
+    int state = digitalRead(b_led);
+    digitalWrite(b_led, !state);
+}
 void connect()
 {
 }
@@ -440,16 +460,20 @@ void setup()
 {
 
     pinMode(b_led, OUTPUT); //On Board LED
-    // pinMode(LED_BUILTIN, OUTPUT);
-    //pinMode(D6, OUTPUT);
-    //pinMode(D5, OUTPUT);
-    // pinMode(D1, OUTPUT);
+                            //  pinMode(D4, OUTPUT);
+                            // pinMode(LED_BUILTIN, OUTPUT);
+                            //pinMode(D6, OUTPUT);
+                            //pinMode(D5, OUTPUT);
+    //pinMode(D1, OUTPUT);
     //  pinMode(D3, OUTPUT);
+    // digitalWrite(D3,0);
+
     Serial.begin(9600);
     Serial.println();
     Serial.println();
 
     // connect();
+    WiFiMulti.addAP("SP3", "04qwerty");
     WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("pksy", "04qwerty");
     WiFiMulti.addAP("SP", "04qwerty");
@@ -465,6 +489,7 @@ void setup()
     server.on("/command", runCommand);
     server.on("/ktype", KtypetoJSON);
     server.on("/info", info);
+    server.on("/read40", read40);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
@@ -474,14 +499,9 @@ void setup()
     // Initialize device.
     dht.begin();
     t.every(60000, senddata);
+    flipper.attach(1, inden);
 }
-void inden()
-{
-    digitalWrite(b_led, 0);
-    delay(500);
-    digitalWrite(b_led, 1);
-    delay(500);
-}
+
 void loop()
 {
 
@@ -490,11 +510,6 @@ void loop()
 
         t.update();
         server.handleClient();
-        digitalWrite(b_led, 0);
-        delay(500);
-        digitalWrite(b_led, 1);
-        delay(500);
-        // httpService();
     }
     else
     {

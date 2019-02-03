@@ -40,7 +40,7 @@ float KAnalog::fliter(float v)
         t = t + av[j];
         //  Serial.println(av[j]);
     }
-    v = t/16;
+    v = t / 16;
 
     Serial.println(v);
     return v;
@@ -72,8 +72,9 @@ float KAnalog::readVolts(void)
     //for (int i = 0; i < 16; i++)
     // {
     float value = readA0();
-    //  Serial.println(value);
+    Serial.print("RAW : ");
+    Serial.println(value);
     volts = (3.30 * value / 1023.00);
     //}
-    return volts ;
+    return volts;
 }
