@@ -97,11 +97,10 @@ void readDHT()
 void read40()
 {
     float v = hx711.read() / 100.0;
-    StaticJsonBuffer<300> jsonBuffer;
-    JsonObject &root = jsonBuffer.createObject();
-    root["value"] = v;
+    StaticJsonDocument<500> doc;
+    doc["value"] = v;
     char jsonChar[100];
-    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    serializeJsonPretty(doc, jsonChar, 100);
     server.send(200, "application/json", jsonChar);
 }
 void sendA0()
@@ -112,18 +111,17 @@ void sendA0()
         Serial.println("Error value A0");
         return;
     }
-    StaticJsonBuffer<300> JSONbuffer;
-    JsonObject &JSONencoder = JSONbuffer.createObject();
-    JSONencoder["rawvalue"] = rawvalue;
-    JSONencoder["pressurevalue"] = a0value;
+    StaticJsonDocument<500> doc;
+    doc["rawvalue"] = rawvalue;
+    doc["pressurevalue"] = a0value;
     //pressurevalue
     // JSONencoder["t"] = pfTemp;
     // JSONencoder["h"] = pfHum;
-    JsonObject &pidevice = JSONencoder.createNestedObject("device");
+    JsonObject pidevice = doc.createNestedObject("device");
     pidevice["mac"] = WiFi.macAddress();
 
     char JSONmessageBuffer[300];
-    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+    serializeJsonPretty(doc, JSONmessageBuffer, 300);
     Serial.println(JSONmessageBuffer);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
@@ -143,20 +141,19 @@ void sendA0()
 
 void sendKtype()
 {
-    StaticJsonBuffer<300> JSONbuffer;
-    JsonObject &JSONencoder = JSONbuffer.createObject();
-    JSONencoder["mac"] = WiFi.macAddress();
+    StaticJsonDocument<500> doc;
+    doc["mac"] = WiFi.macAddress();
     // JSONencoder["t"] = pfTemp;
     // JSONencoder["h"] = pfHum;
-    JsonObject &dht = JSONencoder.createNestedObject("ds18value");
+    JsonObject dht = doc.createNestedObject("ds18value");
     dht["t"] = ktypevalue;
 
-    JsonObject &sensor = dht.createNestedObject("ds18sensor");
+    JsonObject sensor = dht.createNestedObject("ds18sensor");
     sensor["name"] = WiFi.macAddress();
     sensor["callname"] = WiFi.macAddress();
 
     char JSONmessageBuffer[300];
-    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+    serializeJsonPretty(doc, JSONmessageBuffer, 300);
     Serial.println(JSONmessageBuffer);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
@@ -179,18 +176,17 @@ void sendDht()
     {
         return;
     }
-    StaticJsonBuffer<300> JSONbuffer;
-    JsonObject &JSONencoder = JSONbuffer.createObject();
-    JSONencoder["mac"] = WiFi.macAddress();
+    StaticJsonDocument<500> doc;
+    doc["mac"] = WiFi.macAddress();
     // JSONencoder["t"] = pfTemp;
     // JSONencoder["h"] = pfHum;
-    JsonObject &dht = JSONencoder.createNestedObject("dhtvalue");
+    JsonObject dht = doc.createNestedObject("dhtvalue");
 
     dht["t"] = pfTemp;
     dht["h"] = pfHum;
 
     char JSONmessageBuffer[300];
-    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+    serializeJsonPretty(doc, JSONmessageBuffer, 300);
     Serial.println(JSONmessageBuffer);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
@@ -209,19 +205,18 @@ void sendDht()
 }
 void checkin()
 {
-    StaticJsonBuffer<300> JSONbuffer;
-    JsonObject &JSONencoder = JSONbuffer.createObject();
-    JSONencoder["mac"] = WiFi.macAddress();
-    JSONencoder["password"] = "";
-    JSONencoder["ip"] = WiFi.localIP().toString();
+    StaticJsonDocument<500> doc;
+    doc["mac"] = WiFi.macAddress();
+    doc["password"] = "";
+    doc["ip"] = WiFi.localIP().toString();
     // JSONencoder["t"] = pfTemp;
     // JSONencoder["h"] = pfHum;
-    JsonObject &dht = JSONencoder.createNestedObject("dhtvalue");
+    JsonObject dht = doc.createNestedObject("dhtvalue");
     dht["t"] = pfTemp;
     dht["h"] = pfHum;
 
     char JSONmessageBuffer[300];
-    JSONencoder.prettyPrintTo(JSONmessageBuffer, sizeof(JSONmessageBuffer));
+    serializeJsonPretty(doc, JSONmessageBuffer, 300);
     Serial.println(JSONmessageBuffer);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
@@ -247,7 +242,7 @@ void writeResponse(WiFiClient &client, JsonObject &json)
     client.println("Access-Control-Allow-Origin: *");
     client.println("Connection: close");
     client.println();
-    json.prettyPrintTo(client);
+    serializeJsonPretty(json, client);
 }
 bool readRequest(WiFiClient &client)
 {
@@ -273,13 +268,13 @@ bool readRequest(WiFiClient &client)
     }
     return false;
 }
-JsonObject &prepareResponse(JsonBuffer &jsonBuffer)
-{
-    JsonObject &root = jsonBuffer.createObject();
-    root["t"] = pfTemp;
-    root["h"] = pfHum;
-    return root;
-}
+// JsonObject &prepareResponse(JsonBuffer &jsonBuffer)
+// {
+//     JsonObject &root = jsonBuffer.createObject();
+//     root["t"] = pfTemp;
+//     root["h"] = pfHum;
+//     return root;
+// }
 /**
  * 
  * Run command คือการเปิด port ที่ส่งมา
@@ -290,13 +285,12 @@ void runCommand()
     Serial.println("Port:" + s);
     String set = server.arg("set");
     digitalWrite(s.toInt(), set.toInt());
-    StaticJsonBuffer<300> jb;
-    JsonObject &json = jb.createObject();
-    json["add"] = "ok";
-    json["port"] = s;
-    json["set"] = set;
+    StaticJsonDocument<500> doc;
+    doc["add"] = "ok";
+    doc["port"] = s;
+    doc["set"] = set;
     char jsonChar[100];
-    json.printTo((char *)jsonChar, json.measureLength() + 1);
+    serializeJsonPretty(doc, jsonChar, 100);
     server.send(200, "application/json", jsonChar);
     Serial.println("Set port " + s + " to " + set);
 }
@@ -331,7 +325,7 @@ void readA0()
     //  float volts = analog.readVolts();
     // 42.5 = 172 psi  37.5 = 150 psi 3.75 = 15psi
     // float psi = analog.readPsi(0.42, 3.75);
-    float psi = analog.readPsi(0.50, 37.5);
+    float psi = analog.readPsi(0.50, 42.5);
     if (psi < 0)
         psi = 0;
     Serial.print(" , Voltage = ");
@@ -347,10 +341,12 @@ void DHTtoJSON()
     digitalWrite(b_led, LOW);
     readDHT();
     digitalWrite(b_led, HIGH);
-    StaticJsonBuffer<300> jsonBuffer;
-    JsonObject &json = prepareResponse(jsonBuffer);
+    StaticJsonDocument<500> doc;
+    doc["t"] = pfTemp;
+    doc["h"] = pfHum;
     char jsonChar[100];
-    json.printTo((char *)jsonChar, json.measureLength() + 1);
+
+    serializeJsonPretty(doc, jsonChar, 100);
     server.send(200, "application/json", jsonChar);
 }
 void PressuretoJSON()
@@ -358,40 +354,39 @@ void PressuretoJSON()
     digitalWrite(LED_BUILTIN, LOW);
     readA0();
     digitalWrite(LED_BUILTIN, HIGH);
-    StaticJsonBuffer<300> jsonBuffer;
-    JsonObject &root = jsonBuffer.createObject();
+    StaticJsonDocument<500> doc;
     //root["mac"] = WiFi.macAddress();
-    root["rawvalue"] = rawvalue;
-    root["pressurevalue"] = a0value;
-    JsonObject &device = root.createNestedObject("device");
+    doc["rawvalue"] = rawvalue;
+    doc["pressurevalue"] = a0value;
+    JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
     char jsonChar[200];
-    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    serializeJsonPretty(doc, jsonChar, 200);
+    // root.printTo((char *)jsonChar, root.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
 }
 void KtypetoJSON()
 {
     //  digitalWrite(D3, 1);
-    StaticJsonBuffer<500> jsonBuffer;
-    JsonObject &root = jsonBuffer.createObject();
+    StaticJsonDocument<500> doc;
     //root["mac"] = WiFi.macAddress();
     // root["mac"] = WiFi.macAddress();
     //root["pressurevalue"] = a0value;
     // JsonObject &ds18value = root.createNestedObject("ds18value");
-    root["t"] = readKtype();
+    doc["t"] = readKtype();
 
-    JsonObject &pidevice = root.createNestedObject("pidevice");
+    JsonObject pidevice = doc.createNestedObject("pidevice");
     pidevice["mac"] = WiFi.macAddress();
 
-    JsonObject &ds18sensor = root.createNestedObject("ds18sensor");
+    JsonObject ds18sensor = doc.createNestedObject("ds18sensor");
     ds18sensor["name"] = WiFi.macAddress();
     ds18sensor["callname "] = WiFi.macAddress();
 
-    JsonObject &device = root.createNestedObject("device");
+    JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
 
     char jsonChar[500];
-    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
     // server.close();
     //  digitalWrite(D3, 0);
@@ -404,18 +399,17 @@ void info()
     Serial.println(WiFi.localIP());
     Serial.print("Version:");
     Serial.println(version);
-
-    StaticJsonBuffer<500> jsonBuffer;
-    JsonObject &root = jsonBuffer.createObject();
-    //root["mac"] = WiFi.macAddress();
+    StaticJsonDocument<500> doc;
+    //root["mac"] = WiFi.macAddr ess();
     // root["mac"] = WiFi.macAddress();
     //root["pressurevalue"] = a0value;
     // JsonObject &ds18value = root.createNestedObject("ds18value");
-    root["mac"] = WiFi.macAddress();
-    root["IP"] = WiFi.localIP().toString();
-    root["version"] = version;
+    doc["mac"] = WiFi.macAddress();
+    doc["IP"] = WiFi.localIP().toString();
+    doc["version"] = version;
     char jsonChar[500];
-    root.printTo((char *)jsonChar, root.measureLength() + 1);
+    // root.printTo((char *)jsonChar, root.measureLength() + 1);
+    serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
 }
 void ota()
@@ -458,7 +452,8 @@ void connect()
 }
 void setup()
 {
-
+    WiFi.hostname("D1-sensor-1");
+    WiFi.mode(WIFI_STA);
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
                             // pinMode(LED_BUILTIN, OUTPUT);
@@ -473,11 +468,12 @@ void setup()
     Serial.println();
 
     // connect();
-    WiFiMulti.addAP("SP3", "04qwerty");
-    WiFiMulti.addAP("Sirifarm", "0932154741");
-    WiFiMulti.addAP("pksy", "04qwerty");
-    WiFiMulti.addAP("SP", "04qwerty");
 
+    WiFiMulti.addAP("Sirifarm", "0932154741");
+    WiFiMulti.addAP("forgame", "0894297443");
+    WiFiMulti.addAP("pksy", "04qwerty");
+    // WiFiMulti.addAP("SP", "04qwerty");
+    // WiFiMulti.addAP("SP3", "04qwerty");
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
         delay(500);
