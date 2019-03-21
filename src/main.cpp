@@ -47,9 +47,9 @@ float pfDew, pfHum, pfTemp, pfVcc;
 float a0value;
 float rawvalue = 0;
 
-int ktcSO = 12;
-int ktcCS = 13;
-int ktcCLK = 14;
+int ktcSO = D6;
+int ktcCS = D7;
+int ktcCLK = D5;
 
 MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
 ESP8266WiFiMulti WiFiMulti;
