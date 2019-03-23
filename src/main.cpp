@@ -468,10 +468,10 @@ void setup()
     Serial.println();
 
     // connect();
-
-    WiFiMulti.addAP("Sirifarm", "0932154741");
-    WiFiMulti.addAP("forgame", "0894297443");
-    WiFiMulti.addAP("pksy", "04qwerty");
+    WiFiMulti.addAP("forpi", "04qwerty");
+    // WiFiMulti.addAP("Sirifarm", "0932154741");
+    // WiFiMulti.addAP("forgame", "0894297443");
+    // WiFiMulti.addAP("pksy", "04qwerty");
     // WiFiMulti.addAP("SP", "04qwerty");
     // WiFiMulti.addAP("SP3", "04qwerty");
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
