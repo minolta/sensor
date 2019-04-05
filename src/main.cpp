@@ -3,7 +3,7 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
-
+#include <OneWire.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
@@ -15,6 +15,20 @@
 #include <Ticker.h>
 #include "KAnalog.h"
 #include <Q2HX711.h>
+
+class Portio
+{
+  public:
+    int port;
+    int value;
+    int delay;
+    int waittime;
+    int run = 0;
+    String closetime;
+    Portio *n;
+    Portio *p;
+};
+Portio ports[5];
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
 const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
@@ -23,6 +37,7 @@ int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 ESP8266WebServer server(80);
 //#define ONE_WIRE_BUS D4
+OneWire ds(D4); // on pin D4 (a 4.7K resistor is necessary)
 uint8_t deviceCount = 0;
 float tempC;
 Timer t;
@@ -55,7 +70,197 @@ MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
 ESP8266WiFiMulti WiFiMulti;
 float ktypevalue = 0;
 Ticker flipper;
+void setport()
+{
+    ports[0].port = D1;
+    ports[1].port = D2;
+    ports[2].port = D5;
+    ports[3].port = D6;
+    ports[4].port = D7;
+    //   ports[5].port = D8;
+}
+void addTorun(int port, int delay, int value, int wait)
+{
 
+    for (int i = 0; i < 6; i++)
+    {
+        if (ports[i].port == port)
+        {
+            pinMode(port,OUTPUT);
+            // if (!ports[i].run)
+            // {
+            ports[i].value = value;
+            ports[i].delay = delay;
+            ports[i].waittime = wait;
+            ports[i].run = 1;
+            digitalWrite(ports[i].port, value);
+            // }
+            // else
+            // {
+            //   Serial.println("this port running");
+            // }
+        }
+    }
+}
+int getPort(String p)
+{
+    if (p == "D1")
+    {
+        return D1;
+    }
+    else if (p == "D2")
+    {
+        return D2;
+    }
+    else if (p == "D5")
+    {
+        return D5;
+    }
+    else if (p == "D6")
+    {
+        return D6;
+    }
+    else if (p == "D7")
+    {
+        return D7;
+    }
+    else if (p == "D8")
+    {
+        return D8;
+    }
+}
+void run()
+{
+    Serial.println("Run");
+    String p = server.arg("port");
+    String v = server.arg("value");
+    String d = server.arg("delay");
+    String w = server.arg("wait");
+    Serial.println("Port: " + p + " value : " + v + " delay: " + d);
+    int value = v.toInt();
+
+    //int d = server.arg("delay").toInt();
+    int port = getPort(p);
+    addTorun(port, d.toInt(), v.toInt(), w.toInt());
+    // digitalWrite(port, value);
+    server.send(200, "application/json", "ok");
+    // delay(d.toInt() * 1000);
+    // digitalWrite(port, !value);
+    // delay(w.toInt() * 1000);
+    // busy = false;
+}
+void readDS()
+{
+    byte i;
+    byte present = 0;
+    byte type_s;
+    byte data[12];
+    byte addr[8];
+    float celsius, fahrenheit;
+
+    if (!ds.search(addr))
+    {
+        Serial.println("No more addresses.");
+        Serial.println();
+        ds.reset_search();
+        delay(250);
+        return;
+    }
+
+    Serial.print("ROM =");
+    for (i = 0; i < 8; i++)
+    {
+        Serial.write(' ');
+        Serial.print(addr[i], HEX);
+    }
+
+    if (OneWire::crc8(addr, 7) != addr[7])
+    {
+        Serial.println("CRC is not valid!");
+        return;
+    }
+    Serial.println();
+
+    // the first ROM byte indicates which chip
+    switch (addr[0])
+    {
+    case 0x10:
+        Serial.println("  Chip = DS18S20"); // or old DS1820
+        type_s = 1;
+        break;
+    case 0x28:
+        Serial.println("  Chip = DS18B20");
+        type_s = 0;
+        break;
+    case 0x22:
+        Serial.println("  Chip = DS1822");
+        type_s = 0;
+        break;
+    default:
+        Serial.println("Device is not a DS18x20 family device.");
+        return;
+    }
+
+    ds.reset();
+    ds.select(addr);
+    ds.write(0x44, 1); // start conversion, with parasite power on at the end
+
+    delay(1000); // maybe 750ms is enough, maybe not
+    // we might do a ds.depower() here, but the reset will take care of it.
+
+    present = ds.reset();
+    ds.select(addr);
+    ds.write(0xBE); // Read Scratchpad
+
+    Serial.print("  Data = ");
+    Serial.print(present, HEX);
+    Serial.print(" ");
+    for (i = 0; i < 9; i++)
+    { // we need 9 bytes
+        data[i] = ds.read();
+        Serial.print(data[i], HEX);
+        Serial.print(" ");
+    }
+    Serial.print(" CRC=");
+    Serial.print(OneWire::crc8(data, 8), HEX);
+    Serial.println();
+
+    // Convert the data to actual temperature
+    // because the result is a 16 bit signed integer, it should
+    // be stored to an "int16_t" type, which is always 16 bits
+    // even when compiled on a 32 bit processor.
+    int16_t raw = (data[1] << 8) | data[0];
+    if (type_s)
+    {
+        raw = raw << 3; // 9 bit resolution default
+        if (data[7] == 0x10)
+        {
+            // "count remain" gives full 12 bit resolution
+            raw = (raw & 0xFFF0) + 12 - data[6];
+        }
+    }
+    else
+    {
+        byte cfg = (data[4] & 0x60);
+        // at lower res, the low bits are undefined, so let's zero them
+        if (cfg == 0x00)
+            raw = raw & ~7; // 9 bit resolution, 93.75 ms
+        else if (cfg == 0x20)
+            raw = raw & ~3; // 10 bit res, 187.5 ms
+        else if (cfg == 0x40)
+            raw = raw & ~1; // 11 bit res, 375 ms
+                            //// default is 12 bit resolution, 750 ms conversion time
+    }
+    celsius = (float)raw / 16.0;
+    fahrenheit = celsius * 1.8 + 32.0;
+
+    StaticJsonDocument<500> doc;
+    doc["c"] = celsius;
+    doc["f"] = fahrenheit;
+    char jsonChar[100];
+    serializeJsonPretty(doc, jsonChar, 100);
+    server.send(200, "application/json", jsonChar);
+}
 void readDHT()
 {
     count++;
@@ -268,23 +473,17 @@ bool readRequest(WiFiClient &client)
     }
     return false;
 }
-// JsonObject &prepareResponse(JsonBuffer &jsonBuffer)
-// {
-//     JsonObject &root = jsonBuffer.createObject();
-//     root["t"] = pfTemp;
-//     root["h"] = pfHum;
-//     return root;
-// }
-/**
- * 
- * Run command คือการเปิด port ที่ส่งมา
- * */
+
 void runCommand()
 {
     String s = server.arg("port");
-    Serial.println("Port:" + s);
+    String d = server.arg("delay");
+    int p = getPort(s);
+
     String set = server.arg("set");
-    digitalWrite(s.toInt(), set.toInt());
+    digitalWrite(p, set.toInt());
+    addTorun(p, d.toInt(), set.toInt(), 0);
+
     StaticJsonDocument<500> doc;
     doc["add"] = "ok";
     doc["port"] = s;
@@ -303,6 +502,7 @@ float readKtype()
     Serial.println(DC);
     return DC;
 }
+
 void readA0()
 {
     //   int sensorValue = analog.readA0();
@@ -446,6 +646,27 @@ void inden()
 {
     int state = digitalRead(b_led);
     digitalWrite(b_led, !state);
+    for (int i = 0; i < 6; i++)
+    {
+        //  Serial.println("Check port " + ports[i].port);
+        if (ports[i].delay > 0)
+        {
+            ports[i].delay--;
+            Serial.print("Port  ");
+            Serial.println(ports[i].port);
+            Serial.print(" Delay ");
+            Serial.println(ports[i].delay);
+            if (ports[i].delay == 0)
+            {
+                ports[i].run = 0;
+                digitalWrite(ports[i].port, !ports[i].value);
+                Serial.println("End job");
+            }
+        }
+
+        if (ports[i].delay == 0)
+            ports[i].run = 0;
+    }
 }
 void connect()
 {
@@ -454,6 +675,7 @@ void setup()
 {
     WiFi.hostname("D1-sensor-1");
     WiFi.mode(WIFI_STA);
+    setport();
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
                             // pinMode(LED_BUILTIN, OUTPUT);
@@ -486,6 +708,8 @@ void setup()
     server.on("/ktype", KtypetoJSON);
     server.on("/info", info);
     server.on("/read40", read40);
+    server.on("/ds18b20", readDS);
+    server.on("/run", run);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
