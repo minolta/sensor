@@ -9,16 +9,17 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266httpUpdate.h>
-
+#include <OneWire.h>
 #include "Timer.h"
 #include <max6675.h>
 #include <Ticker.h>
 #include "KAnalog.h"
 #include <Q2HX711.h>
-
+#define someofio 5
+// OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
 {
-  public:
+public:
     int port;
     int value;
     int delay;
@@ -28,7 +29,15 @@ class Portio
     Portio *n;
     Portio *p;
 };
-Portio ports[5];
+class DS18b20
+{
+public:
+    float c;
+    float f;
+    float t;
+};
+int watchdog = 0;
+// Portio ports[someofio];
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
 const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
@@ -37,7 +46,7 @@ int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 ESP8266WebServer server(80);
 //#define ONE_WIRE_BUS D4
-OneWire ds(D4); // on pin D4 (a 4.7K resistor is necessary)
+OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
 uint8_t deviceCount = 0;
 float tempC;
 Timer t;
@@ -72,35 +81,43 @@ float ktypevalue = 0;
 Ticker flipper;
 void setport()
 {
-    ports[0].port = D1;
-    ports[1].port = D2;
-    ports[2].port = D5;
-    ports[3].port = D6;
-    ports[4].port = D7;
-    //   ports[5].port = D8;
+    // ports[0].port = D1;
+    // ports[0].delay = 0;
+    // ports[1].port = D2;
+    // ports[1].delay = 0;
+    // ports[2].port = D5;
+    // ports[2].delay = 0;
+
+    // ports[3].port = D6;
+    // ports[3].delay = 0;
+    // ports[4].port = D7;
+    // ports[4].delay = 0;
+    // //   ports[5].port = D8;
 }
 void addTorun(int port, int delay, int value, int wait)
 {
-
-    for (int i = 0; i < 6; i++)
-    {
-        if (ports[i].port == port)
-        {
-            pinMode(port,OUTPUT);
-            // if (!ports[i].run)
-            // {
-            ports[i].value = value;
-            ports[i].delay = delay;
-            ports[i].waittime = wait;
-            ports[i].run = 1;
-            digitalWrite(ports[i].port, value);
-            // }
-            // else
-            // {
-            //   Serial.println("this port running");
-            // }
-        }
-    }
+    // Serial.println("Call addTorun");
+    // for (int i = 0; i < 5; i++)
+    // {
+    //     if (ports[i].port == port)
+    //     {
+    //         Serial.print("Set port  ============ >");
+    //         Serial.println(port);
+    //         pinMode(port, OUTPUT);
+    //         // if (!ports[i].run)
+    //         // {
+    //         ports[i].value = value;
+    //         ports[i].delay = delay;
+    //         ports[i].waittime = wait;
+    //         ports[i].run = 1;
+    //         digitalWrite(ports[i].port, value);
+    //         // }
+    //         // else
+    //         // {
+    //         //   Serial.println("this port running");
+    //         // }
+    //     }
+    // }
 }
 int getPort(String p)
 {
@@ -129,6 +146,7 @@ int getPort(String p)
         return D8;
     }
 }
+
 void run()
 {
     Serial.println("Run");
@@ -149,39 +167,21 @@ void run()
     // delay(w.toInt() * 1000);
     // busy = false;
 }
-void readDS()
+int foundds = 0;
+byte addr[8];
+byte type_s;
+int searchDs()
 {
-    byte i;
-    byte present = 0;
-    byte type_s;
-    byte data[12];
-    byte addr[8];
-    float celsius, fahrenheit;
-
     if (!ds.search(addr))
     {
         Serial.println("No more addresses.");
         Serial.println();
         ds.reset_search();
         delay(250);
-        return;
+        return 0;
     }
-
-    Serial.print("ROM =");
-    for (i = 0; i < 8; i++)
-    {
-        Serial.write(' ');
-        Serial.print(addr[i], HEX);
-    }
-
-    if (OneWire::crc8(addr, 7) != addr[7])
-    {
-        Serial.println("CRC is not valid!");
-        return;
-    }
-    Serial.println();
-
-    // the first ROM byte indicates which chip
+    foundds = 1; //เจอแล้ว
+     // the first ROM byte indicates which chip
     switch (addr[0])
     {
     case 0x10:
@@ -198,14 +198,46 @@ void readDS()
         break;
     default:
         Serial.println("Device is not a DS18x20 family device.");
-        return;
+        return 0;
     }
+    return 1;
+}
+DS18b20 DS()
+{
+    DS18b20 value;
+    value.c = -1;
+    value.f = -1;
+    value.t = -1;
+    byte i;
+    byte present = 0;
+
+    byte data[12];
+
+    float celsius, fahrenheit;
+    if (!foundds)
+        searchDs();
+    // foundds = 1; //เจอแล้ว
+    // Serial.print("ROM =");
+    // for (i = 0; i < 8; i++)
+    // {
+    //     Serial.write(' ');
+    //     Serial.print(addr[i], HEX);
+    // }
+
+    if (OneWire::crc8(addr, 7) != addr[7])
+    {
+        Serial.println("CRC is not valid!");
+        return value;
+    }
+    Serial.println();
+
+   
 
     ds.reset();
     ds.select(addr);
     ds.write(0x44, 1); // start conversion, with parasite power on at the end
 
-    delay(1000); // maybe 750ms is enough, maybe not
+    delay(750); // maybe 750ms is enough, maybe not
     // we might do a ds.depower() here, but the reset will take care of it.
 
     present = ds.reset();
@@ -254,11 +286,20 @@ void readDS()
     celsius = (float)raw / 16.0;
     fahrenheit = celsius * 1.8 + 32.0;
 
+    value.c = celsius;
+    value.f = fahrenheit;
+    value.t = celsius;
+    return value;
+}
+void readDS()
+{
+    DS18b20 v = DS();
     StaticJsonDocument<500> doc;
-    doc["c"] = celsius;
-    doc["f"] = fahrenheit;
-    char jsonChar[100];
-    serializeJsonPretty(doc, jsonChar, 100);
+    doc["c"] = v.c;
+    doc["f"] = v.f;
+    doc["t"] = v.t;
+    char jsonChar[500];
+    serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
 }
 void readDHT()
@@ -502,7 +543,17 @@ float readKtype()
     Serial.println(DC);
     return DC;
 }
-
+void a0()
+{
+    float value = analog.readA0();
+    StaticJsonDocument<500> doc;
+    doc["a0"] = value;
+    JsonObject device = doc.createNestedObject("device");
+    device["mac"] = WiFi.macAddress();
+    char jsonChar[500];
+    serializeJsonPretty(doc, jsonChar, 500);
+    server.send(200, "application/json", jsonChar);
+}
 void readA0()
 {
     //   int sensorValue = analog.readA0();
@@ -567,13 +618,19 @@ void PressuretoJSON()
 }
 void KtypetoJSON()
 {
+    float c = readKtype();
+    if (isnan(c))
+    {
+        DS18b20 ds = DS();
+        c = ds.c;
+    }
     //  digitalWrite(D3, 1);
     StaticJsonDocument<500> doc;
     //root["mac"] = WiFi.macAddress();
     // root["mac"] = WiFi.macAddress();
     //root["pressurevalue"] = a0value;
     // JsonObject &ds18value = root.createNestedObject("ds18value");
-    doc["t"] = readKtype();
+    doc["t"] = c;
 
     JsonObject pidevice = doc.createNestedObject("pidevice");
     pidevice["mac"] = WiFi.macAddress();
@@ -631,51 +688,66 @@ void ota()
 }
 void senddata()
 {
-    digitalWrite(b_led, 1);
-    checkin();
-    //readDHT();
-    //sendDht();
-    //sendA0();
-    //sendKtype();
-    ota();
-    digitalWrite(b_led, 0);
+
+    if (WiFi.status() == WL_CONNECTED)
+    { //Check WiFi connection status
+
+        digitalWrite(b_led, 1);
+        checkin();
+        //readDHT();
+        //sendDht();
+        //sendA0();
+        //sendKtype();
+        ota();
+        digitalWrite(b_led, 0);
+    }
+    else
+    {
+        if (!WiFi.reconnect())
+        {
+            ESP.restart();
+        }
+    }
 
     // readKtype();
 }
 void inden()
 {
-    int state = digitalRead(b_led);
-    digitalWrite(b_led, !state);
-    for (int i = 0; i < 6; i++)
-    {
-        //  Serial.println("Check port " + ports[i].port);
-        if (ports[i].delay > 0)
-        {
-            ports[i].delay--;
-            Serial.print("Port  ");
-            Serial.println(ports[i].port);
-            Serial.print(" Delay ");
-            Serial.println(ports[i].delay);
-            if (ports[i].delay == 0)
-            {
-                ports[i].run = 0;
-                digitalWrite(ports[i].port, !ports[i].value);
-                Serial.println("End job");
-            }
-        }
+    digitalWrite(b_led, !digitalRead(b_led));
+    // for (int i = 0; i < 5; i++)
+    // {
+    //     //  Serial.println("Check port " + ports[i].port);
+    //     if (ports[i].delay > 0)
+    //     {
+    //         ports[i].delay--;
+    //         Serial.print("Port  ");
+    //         Serial.println(ports[i].port);
+    //         Serial.print(" Delay ");
+    //         Serial.println(ports[i].delay);
+    //         if (ports[i].delay == 0)
+    //         {
+    //             ports[i].run = 0;
+    //             digitalWrite(ports[i].port, !ports[i].value);
+    //             Serial.println("End job");
+    //         }
+    //     }
 
-        if (ports[i].delay == 0)
-            ports[i].run = 0;
-    }
+    //     if (ports[i].delay == 0)
+    //         ports[i].run = 0;
+    // }
 }
 void connect()
 {
 }
 void setup()
 {
-    WiFi.hostname("D1-sensor-1");
+    //WiFi.hostname("D1-sensor-1");
+    Serial.begin(9600);
+    Serial.println();
+    Serial.println();
+
     WiFi.mode(WIFI_STA);
-    setport();
+
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
                             // pinMode(LED_BUILTIN, OUTPUT);
@@ -685,13 +757,11 @@ void setup()
     //  pinMode(D3, OUTPUT);
     // digitalWrite(D3,0);
 
-    Serial.begin(9600);
-    Serial.println();
-    Serial.println();
-
     // connect();
     WiFiMulti.addAP("forpi", "04qwerty");
-    // WiFiMulti.addAP("Sirifarm", "0932154741");
+    WiFiMulti.addAP("forpi2", "04qwerty");
+    WiFiMulti.addAP("forpi3", "04qwerty");
+    WiFiMulti.addAP("Sirifarm", "0932154741");
     // WiFiMulti.addAP("forgame", "0894297443");
     // WiFiMulti.addAP("pksy", "04qwerty");
     // WiFiMulti.addAP("SP", "04qwerty");
@@ -704,12 +774,13 @@ void setup()
 
     server.on("/dht", DHTtoJSON);
     server.on("/pressure", PressuretoJSON);
-    server.on("/command", runCommand);
+    // server.on("/command", runCommand);
     server.on("/ktype", KtypetoJSON);
     server.on("/info", info);
     server.on("/read40", read40);
     server.on("/ds18b20", readDS);
     server.on("/run", run);
+    server.on("/a0", a0);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
@@ -718,21 +789,14 @@ void setup()
     Serial.println(mac); // แสดงหมายเลข IP ของ Server
     // Initialize device.
     dht.begin();
-    t.every(60000, senddata);
+    t.every(120000, senddata);
     flipper.attach(1, inden);
 }
 
 void loop()
 {
 
-    if (WiFi.status() == WL_CONNECTED)
-    { //Check WiFi connection status
-
-        t.update();
-        server.handleClient();
-    }
-    else
-    {
-        Serial.println("Error in WiFi connection");
-    }
+    t.update();
+    server.handleClient();
+    delay(100);
 }
