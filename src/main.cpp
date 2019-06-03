@@ -619,7 +619,7 @@ void PressuretoJSON()
 void KtypetoJSON()
 {
     float c = readKtype();
-    if (isnan(c))
+    if (isnan(c) || c < 1)
     {
         DS18b20 ds = DS();
         c = ds.c;
@@ -789,7 +789,7 @@ void setup()
     Serial.println(mac); // แสดงหมายเลข IP ของ Server
     // Initialize device.
     dht.begin();
-    t.every(120000, senddata);
+    t.every(600000, senddata);
     flipper.attach(1, inden);
 }
 
