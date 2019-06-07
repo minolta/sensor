@@ -16,6 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
+const String version = "1";
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
 {
@@ -40,7 +41,6 @@ int watchdog = 0;
 // Portio ports[someofio];
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
-const char *version = "1.0-a09f802999d3a35610d5b4a11924f8fb";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
@@ -81,43 +81,9 @@ float ktypevalue = 0;
 Ticker flipper;
 void setport()
 {
-    // ports[0].port = D1;
-    // ports[0].delay = 0;
-    // ports[1].port = D2;
-    // ports[1].delay = 0;
-    // ports[2].port = D5;
-    // ports[2].delay = 0;
-
-    // ports[3].port = D6;
-    // ports[3].delay = 0;
-    // ports[4].port = D7;
-    // ports[4].delay = 0;
-    // //   ports[5].port = D8;
 }
 void addTorun(int port, int delay, int value, int wait)
 {
-    // Serial.println("Call addTorun");
-    // for (int i = 0; i < 5; i++)
-    // {
-    //     if (ports[i].port == port)
-    //     {
-    //         Serial.print("Set port  ============ >");
-    //         Serial.println(port);
-    //         pinMode(port, OUTPUT);
-    //         // if (!ports[i].run)
-    //         // {
-    //         ports[i].value = value;
-    //         ports[i].delay = delay;
-    //         ports[i].waittime = wait;
-    //         ports[i].run = 1;
-    //         digitalWrite(ports[i].port, value);
-    //         // }
-    //         // else
-    //         // {
-    //         //   Serial.println("this port running");
-    //         // }
-    //     }
-    // }
 }
 int getPort(String p)
 {
@@ -181,7 +147,7 @@ int searchDs()
         return 0;
     }
     foundds = 1; //เจอแล้ว
-     // the first ROM byte indicates which chip
+                 // the first ROM byte indicates which chip
     switch (addr[0])
     {
     case 0x10:
@@ -216,22 +182,13 @@ DS18b20 DS()
     float celsius, fahrenheit;
     if (!foundds)
         searchDs();
-    // foundds = 1; //เจอแล้ว
-    // Serial.print("ROM =");
-    // for (i = 0; i < 8; i++)
-    // {
-    //     Serial.write(' ');
-    //     Serial.print(addr[i], HEX);
-    // }
-
+    
     if (OneWire::crc8(addr, 7) != addr[7])
     {
         Serial.println("CRC is not valid!");
         return value;
     }
     Serial.println();
-
-   
 
     ds.reset();
     ds.select(addr);
@@ -349,106 +306,25 @@ void read40()
     serializeJsonPretty(doc, jsonChar, 100);
     server.send(200, "application/json", jsonChar);
 }
-void sendA0()
+
+void ota()
 {
 
-    if (rawvalue < 100)
+    t_httpUpdate_return ret = ESPhttpUpdate.update("http://fw-dot-kykub-161406.appspot.com", 80, "/espupdate/nodemcu/" + version, version);
+    switch (ret)
     {
-        Serial.println("Error value A0");
-        return;
+    case HTTP_UPDATE_FAILED:
+        Serial.println("[update] Update failed.");
+        break;
+    case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("[update] Update no Update.");
+        break;
+    case HTTP_UPDATE_OK:
+        Serial.println("[update] Update ok."); // may not called we reboot the ESP
+        break;
     }
-    StaticJsonDocument<500> doc;
-    doc["rawvalue"] = rawvalue;
-    doc["pressurevalue"] = a0value;
-    //pressurevalue
-    // JSONencoder["t"] = pfTemp;
-    // JSONencoder["h"] = pfHum;
-    JsonObject pidevice = doc.createNestedObject("device");
-    pidevice["mac"] = WiFi.macAddress();
-
-    char JSONmessageBuffer[300];
-    serializeJsonPretty(doc, JSONmessageBuffer, 300);
-    Serial.println(JSONmessageBuffer);
-    // put your main code here, to run repeatedly:
-    HTTPClient http; //Declare object of class HTTPClient
-
-    http.begin("http://endpoint.pixka.me:5002/pressure/add"); //Specify request destination
-    http.addHeader("Content-Type", "application/json");       //Specify content-type header
-
-    int httpCode = http.POST(JSONmessageBuffer); //Send the request
-    String payload = http.getString();           //Get the response payload
-    Serial.print(" Http Code:");
-    Serial.println(httpCode); //Print HTTP return code
-    Serial.print(" Play load:");
-    Serial.println(payload); //Print request response payload
-
-    http.end(); //Close connection
 }
 
-void sendKtype()
-{
-    StaticJsonDocument<500> doc;
-    doc["mac"] = WiFi.macAddress();
-    // JSONencoder["t"] = pfTemp;
-    // JSONencoder["h"] = pfHum;
-    JsonObject dht = doc.createNestedObject("ds18value");
-    dht["t"] = ktypevalue;
-
-    JsonObject sensor = dht.createNestedObject("ds18sensor");
-    sensor["name"] = WiFi.macAddress();
-    sensor["callname"] = WiFi.macAddress();
-
-    char JSONmessageBuffer[300];
-    serializeJsonPretty(doc, JSONmessageBuffer, 300);
-    Serial.println(JSONmessageBuffer);
-    // put your main code here, to run repeatedly:
-    HTTPClient http; //Declare object of class HTTPClient
-
-    http.begin("http://endpoint.pixka.me:5002/ds18value/add"); //Specify request destination
-    http.addHeader("Content-Type", "application/json");        //Specify content-type header
-
-    int httpCode = http.POST(JSONmessageBuffer); //Send the request
-    String payload = http.getString();           //Get the response payload
-    Serial.print(" Http Code:");
-    Serial.println(httpCode); //Print HTTP return code
-    Serial.print(" Play load:");
-    Serial.println(payload); //Print request response payload
-    http.end();              //Close connection
-}
-void sendDht()
-{
-    readDHT();
-    if (pfTemp == 0 || pfHum == 0)
-    {
-        return;
-    }
-    StaticJsonDocument<500> doc;
-    doc["mac"] = WiFi.macAddress();
-    // JSONencoder["t"] = pfTemp;
-    // JSONencoder["h"] = pfHum;
-    JsonObject dht = doc.createNestedObject("dhtvalue");
-
-    dht["t"] = pfTemp;
-    dht["h"] = pfHum;
-
-    char JSONmessageBuffer[300];
-    serializeJsonPretty(doc, JSONmessageBuffer, 300);
-    Serial.println(JSONmessageBuffer);
-    // put your main code here, to run repeatedly:
-    HTTPClient http; //Declare object of class HTTPClient
-
-    http.begin("http://endpoint.pixka.me:8081/dht/add"); //Specify request destination
-    http.addHeader("Content-Type", "application/json");  //Specify content-type header
-    http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
-    int httpCode = http.POST(JSONmessageBuffer); //Send the request
-    String payload = http.getString();           //Get the response payload
-    Serial.print(" Http Code:");
-    Serial.println(httpCode); //Print HTTP return code
-    Serial.print(" Play load:");
-    Serial.println(payload); //Print request response payload
-
-    http.end(); //Close connection
-}
 void checkin()
 {
     StaticJsonDocument<500> doc;
@@ -479,6 +355,7 @@ void checkin()
     Serial.println(payload); //Print request response payload
 
     http.end(); //Close connection
+    ota();
 }
 
 void writeResponse(WiFiClient &client, JsonObject &json)
@@ -543,6 +420,7 @@ float readKtype()
     Serial.println(DC);
     return DC;
 }
+
 void a0()
 {
     float value = analog.readA0();
@@ -669,23 +547,7 @@ void info()
     serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
 }
-void ota()
-{
 
-    t_httpUpdate_return ret = ESPhttpUpdate.update("endpoint.pixka.me", 5002, "/espupdate", version);
-    switch (ret)
-    {
-    case HTTP_UPDATE_FAILED:
-        Serial.println("[update] Update failed.");
-        break;
-    case HTTP_UPDATE_NO_UPDATES:
-        Serial.println("[update] Update no Update.");
-        break;
-    case HTTP_UPDATE_OK:
-        Serial.println("[update] Update ok."); // may not called we reboot the ESP
-        break;
-    }
-}
 void senddata()
 {
 
@@ -694,10 +556,6 @@ void senddata()
 
         digitalWrite(b_led, 1);
         checkin();
-        //readDHT();
-        //sendDht();
-        //sendA0();
-        //sendKtype();
         ota();
         digitalWrite(b_led, 0);
     }
@@ -714,27 +572,6 @@ void senddata()
 void inden()
 {
     digitalWrite(b_led, !digitalRead(b_led));
-    // for (int i = 0; i < 5; i++)
-    // {
-    //     //  Serial.println("Check port " + ports[i].port);
-    //     if (ports[i].delay > 0)
-    //     {
-    //         ports[i].delay--;
-    //         Serial.print("Port  ");
-    //         Serial.println(ports[i].port);
-    //         Serial.print(" Delay ");
-    //         Serial.println(ports[i].delay);
-    //         if (ports[i].delay == 0)
-    //         {
-    //             ports[i].run = 0;
-    //             digitalWrite(ports[i].port, !ports[i].value);
-    //             Serial.println("End job");
-    //         }
-    //     }
-
-    //     if (ports[i].delay == 0)
-    //         ports[i].run = 0;
-    // }
 }
 void connect()
 {
