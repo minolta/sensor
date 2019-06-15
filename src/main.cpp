@@ -310,7 +310,8 @@ void read40()
 void ota()
 {
 
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://fw-dot-kykub-161406.appspot.com", 80, "/espupdate/nodemcu/" + version, version);
+    t_httpUpdate_return ret = ESPhttpUpdate.update("http://fw-dot-kykub-161406.appspot.com", 80, 
+    "/espupdate/nodemcu/" + version, version);
     switch (ret)
     {
     case HTTP_UPDATE_FAILED:
@@ -599,6 +600,7 @@ void setup()
     WiFiMulti.addAP("forpi2", "04qwerty");
     WiFiMulti.addAP("forpi3", "04qwerty");
     WiFiMulti.addAP("Sirifarm", "0932154741");
+    WiFiMulti.addAP("test","12345678");
     // WiFiMulti.addAP("forgame", "0894297443");
     // WiFiMulti.addAP("pksy", "04qwerty");
     // WiFiMulti.addAP("SP", "04qwerty");
