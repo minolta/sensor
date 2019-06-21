@@ -41,6 +41,8 @@ int watchdog = 0;
 // Portio ports[someofio];
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
+char *checkinhost = "https://pi-dot-kykub-2.appspot.com/checkin";
+char *otahost = "http://fw-dot-kykub-2.appspot.com";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
@@ -82,6 +84,7 @@ Ticker flipper;
 void setport()
 {
 }
+
 void addTorun(int port, int delay, int value, int wait)
 {
 }
@@ -133,6 +136,12 @@ void run()
     // delay(w.toInt() * 1000);
     // busy = false;
 }
+void updateCheckin()
+{
+    String s = server.arg("newurl");
+    s.toCharArray(checkinhost,s.length() );
+
+}
 int foundds = 0;
 byte addr[8];
 byte type_s;
@@ -182,7 +191,7 @@ DS18b20 DS()
     float celsius, fahrenheit;
     if (!foundds)
         searchDs();
-    
+
     if (OneWire::crc8(addr, 7) != addr[7])
     {
         Serial.println("CRC is not valid!");
@@ -310,8 +319,8 @@ void read40()
 void ota()
 {
 
-    t_httpUpdate_return ret = ESPhttpUpdate.update("http://fw-dot-kykub-161406.appspot.com", 80, 
-    "/espupdate/nodemcu/" + version, version);
+    t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 80,
+                                                   "/espupdate/nodemcu/" + version, version);
     switch (ret)
     {
     case HTTP_UPDATE_FAILED:
@@ -344,8 +353,8 @@ void checkin()
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
-    http.begin("http://endpoint.pixka.me:8081/checkin"); //Specify request destination
-    http.addHeader("Content-Type", "application/json");  //Specify content-type header
+    http.begin(checkinhost);                            //Specify request destination
+    http.addHeader("Content-Type", "application/json"); //Specify content-type header
     http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
 
     int httpCode = http.POST(JSONmessageBuffer); //Send the request
@@ -600,7 +609,7 @@ void setup()
     WiFiMulti.addAP("forpi2", "04qwerty");
     WiFiMulti.addAP("forpi3", "04qwerty");
     WiFiMulti.addAP("Sirifarm", "0932154741");
-    WiFiMulti.addAP("test","12345678");
+    WiFiMulti.addAP("test", "12345678");
     // WiFiMulti.addAP("forgame", "0894297443");
     // WiFiMulti.addAP("pksy", "04qwerty");
     // WiFiMulti.addAP("SP", "04qwerty");
@@ -620,6 +629,7 @@ void setup()
     server.on("/ds18b20", readDS);
     server.on("/run", run);
     server.on("/a0", a0);
+    server.on("/updatecheckin",updateCheckin);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
