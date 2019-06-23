@@ -16,7 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "1";
+const String version = "9";
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
 {
@@ -41,7 +41,7 @@ int watchdog = 0;
 // Portio ports[someofio];
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
-char *checkinhost = "https://pi-dot-kykub-2.appspot.com/checkin";
+char *checkinhost = "http://pi-dot-kykub-2.appspot.com/checkin";
 char *otahost = "http://fw-dot-kykub-2.appspot.com";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
@@ -139,8 +139,7 @@ void run()
 void updateCheckin()
 {
     String s = server.arg("newurl");
-    s.toCharArray(checkinhost,s.length() );
-
+    s.toCharArray(checkinhost, s.length());
 }
 int foundds = 0;
 byte addr[8];
@@ -318,9 +317,20 @@ void read40()
 
 void ota()
 {
+    Serial.println("OTA");
+    IPAddress resolvedIP;
+  if (!WiFi.hostByName("fw-dot-kykub-2.appspot.com", resolvedIP)) {
+      Serial.println("Host not found");
+  }
+    Serial.println(resolvedIP);
 
-    t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 80,
-                                                   "/espupdate/nodemcu/" + version, version);
+    //http://fw-dot-kykub-2.appspot.com
+    // t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 80,"/espupdate/nodemcu/" + version, version);
+    String u = "/espupdate/nodemcu/"+version;
+    Serial.println(u);
+    t_httpUpdate_return ret = ESPhttpUpdate.update("fw-dot-kykub-2.appspot.com", 80,u, version);
+    // t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.88.15", 8889,"/espupdate/nodemcu/"+version, version);
+    Serial.println("return "+ret);
     switch (ret)
     {
     case HTTP_UPDATE_FAILED:
@@ -365,7 +375,6 @@ void checkin()
     Serial.println(payload); //Print request response payload
 
     http.end(); //Close connection
-    ota();
 }
 
 void writeResponse(WiFiClient &client, JsonObject &json)
@@ -583,6 +592,18 @@ void inden()
 {
     digitalWrite(b_led, !digitalRead(b_led));
 }
+void printIPAddressOfHost(const char* host) {
+  IPAddress resolvedIP;
+  if (!WiFi.hostByName(host, resolvedIP)) {
+    Serial.println("DNS lookup failed.  Rebooting...");
+    Serial.flush();
+    ESP.reset();
+  }
+  Serial.print(host);
+  Serial.print(" IP: ");
+  Serial.println(resolvedIP);
+}
+
 void connect()
 {
 }
@@ -629,7 +650,7 @@ void setup()
     server.on("/ds18b20", readDS);
     server.on("/run", run);
     server.on("/a0", a0);
-    server.on("/updatecheckin",updateCheckin);
+    server.on("/updatecheckin", updateCheckin);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
@@ -637,8 +658,11 @@ void setup()
     String mac = WiFi.macAddress();
     Serial.println(mac); // แสดงหมายเลข IP ของ Server
     // Initialize device.
+    Serial.print("DNS");
+    Serial.println(WiFi.dnsIP().toString());
+    printIPAddressOfHost("fw-dot-kykub-2.appspot.com");
     dht.begin();
-    t.every(600000, senddata);
+    t.every(60000, senddata);
     flipper.attach(1, inden);
 }
 
@@ -647,5 +671,5 @@ void loop()
 
     t.update();
     server.handleClient();
-    delay(100);
+  //  delay(100);
 }
