@@ -16,7 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "9";
+const String version = "10";
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
 {
@@ -55,6 +55,7 @@ Timer t;
 KAnalog analog;
 #define DHTPIN D3 // Pin which is connected to the DHT sensor.
 #define cccc D6;
+String name = "nodemcu";
 const byte hx711_data_pin = D1;
 const byte hx711_clock_pin = D2;
 Q2HX711 hx711(hx711_data_pin, hx711_clock_pin);
@@ -84,7 +85,63 @@ Ticker flipper;
 void setport()
 {
 }
+void readDHT()
+{
+    count++;
+    Serial.print("count :");
+    Serial.println(count);
+    // Delay between measurements.
+    // delay(delayMS);
+    // Get temperature event and print its value.
+    sensors_event_t event;
+    dht.temperature().getEvent(&event);
+    if (isnan(event.temperature))
+    {
+        Serial.println("Error reading temperature!");
+    }
+    else
+    {
+        Serial.print("Temperature: ");
+        Serial.print(event.temperature);
+        Serial.println(" *C");
+        pfTemp = event.temperature;
+    }
+    // Get humidity event and print its value.
+    dht.humidity().getEvent(&event);
+    if (isnan(event.relative_humidity))
+    {
+        Serial.println("Error reading humidity!");
+    }
+    else
+    {
+        Serial.print("Humidity: ");
+        Serial.print(event.relative_humidity);
+        Serial.println("%");
+        pfHum = event.relative_humidity;
+    }
 
+    // tempC = sensors.getTempC(t);
+}
+void status()
+{
+
+    StaticJsonDocument<1000> doc;
+    doc["name"] = name;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["mac"] = WiFi.macAddress();
+    doc["ssid"] = WiFi.SSID();
+    doc["version"] = version;
+    readDHT();
+    doc["h"] = pfHum;
+    doc["t"] = pfTemp;
+    char jsonChar[1000];
+    serializeJsonPretty(doc, jsonChar, 1000);
+    server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    server.sendHeader("Access-Control-Allow-Headers", "application/json");
+    // 'Access-Control-Allow-Headers':'application/json'
+    server.send(200, "application/json", jsonChar);
+}
 void addTorun(int port, int delay, int value, int wait)
 {
 }
@@ -267,43 +324,7 @@ void readDS()
     serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
 }
-void readDHT()
-{
-    count++;
-    Serial.print("count :");
-    Serial.println(count);
-    // Delay between measurements.
-    // delay(delayMS);
-    // Get temperature event and print its value.
-    sensors_event_t event;
-    dht.temperature().getEvent(&event);
-    if (isnan(event.temperature))
-    {
-        Serial.println("Error reading temperature!");
-    }
-    else
-    {
-        Serial.print("Temperature: ");
-        Serial.print(event.temperature);
-        Serial.println(" *C");
-        pfTemp = event.temperature;
-    }
-    // Get humidity event and print its value.
-    dht.humidity().getEvent(&event);
-    if (isnan(event.relative_humidity))
-    {
-        Serial.println("Error reading humidity!");
-    }
-    else
-    {
-        Serial.print("Humidity: ");
-        Serial.print(event.relative_humidity);
-        Serial.println("%");
-        pfHum = event.relative_humidity;
-    }
 
-    // tempC = sensors.getTempC(t);
-}
 
 void read40()
 {
@@ -319,18 +340,19 @@ void ota()
 {
     Serial.println("OTA");
     IPAddress resolvedIP;
-  if (!WiFi.hostByName("fw-dot-kykub-2.appspot.com", resolvedIP)) {
-      Serial.println("Host not found");
-  }
+    if (!WiFi.hostByName("fw-dot-kykub-2.appspot.com", resolvedIP))
+    {
+        Serial.println("Host not found");
+    }
     Serial.println(resolvedIP);
 
     //http://fw-dot-kykub-2.appspot.com
     // t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 80,"/espupdate/nodemcu/" + version, version);
-    String u = "/espupdate/nodemcu/"+version;
+    String u = "/espupdate/nodemcu/" + version;
     Serial.println(u);
-    t_httpUpdate_return ret = ESPhttpUpdate.update("fw-dot-kykub-2.appspot.com", 80,u, version);
+    t_httpUpdate_return ret = ESPhttpUpdate.update("fw-dot-kykub-2.appspot.com", 80, u, version);
     // t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.88.15", 8889,"/espupdate/nodemcu/"+version, version);
-    Serial.println("return "+ret);
+    Serial.println("return " + ret);
     switch (ret)
     {
     case HTTP_UPDATE_FAILED:
@@ -371,6 +393,16 @@ void checkin()
     String payload = http.getString();           //Get the response payload
     Serial.print(" Http Code:");
     Serial.println(httpCode); //Print HTTP return code
+    if (httpCode == 200)
+    {
+        Serial.print(" Play load:");
+        Serial.println(payload); //Print request response payload
+        DynamicJsonDocument doc(1024);
+        deserializeJson(doc, payload);
+        JsonObject obj = doc.as<JsonObject>();
+        name = obj["pidevice"]["name"].as<String>();
+    }
+
     Serial.print(" Play load:");
     Serial.println(payload); //Print request response payload
 
@@ -592,16 +624,18 @@ void inden()
 {
     digitalWrite(b_led, !digitalRead(b_led));
 }
-void printIPAddressOfHost(const char* host) {
-  IPAddress resolvedIP;
-  if (!WiFi.hostByName(host, resolvedIP)) {
-    Serial.println("DNS lookup failed.  Rebooting...");
-    Serial.flush();
-    ESP.reset();
-  }
-  Serial.print(host);
-  Serial.print(" IP: ");
-  Serial.println(resolvedIP);
+void printIPAddressOfHost(const char *host)
+{
+    IPAddress resolvedIP;
+    if (!WiFi.hostByName(host, resolvedIP))
+    {
+        Serial.println("DNS lookup failed.  Rebooting...");
+        Serial.flush();
+        ESP.reset();
+    }
+    Serial.print(host);
+    Serial.print(" IP: ");
+    Serial.println(resolvedIP);
 }
 
 void connect()
@@ -651,6 +685,7 @@ void setup()
     server.on("/run", run);
     server.on("/a0", a0);
     server.on("/updatecheckin", updateCheckin);
+    server.on("/status", status);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
@@ -671,5 +706,5 @@ void loop()
 
     t.update();
     server.handleClient();
-  //  delay(100);
+    //  delay(100);
 }
