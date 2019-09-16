@@ -16,7 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "10";
+const String version = "11";
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
 {
@@ -505,7 +505,7 @@ void readA0()
     //  float volts = analog.readVolts();
     // 42.5 = 172 psi  37.5 = 150 psi 3.75 = 15psi
     // float psi = analog.readPsi(0.42, 3.75);
-    float psi = analog.readPsi(0.50, 42.5);
+    float psi = analog.readPsi(0.5, 42.5);
     if (psi < 0)
         psi = 0;
     Serial.print(" , Voltage = ");
@@ -536,8 +536,11 @@ void PressuretoJSON()
     digitalWrite(LED_BUILTIN, HIGH);
     StaticJsonDocument<500> doc;
     //root["mac"] = WiFi.macAddress();
-    doc["rawvalue"] = rawvalue;
+    doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
+    doc["psi"] = a0value;
+    doc["bar"] = a0value/14.504;
+    doc["volts"] = analog.getReadVolts();
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
     char jsonChar[200];
