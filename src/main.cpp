@@ -350,7 +350,7 @@ void ota()
     // t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 80,"/espupdate/nodemcu/" + version, version);
     String u = "/espupdate/nodemcu/" + version;
     Serial.println(u);
-    t_httpUpdate_return ret = ESPhttpUpdate.update("fw-dot-kykub-2.appspot.com", 80, u, version);
+    t_httpUpdate_return ret = ESPhttpUpdate.update("fw1.pixka.me", 8080, u, version);
     // t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.88.15", 8889,"/espupdate/nodemcu/"+version, version);
     Serial.println("return " + ret);
     switch (ret)
