@@ -41,8 +41,8 @@ int watchdog = 0;
 // Portio ports[someofio];
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
-char *checkinhost = "http://pi-dot-kykub-2.appspot.com/checkin";
-char *otahost = "http://fw-dot-kykub-2.appspot.com";
+char *checkinhost = "http://fw1.pixka.me:2222/checkin";
+char *otahost = "fw1.pixka.me";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
@@ -340,7 +340,7 @@ void ota()
 {
     Serial.println("OTA");
     IPAddress resolvedIP;
-    if (!WiFi.hostByName("fw-dot-kykub-2.appspot.com", resolvedIP))
+    if (!WiFi.hostByName("fw1.pixka.me", resolvedIP))
     {
         Serial.println("Host not found");
     }
@@ -387,7 +387,7 @@ void checkin()
 
     http.begin(checkinhost);                            //Specify request destination
     http.addHeader("Content-Type", "application/json"); //Specify content-type header
-    http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
+    // http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
 
     int httpCode = http.POST(JSONmessageBuffer); //Send the request
     String payload = http.getString();           //Get the response payload
@@ -698,7 +698,7 @@ void setup()
     // Initialize device.
     Serial.print("DNS");
     Serial.println(WiFi.dnsIP().toString());
-    printIPAddressOfHost("fw-dot-kykub-2.appspot.com");
+    printIPAddressOfHost("fw1.pixka.me");
     dht.begin();
     t.every(60000, senddata);
     flipper.attach(1, inden);
