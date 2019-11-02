@@ -16,7 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "11";
+const String version = "12";
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
 {
@@ -48,12 +48,13 @@ int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 ESP8266WebServer server(80);
 //#define ONE_WIRE_BUS D4
-OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
+OneWire ds(D3);   // on pin D4 (a 4.7K resistor is necessary)
+#define DHTPIN D4 // Pin which is connected to the DHT sensor.
 uint8_t deviceCount = 0;
 float tempC;
 Timer t;
 KAnalog analog;
-#define DHTPIN D3 // Pin which is connected to the DHT sensor.
+
 #define cccc D6;
 String name = "nodemcu";
 const byte hx711_data_pin = D1;
@@ -87,6 +88,7 @@ void setport()
 }
 void readDHT()
 {
+    dht.begin();
     count++;
     Serial.print("count :");
     Serial.println(count);
@@ -121,6 +123,7 @@ void readDHT()
     }
 
     // tempC = sensors.getTempC(t);
+    pinMode(D4, OUTPUT);
 }
 void status()
 {
@@ -324,7 +327,6 @@ void readDS()
     serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
 }
-
 
 void read40()
 {
@@ -539,7 +541,7 @@ void PressuretoJSON()
     doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
     doc["psi"] = a0value;
-    doc["bar"] = a0value/14.504;
+    doc["bar"] = a0value / 14.504;
     doc["volts"] = analog.getReadVolts();
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
@@ -668,8 +670,9 @@ void setup()
     WiFiMulti.addAP("forpi3", "04qwerty");
     WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("test", "12345678");
+
     // WiFiMulti.addAP("forgame", "0894297443");
-    // WiFiMulti.addAP("pksy", "04qwerty");
+    WiFiMulti.addAP("pksy", "04qwerty");
     // WiFiMulti.addAP("SP", "04qwerty");
     // WiFiMulti.addAP("SP3", "04qwerty");
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
@@ -677,6 +680,7 @@ void setup()
         delay(500);
         Serial.print(".");
     }
+    checkin();
 
     server.on("/dht", DHTtoJSON);
     server.on("/pressure", PressuretoJSON);
@@ -699,7 +703,8 @@ void setup()
     Serial.print("DNS");
     Serial.println(WiFi.dnsIP().toString());
     printIPAddressOfHost("fw1.pixka.me");
-    dht.begin();
+
+    pinMode(D4, OUTPUT);
     t.every(60000, senddata);
     flipper.attach(1, inden);
 }
