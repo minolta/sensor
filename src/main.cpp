@@ -346,10 +346,9 @@ void read40()
 void ota()
 {
     Serial.println("OTA");
-   
 
     Serial.println(urlupdate);
-    t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 8080,urlupdate);
+    t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 8080, urlupdate);
     // t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.88.15", 8889,"/espupdate/nodemcu/"+version, version);
     Serial.println("return " + ret);
     switch (ret)
@@ -372,8 +371,7 @@ void checkin()
     doc["mac"] = WiFi.macAddress();
     doc["password"] = "";
     doc["ip"] = WiFi.localIP().toString();
-    // JSONencoder["t"] = pfTemp;
-    // JSONencoder["h"] = pfHum;
+    doc["uptime"] = uptime;
     JsonObject dht = doc.createNestedObject("dhtvalue");
     dht["t"] = pfTemp;
     dht["h"] = pfHum;
@@ -719,7 +717,7 @@ void loop()
         checkintime = 0;
         checkin();
     }
-    if (otatime>60)
+    if (otatime > 60)
     {
         otatime = 0;
         ota();
