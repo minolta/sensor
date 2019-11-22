@@ -16,7 +16,12 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "12";
+const String version = "14";
+long uptime = 0;
+long checkintime = 0;
+long otatime = 0;
+String otahost = "fw1.pixka.me";
+String urlupdate = "/espupdate/nodemcu/" + version;
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
 {
@@ -42,7 +47,7 @@ int watchdog = 0;
 #define b_led 2 // 1 for ESP-01, 2 for ESP-12
 const char *host = "endpoint.pixka.me:5002";
 char *checkinhost = "http://fw1.pixka.me:2222/checkin";
-char *otahost = "fw1.pixka.me";
+// char *otahost = "fw1.pixka.me";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
@@ -341,18 +346,10 @@ void read40()
 void ota()
 {
     Serial.println("OTA");
-    IPAddress resolvedIP;
-    if (!WiFi.hostByName("fw1.pixka.me", resolvedIP))
-    {
-        Serial.println("Host not found");
-    }
-    Serial.println(resolvedIP);
+   
 
-    //http://fw-dot-kykub-2.appspot.com
-    // t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 80,"/espupdate/nodemcu/" + version, version);
-    String u = "/espupdate/nodemcu/" + version;
-    Serial.println(u);
-    t_httpUpdate_return ret = ESPhttpUpdate.update("fw1.pixka.me", 8080, u, version);
+    Serial.println(urlupdate);
+    t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 8080,urlupdate);
     // t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.88.15", 8889,"/espupdate/nodemcu/"+version, version);
     Serial.println("return " + ret);
     switch (ret)
@@ -627,6 +624,10 @@ void senddata()
 }
 void inden()
 {
+    uptime++;
+    checkintime++;
+    otatime++;
+
     digitalWrite(b_led, !digitalRead(b_led));
 }
 void printIPAddressOfHost(const char *host)
@@ -652,9 +653,7 @@ void setup()
     Serial.begin(9600);
     Serial.println();
     Serial.println();
-
     WiFi.mode(WIFI_STA);
-
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
                             // pinMode(LED_BUILTIN, OUTPUT);
@@ -705,14 +704,24 @@ void setup()
     printIPAddressOfHost("fw1.pixka.me");
 
     pinMode(D4, OUTPUT);
-    t.every(60000, senddata);
+    // t.every(60000, senddata);
     flipper.attach(1, inden);
 }
 
 void loop()
 {
 
-    t.update();
+    // t.update();
     server.handleClient();
     //  delay(100);
+    if (checkintime > 600)
+    {
+        checkintime = 0;
+        checkin();
+    }
+    if (otatime>60)
+    {
+        otatime = 0;
+        ota();
+    }
 }
