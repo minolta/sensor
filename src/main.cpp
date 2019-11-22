@@ -16,7 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "14";
+const String version = "16";
 long uptime = 0;
 long checkintime = 0;
 long otatime = 0;
