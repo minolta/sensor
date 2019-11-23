@@ -16,7 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "17";
+const String version = "18";
 long uptime = 0;
 long checkintime = 0;
 long otatime = 0;
@@ -142,6 +142,7 @@ void status()
     readDHT();
     doc["h"] = pfHum;
     doc["t"] = pfTemp;
+    doc["uptime"] = uptime;
     char jsonChar[1000];
     serializeJsonPretty(doc, jsonChar, 1000);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
