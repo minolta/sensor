@@ -16,7 +16,7 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #define someofio 5
-const String version = "16";
+const String version = "17";
 long uptime = 0;
 long checkintime = 0;
 long otatime = 0;
@@ -690,6 +690,8 @@ void setup()
     server.on("/a0", a0);
     server.on("/updatecheckin", updateCheckin);
     server.on("/status", status);
+    server.on("/", status);
+
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
 
