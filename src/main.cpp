@@ -18,7 +18,7 @@
 #include <EEPROM.h>
 #define ADDR 100
 #define someofio 5
-const String version = "21";
+const String version = "23";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -34,6 +34,10 @@ public:
     float t;
     int count;
 };
+struct
+{
+    String save = "";
+} saveconfig;
 struct
 {
     int readtmpvalue = 120;
@@ -236,6 +240,10 @@ void status()
     doc["message"] = message;
     doc["a0"] = a0value;
     doc["tmp"] = tmpvalue;
+    //  int readtmpvalue = 120;
+    // int a0readtime = 120;
+    doc["reada0time"] = configdata.a0readtime;
+    doc["readtmptime"] = configdata.readtmpvalue;
     char jsonChar[1000];
     serializeJsonPretty(doc, jsonChar, 1000);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
@@ -701,7 +709,6 @@ void KtypetoJSON()
     char jsonChar[500];
     serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
-
 }
 void info()
 {
@@ -793,12 +800,15 @@ void setup()
     Serial.begin(9600);
     Serial.println();
     Serial.println();
-    int r = EEPROM.read(0);
-    if (r != 99)
+    int flag = EEPROM.read(0);
+    // EEPROM.get(ADDR + 200, saveconfig);
+    // String v = saveconfig.save;
+    if (flag != 22)
     {
-        EEPROM.write(0, 99);
+        EEPROM.write(0, 22);
         EEPROM.put(ADDR, wifidata);
         EEPROM.put(ADDR + 100, configdata);
+
         EEPROM.commit();
     }
     else
