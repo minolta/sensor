@@ -16,9 +16,12 @@
 #include "KAnalog.h"
 #include <Q2HX711.h>
 #include <EEPROM.h>
+#include "Adafruit_Sensor.h"
+#include "Adafruit_AM2320.h"
+
 #define ADDR 100
 #define someofio 5
-const String version = "23";
+const String version = "24";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -100,8 +103,10 @@ int count = 0;
 //WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 ESP8266WebServer server(80);
 //#define ONE_WIRE_BUS D4
-OneWire ds(D3);   // on pin D4 (a 4.7K resistor is necessary)
+OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
+
 #define DHTPIN D4 // Pin which is connected to the DHT sensor.
+
 uint8_t deviceCount = 0;
 float tempC;
 Timer t;
@@ -111,7 +116,7 @@ KAnalog analog;
 String name = "nodemcu";
 const byte hx711_data_pin = D1;
 const byte hx711_clock_pin = D2;
-Q2HX711 hx711(hx711_data_pin, hx711_clock_pin);
+// Q2HX711 hx711(hx711_data_pin, hx711_clock_pin);
 // Uncomment the type of sensor in use:
 //#define DHTTYPE           DHT11     // DHT 11
 #define DHTTYPE DHT22 // DHT 22 (AM2302)
@@ -120,7 +125,8 @@ Q2HX711 hx711(hx711_data_pin, hx711_clock_pin);
 // See guide for details on sensor wiring and usage:
 //   https://learn.adafruit.com/dht/overview
 
-DHT_Unified dht(DHTPIN, DHTTYPE);
+// DHT_Unified dht(DHTPIN, DHTTYPE);
+Adafruit_AM2320 am2320 = Adafruit_AM2320();
 int countsend = 0;
 uint32_t delayMS;
 float pfDew, pfHum, pfTemp, pfVcc;
@@ -183,9 +189,10 @@ void setport()
 }
 void readDHT()
 {
+    #ifdef DHT
     readdhtstate = 1;
     pinMode(D4, INPUT);
-    dht.begin();
+    // dht.begin();
     // Delay between measurements.
     // delay(delayMS);
     // Get temperature event and print its value.
@@ -222,6 +229,7 @@ void readDHT()
 
     pinMode(D4, OUTPUT);
     readdhtstate = 0;
+    #endif
 }
 void status()
 {
@@ -438,12 +446,12 @@ void readDS()
 
 void read40()
 {
-    float v = hx711.read() / 100.0;
-    StaticJsonDocument<500> doc;
-    doc["value"] = v;
-    char jsonChar[100];
-    serializeJsonPretty(doc, jsonChar, 100);
-    server.send(200, "application/json", jsonChar);
+    // float v = hx711.read() / 100.0;
+    // StaticJsonDocument<500> doc;
+    // doc["value"] = v;
+    // char jsonChar[100];
+    // serializeJsonPretty(doc, jsonChar, 100);
+    // server.send(200, "application/json", jsonChar);
 }
 void reset()
 {
@@ -731,7 +739,19 @@ void info()
     serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
 }
-
+void readAm2320()
+{
+    pfTemp = am2320.readTemperature();
+    pfHum = am2320.readHumidity();
+    dhtbuffer.t = pfTemp;
+    dhtbuffer.h = pfHum;
+    dhtbuffer.count = 120; //update buffer life time
+}
+void readam()
+{
+    readAm2320();
+    status();
+}
 void senddata()
 {
 
@@ -880,6 +900,8 @@ void setup()
     server.on("/setreada0", setReada0limit);
     server.on("/get", get);
     server.on("/updatecheckin", updateCheckin);
+    server.on("/readam", readam);
+
     server.on("/status", status);
     server.on("/reset", reset);
 
@@ -899,6 +921,8 @@ void setup()
     pinMode(D4, OUTPUT);
     // t.every(60000, senddata);
     flipper.attach(1, inden);
+    am2320.begin();
+    readAm2320();
 }
 
 void loop()
@@ -917,11 +941,12 @@ void loop()
         otatime = 0;
         ota();
     }
-    if (readdhttime > 120 && dhtbuffer.count < 1)
+    if (readdhttime > 5 && dhtbuffer.count < 1)
     {
         readdhttime = 0;
         message = "Read DHT";
-        readDHT();
+        // readDHT();
+        readAm2320();
     }
     if (readdstime > configdata.readtmpvalue)
     {
