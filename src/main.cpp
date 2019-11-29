@@ -11,10 +11,10 @@
 #include <ESP8266httpUpdate.h>
 #include <OneWire.h>
 #include "Timer.h"
-#include <max6675.h>
+// #include <max6675.h>
 #include <Ticker.h>
 #include "KAnalog.h"
-#include <Q2HX711.h>
+// #include <Q2HX711.h>
 #include <EEPROM.h>
 #include "Adafruit_Sensor.h"
 #include "Adafruit_AM2320.h"
@@ -137,7 +137,7 @@ int ktcSO = D6;
 int ktcCS = D7;
 int ktcCLK = D5;
 
-MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
+// MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
 ESP8266WiFiMulti WiFiMulti;
 float ktypevalue = 0;
 Ticker flipper;
@@ -594,14 +594,14 @@ void runCommand()
     Serial.println("Set port " + s + " to " + set);
 }
 
-float readKtype()
-{
-    float DC = ktc.readCelsius();
-    ktypevalue = DC;
-    Serial.print("K type value ");
-    Serial.println(DC);
-    return DC;
-}
+// float readKtype()
+// {
+//     float DC = ktc.readCelsius();
+//     ktypevalue = DC;
+//     Serial.print("K type value ");
+//     Serial.println(DC);
+//     return DC;
+// }
 void reada0()
 {
     Serial.println("READ A0");
@@ -683,12 +683,12 @@ void PressuretoJSON()
 void readTmp()
 {
     Serial.println("Read TMP");
-    tmpvalue = readKtype();
-    if (isnan(tmpvalue) || tmpvalue < 1)
-    {
+    // tmpvalue = readKtype();
+    // if (isnan(tmpvalue) || tmpvalue < 1)
+    // {
         DS18b20 ds = DS();
         tmpvalue = ds.c;
-    }
+    // }
     Serial.print("READ");
     Serial.println(tmpvalue);
     Serial.println("End Read TMP");
