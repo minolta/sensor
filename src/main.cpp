@@ -21,7 +21,7 @@
 
 #define ADDR 100
 #define someofio 5
-const String version = "24";
+const String version = "25";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -52,7 +52,7 @@ long otatime = 0;
 int readdhtstate = 0;
 int apmode = 0;
 String otahost = "fw1.pixka.me";
-String type = "D1IO";
+String type = "SENSOR";
 String urlupdate = "/espupdate/nodemcu/" + version;
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
 class Portio
