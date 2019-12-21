@@ -10,7 +10,7 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266httpUpdate.h>
 #include <OneWire.h>
-#include "Timer.h"
+// #include "Timer.h"
 // #include <max6675.h>
 #include <Ticker.h>
 #include "KAnalog.h"
@@ -109,7 +109,7 @@ OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
 
 uint8_t deviceCount = 0;
 float tempC;
-Timer t;
+// Timer t;
 KAnalog analog;
 
 #define cccc D6;
