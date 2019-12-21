@@ -510,6 +510,7 @@ void checkin()
     dht["h"] = pfHum;
     doc["type"] = type;
 
+    //Test commit
     char JSONmessageBuffer[300];
     serializeJsonPretty(doc, JSONmessageBuffer, 300);
     Serial.println(JSONmessageBuffer);
