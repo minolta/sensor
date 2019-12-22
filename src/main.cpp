@@ -509,7 +509,8 @@ void checkin()
     dht["t"] = pfTemp;
     dht["h"] = pfHum;
     doc["type"] = type;
-
+    //test
+    
     //Test commit
     char JSONmessageBuffer[300];
     serializeJsonPretty(doc, JSONmessageBuffer, 300);
