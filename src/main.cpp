@@ -10,6 +10,8 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266httpUpdate.h>
 #include <OneWire.h>
+//สำหรับบอกว่ามีการ run port io
+long counttime = 0;
 // #include "Timer.h"
 // #include <max6675.h>
 #include <Ticker.h>
@@ -21,15 +23,32 @@
 
 #define ADDR 100
 #define someofio 5
-const String version = "25";
+const String version = "30";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
+//run port ได้
+long porttrick = 0;
 long readdstime = 0;
 String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
+#define ioport 3
+class Portio
+{
+public:
+    int port;
+    int value;
+    int delay;
+    int waittime;
+    int run = 0;
+    String closetime;
+    String name;
+    Portio *n;
+    Portio *p;
+};
 
+Portio ports[ioport];
 class Dhtbuffer
 {
 public:
@@ -45,7 +64,33 @@ struct
 {
     int readtmpvalue = 120;
     int a0readtime = 120;
+    float va0 = 0.5;
+    float sensorvalue = 42.5;
+    /*float volts = 3.02 * (float)sensorValue / 1023.00;
+    float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
+    float pressure_psi = pressure_kPa * 0.14503773773020923;
+
+    float psi = (volts - 0.50) * 42.5; //172/psi
+    */
+    // float psi = (volts - 0.433) * 3.75; // 15 psi
+    //float psi = (volts - 0.48) * 37.5; // 15 psi
+
+    //  float volts = analog.readVolts();
+    // 42.5 = 172 psi  37.5 = 150 psi 3.75 = 15psi
+    // float psi = analog.readPsi(0.42, 3.75);
 } configdata;
+struct
+{
+    int D5value = OUTPUT;
+    int D5initvalue = 0;
+
+    int D6value = OUTPUT;
+    int D6initvalue = 0;
+
+    int D7value = OUTPUT;
+    int D7initvalue = 0;
+
+} portconfig;
 
 Dhtbuffer dhtbuffer;
 long otatime = 0;
@@ -55,18 +100,7 @@ String otahost = "fw1.pixka.me";
 String type = "SENSOR";
 String urlupdate = "/espupdate/nodemcu/" + version;
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
-class Portio
-{
-public:
-    int port;
-    int value;
-    int delay;
-    int waittime;
-    int run = 0;
-    String closetime;
-    Portio *n;
-    Portio *p;
-};
+
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html><head>
   <title>ESP WIFI </title>
@@ -133,14 +167,70 @@ float pfDew, pfHum, pfTemp, pfVcc;
 float a0value;
 float rawvalue = 0;
 
-int ktcSO = D6;
-int ktcCS = D7;
-int ktcCLK = D5;
+// int ktcSO = D6;
+// int ktcCS = D7;
+// int ktcCLK = D5;
 
 // MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
 ESP8266WiFiMulti WiFiMulti;
 float ktypevalue = 0;
 Ticker flipper;
+void portcheck()
+{
+    for (int i = 0; i < ioport; i++)
+    {
+        if (ports[i].delay > 0)
+        {
+            ports[i].delay--;
+            Serial.print("Port  ");
+            Serial.println(ports[i].port);
+            Serial.print(" Delay ");
+            Serial.println(ports[i].delay);
+            if (ports[i].delay == 0)
+            {
+                ports[i].run = 0;
+                digitalWrite(ports[i].port, !ports[i].value);
+                Serial.println("End job");
+            }
+        }
+
+        if (ports[i].delay == 0)
+            ports[i].run = 0;
+    }
+}
+void readA0()
+{
+    //   int sensorValue = analog.readA0();
+
+    Serial.print("ADC 10 bit = ");
+    //   Serial.print(sensorValue); // print out the value you read:
+
+    // (3.6 * val) / 4095;
+    // float volts = 3.30 * (float)sensorValue / 1023.00;
+
+    /*float volts = 3.02 * (float)sensorValue / 1023.00;
+    float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
+    float pressure_psi = pressure_kPa * 0.14503773773020923;
+
+    float psi = (volts - 0.50) * 42.5; //172/psi
+    */
+    // float psi = (volts - 0.433) * 3.75; // 15 psi
+    //float psi = (volts - 0.48) * 37.5; // 15 psi
+
+    //  float volts = analog.readVolts();
+    // 42.5 = 172 psi  37.5 = 150 psi 3.75 = 15psi
+    // float psi = analog.readPsi(0.42, 3.75);
+    float psi = analog.readPsi(configdata.va0, configdata.sensorvalue);
+    if (psi < 0)
+        psi = 0;
+    Serial.print(" , Voltage = ");
+    // Serial.print(volts, 2);
+    Serial.print(" V");
+    Serial.print(", PSI:");
+    Serial.println(psi);
+    a0value = psi;
+    // rawvalue = sensorValue;
+}
 void get()
 {
     String ssd = server.arg("ssid");
@@ -186,10 +276,26 @@ void setReada0limit()
 }
 void setport()
 {
+
+    pinMode(D5, portconfig.D5value);
+    digitalWrite(D5, portconfig.D5initvalue);
+    pinMode(D6, portconfig.D6value);
+    digitalWrite(D6, portconfig.D6initvalue);
+
+    pinMode(D7, portconfig.D7value);
+    digitalWrite(D7, portconfig.D7initvalue);
+
+    ports[0].port = D5;
+    ports[0].name = "D5";
+    ports[1].port = D6;
+    ports[1].name = "D6";
+
+    ports[2].port = D7;
+    ports[2].name = "D7";
 }
 void readDHT()
 {
-    #ifdef DHT
+#ifdef DHT
     readdhtstate = 1;
     pinMode(D4, INPUT);
     // dht.begin();
@@ -229,16 +335,25 @@ void readDHT()
 
     pinMode(D4, OUTPUT);
     readdhtstate = 0;
-    #endif
+#endif
 }
 void status()
 {
+    readA0();
     StaticJsonDocument<1000> doc;
     doc["name"] = name;
     doc["ip"] = WiFi.localIP().toString();
     doc["mac"] = WiFi.macAddress();
     doc["ssid"] = WiFi.SSID();
     doc["version"] = version;
+    doc["sensorvalue"] = configdata.sensorvalue;
+    doc["rawvalue"] = analog.getRawvalue();
+    doc["pressurevalue"] = a0value;
+    doc["psi"] = a0value;
+    doc["bar"] = a0value / 14.504;
+    doc["volts"] = analog.getReadVolts();
+    doc["a0"] = a0value;
+    doc["VA0"] = configdata.va0;
     // readDHT();
     doc["h"] = pfHum;
     doc["t"] = pfTemp;
@@ -246,12 +361,28 @@ void status()
     doc["dhtbuffer.time"] = dhtbuffer.count;
     doc["type"] = type;
     doc["message"] = message;
-    doc["a0"] = a0value;
+
     doc["tmp"] = tmpvalue;
     //  int readtmpvalue = 120;
     // int a0readtime = 120;
     doc["reada0time"] = configdata.a0readtime;
     doc["readtmptime"] = configdata.readtmpvalue;
+
+    doc["D5config"] = portconfig.D5value;
+    doc["D5init"] = portconfig.D5initvalue;
+
+    doc["D6config"] = portconfig.D6value;
+    doc["D6init"] = portconfig.D6initvalue;
+    doc["D7config"] = portconfig.D7value;
+    doc["D7init"] = portconfig.D7initvalue;
+    for (int i = 0; i < ioport; i++)
+    {
+        JsonObject o = doc.createNestedObject(new String(i));
+        o["port"] = ports[i].port;
+        o["closetime"] = ports[i].closetime;
+        o["delay"] = ports[i].delay;
+        o["value"] = ports[i].value;
+    }
     char jsonChar[1000];
     serializeJsonPretty(doc, jsonChar, 1000);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
@@ -262,6 +393,22 @@ void status()
 }
 void addTorun(int port, int delay, int value, int wait)
 {
+
+    if (delay > counttime)
+        counttime = delay;
+    for (int i = 0; i < ioport; i++)
+    {
+        if (ports[i].port == port)
+        {
+
+            ports[i].value = value;
+            ports[i].delay = delay;
+            ports[i].waittime = wait;
+            ports[i].run = 1;
+            digitalWrite(ports[i].port, value);
+            Serial.println("Set port");
+        }
+    }
 }
 int getPort(String p)
 {
@@ -299,17 +446,9 @@ void run()
     String d = server.arg("delay");
     String w = server.arg("wait");
     Serial.println("Port: " + p + " value : " + v + " delay: " + d);
-    int value = v.toInt();
-
-    //int d = server.arg("delay").toInt();
     int port = getPort(p);
     addTorun(port, d.toInt(), v.toInt(), w.toInt());
-    // digitalWrite(port, value);
-    server.send(200, "application/json", "ok");
-    // delay(d.toInt() * 1000);
-    // digitalWrite(port, !value);
-    // delay(w.toInt() * 1000);
-    // busy = false;
+    server.send(200, "application/json", "ok :" + p + " setto:" + v + " delay:" + d);
 }
 void updateCheckin()
 {
@@ -510,7 +649,7 @@ void checkin()
     dht["h"] = pfHum;
     doc["type"] = type;
     //test
-    
+
     //Test commit
     char JSONmessageBuffer[300];
     serializeJsonPretty(doc, JSONmessageBuffer, 300);
@@ -621,39 +760,7 @@ void a0()
     serializeJsonPretty(doc, jsonChar, 500);
     server.send(200, "application/json", jsonChar);
 }
-void readA0()
-{
-    //   int sensorValue = analog.readA0();
 
-    Serial.print("ADC 10 bit = ");
-    //   Serial.print(sensorValue); // print out the value you read:
-
-    // (3.6 * val) / 4095;
-    // float volts = 3.30 * (float)sensorValue / 1023.00;
-
-    /*float volts = 3.02 * (float)sensorValue / 1023.00;
-    float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
-    float pressure_psi = pressure_kPa * 0.14503773773020923;
-
-    float psi = (volts - 0.50) * 42.5; //172/psi
-    */
-    // float psi = (volts - 0.433) * 3.75; // 15 psi
-    //float psi = (volts - 0.48) * 37.5; // 15 psi
-
-    //  float volts = analog.readVolts();
-    // 42.5 = 172 psi  37.5 = 150 psi 3.75 = 15psi
-    // float psi = analog.readPsi(0.42, 3.75);
-    float psi = analog.readPsi(0.5, 42.5);
-    if (psi < 0)
-        psi = 0;
-    Serial.print(" , Voltage = ");
-    // Serial.print(volts, 2);
-    Serial.print(" V");
-    Serial.print(", PSI:");
-    Serial.println(psi);
-    a0value = psi;
-    // rawvalue = sensorValue;
-}
 void DHTtoJSON()
 {
     StaticJsonDocument<500> doc;
@@ -669,7 +776,6 @@ void PressuretoJSON()
     readA0();
     digitalWrite(LED_BUILTIN, HIGH);
     StaticJsonDocument<500> doc;
-    //root["mac"] = WiFi.macAddress();
     doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
     doc["psi"] = a0value;
@@ -679,7 +785,6 @@ void PressuretoJSON()
     device["mac"] = WiFi.macAddress();
     char jsonChar[200];
     serializeJsonPretty(doc, jsonChar, 200);
-    // root.printTo((char *)jsonChar, root.measureLength() + 1);
     server.send(200, "application/json", jsonChar);
 }
 void readTmp()
@@ -688,8 +793,8 @@ void readTmp()
     // tmpvalue = readKtype();
     // if (isnan(tmpvalue) || tmpvalue < 1)
     // {
-        DS18b20 ds = DS();
-        tmpvalue = ds.c;
+    DS18b20 ds = DS();
+    tmpvalue = ds.c;
     // }
     Serial.print("READ");
     Serial.println(tmpvalue);
@@ -784,6 +889,10 @@ void inden()
     readdstime++;
     dhtbuffer.count--;
     reada0time++;
+    porttrick++; //บอกว่า 1 วิละ
+
+    if (counttime > 0)
+        counttime--;
 
     if (!readdhtstate)
         digitalWrite(b_led, !digitalRead(b_led));
@@ -796,6 +905,87 @@ void setAPMode()
     IPAddress IP = WiFi.softAPIP();
     Serial.println(IP.toString());
     apmode = 1;
+}
+void setvalue()
+{
+    String v = server.arg("p");
+    String value = server.arg("value");
+    String value2 = server.arg("value2");
+    if (v.equals("va0"))
+    {
+        configdata.va0 = value.toFloat();
+    }
+    else if (v.equals("D5"))
+    {
+
+        portconfig.D5value = value.toInt();
+        if (value2 != NULL)
+            portconfig.D5initvalue = value2.toInt();
+    }
+    else if (v.equals("D6"))
+    {
+        portconfig.D6value = value.toInt();
+        if (value2 != NULL)
+            portconfig.D6initvalue = value2.toInt();
+    }
+    else if (v.equals("D7"))
+    {
+        portconfig.D7value = value.toInt();
+        if (value2 != NULL)
+            portconfig.D7initvalue = value2.toInt();
+    }
+    else if (v.equals("sensorvalue"))
+    {
+        configdata.sensorvalue = value.toFloat();
+    }
+
+    EEPROM.put(ADDR + 100, configdata);
+    EEPROM.put(ADDR + 200, portconfig);
+    EEPROM.commit();
+    readA0();
+    StaticJsonDocument<1000> doc;
+    doc["message"] = "set value " + v + "TO " + value;
+    doc["name"] = name;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["mac"] = WiFi.macAddress();
+    doc["ssid"] = WiFi.SSID();
+    doc["version"] = version;
+    doc["sensorvalue"] = configdata.sensorvalue;
+    doc["rawvalue"] = analog.getRawvalue();
+    doc["pressurevalue"] = a0value;
+    doc["psi"] = a0value;
+    doc["bar"] = a0value / 14.504;
+    doc["volts"] = analog.getReadVolts();
+    doc["a0"] = a0value;
+    doc["VA0"] = configdata.va0;
+    // readDHT();
+    doc["h"] = pfHum;
+    doc["t"] = pfTemp;
+    doc["uptime"] = uptime;
+    doc["dhtbuffer.time"] = dhtbuffer.count;
+    doc["type"] = type;
+    doc["message"] = message;
+
+    doc["tmp"] = tmpvalue;
+    //  int readtmpvalue = 120;
+    // int a0readtime = 120;
+    doc["reada0time"] = configdata.a0readtime;
+    doc["readtmptime"] = configdata.readtmpvalue;
+
+    doc["D5config"] = portconfig.D5value;
+    doc["D5init"] = portconfig.D5initvalue;
+
+    doc["D6config"] = portconfig.D6value;
+    doc["D6init"] = portconfig.D6initvalue;
+    doc["D7config"] = portconfig.D7value;
+    doc["D7init"] = portconfig.D7initvalue;
+    char jsonChar[1000];
+    serializeJsonPretty(doc, jsonChar, 1000);
+    server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    server.sendHeader("Access-Control-Allow-Headers", "application/json");
+    // 'Access-Control-Allow-Headers':'application/json'
+    server.send(200, "application/json", jsonChar);
 }
 void printIPAddressOfHost(const char *host)
 {
@@ -810,18 +1000,37 @@ void printIPAddressOfHost(const char *host)
     Serial.print(" IP: ");
     Serial.println(resolvedIP);
 }
+void setHttp()
+{
+    server.on("/dht", DHTtoJSON);
+    server.on("/pressure", PressuretoJSON);
+    server.on("/ktype", KtypetoJSON);
+    server.on("/info", info);
+    server.on("/read40", read40);
+    server.on("/ds18b20", readDS);
+    server.on("/run", run);
+    server.on("/a0", a0);
+    server.on("/setwifi", setwifi);
+    server.on("/setreadtmp", setReadtmplimit);
+    server.on("/setreada0", setReada0limit);
+    server.on("/get", get);
+    server.on("/updatecheckin", updateCheckin);
+    server.on("/readam", readam);
+    server.on("/status", status);
+    server.on("/reset", reset);
+    server.on("/restart", reset);
+    server.on("/setp", setvalue);
 
+    server.on("/", status);
+    server.begin(); //เปิด TCP Server
+    Serial.println("Server started");
+}
 void connect()
 {
 }
-
-void setup()
+void setEEPROM()
 {
     EEPROM.begin(1000); // Use 1k for save value
-    //WiFi.hostname("D1-sensor-1");
-    Serial.begin(9600);
-    Serial.println();
-    Serial.println();
     int flag = EEPROM.read(0);
     // EEPROM.get(ADDR + 200, saveconfig);
     // String v = saveconfig.save;
@@ -830,6 +1039,7 @@ void setup()
         EEPROM.write(0, 22);
         EEPROM.put(ADDR, wifidata);
         EEPROM.put(ADDR + 100, configdata);
+        EEPROM.put(ADDR + 200, portconfig);
 
         EEPROM.commit();
     }
@@ -837,7 +1047,26 @@ void setup()
     {
         EEPROM.get(ADDR, wifidata);
         EEPROM.get(ADDR + 100, configdata);
+        EEPROM.get(ADDR + 200, portconfig);
+
+        //ถ้าไม่อยู่ในช่วงนี้
+        if (!(configdata.va0 > 0.1 && configdata.va0 < 1))
+        {
+            configdata.va0 = 0.5;
+            EEPROM.put(ADDR + 100, configdata);
+            EEPROM.commit();
+        }
     }
+}
+void setup()
+{
+
+    //WiFi.hostname("D1-sensor-1");
+    Serial.begin(9600);
+    Serial.println();
+    Serial.println();
+    setEEPROM();
+    setport();
     Serial.println();
     Serial.println("-----------------------------------------------");
     Serial.println(wifidata.ssid);
@@ -888,29 +1117,8 @@ void setup()
         String mac = WiFi.macAddress();
         Serial.println(mac); // แสดงหมายเลข IP ของ Server
     }
-    server.on("/dht", DHTtoJSON);
-    server.on("/pressure", PressuretoJSON);
-    // server.on("/command", runCommand);
-    server.on("/ktype", KtypetoJSON);
-    server.on("/info", info);
-    server.on("/read40", read40);
-    server.on("/ds18b20", readDS);
-    server.on("/run", run);
-    server.on("/a0", a0);
-    server.on("/setwifi", setwifi);
-    server.on("/setreadtmp", setReadtmplimit);
-    server.on("/setreada0", setReada0limit);
-    server.on("/get", get);
-    server.on("/updatecheckin", updateCheckin);
-    server.on("/readam", readam);
 
-    server.on("/status", status);
-    server.on("/reset", reset);
-
-    server.on("/", status);
-
-    server.begin(); //เปิด TCP Server
-    Serial.println("Server started");
+    setHttp();
 
     Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
     String mac = WiFi.macAddress();
@@ -959,5 +1167,10 @@ void loop()
     {
         reada0time = 0;
         reada0();
+    }
+    if (porttrick > 0 && counttime >= 0)
+    {
+        porttrick = 0;
+        portcheck();
     }
 }

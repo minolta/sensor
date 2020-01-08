@@ -3,16 +3,6 @@
 
 float KAnalog::readA0(void)
 {
-    // int sensorValue = 0;
-
-    // //อ่าน 16 ครั้งเพื่อให้ ละเอียดขึ้น
-    // for (int i = 0; i < 16; i++)
-    // {
-    //     sensorValue += analogRead(A0);
-    // }
-
-    // return (float)sensorValue / 16;
-
     return (float)analogRead(A0);
 }
 float KAnalog::getRawvalue()
@@ -29,7 +19,6 @@ float KAnalog::readPsi(float vinit, float step)
     float volts = readVolts();
     readvolts = volts;
     float psi = (volts - vinit) * step;
-    // psi = fliter(psi); //หาค่าเฉลีย
     return psi;
 }
 
@@ -80,13 +69,11 @@ float KAnalog::readVolts(void)
 {
 
     float volts = 0;
-    //for (int i = 0; i < 16; i++)
-    // {
+    
     float value = readA0();
     Serial.print("RAW : ");
     rawvalue = value;
     Serial.println(value);
     volts = (3.30 * value / 1023.00);
-    //}
     return volts;
 }
