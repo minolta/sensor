@@ -23,7 +23,7 @@ long counttime = 0;
 
 #define ADDR 100
 #define someofio 5
-const String version = "30";
+const String version = "31";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -383,6 +383,16 @@ void status()
         o["delay"] = ports[i].delay;
         o["value"] = ports[i].value;
     }
+
+    doc["D1"] = digitalRead(D1);
+    doc["D2"] = digitalRead(D2);
+    doc["D3"] = digitalRead(D3);
+    doc["D4"] = digitalRead(D4);
+    doc["D5"] = digitalRead(D5);
+    doc["D6"] = digitalRead(D6);
+    doc["D7"] = digitalRead(D7);
+    doc["D8"] = digitalRead(D8);
+
     char jsonChar[1000];
     serializeJsonPretty(doc, jsonChar, 1000);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
