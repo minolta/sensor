@@ -23,7 +23,7 @@ long counttime = 0;
 
 #define ADDR 100
 #define someofio 5
-const String version = "31";
+const String version = "34";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -34,6 +34,7 @@ String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
 #define ioport 3
+int wifitimeout = 0;
 class Portio
 {
 public:
@@ -66,6 +67,9 @@ struct
     int a0readtime = 120;
     float va0 = 0.5;
     float sensorvalue = 42.5;
+    boolean havedht = false;
+    boolean haveds = false;
+    boolean havea0 = false;
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
@@ -339,7 +343,8 @@ void readDHT()
 }
 void status()
 {
-    readA0();
+    if (configdata.haveds)
+        readA0();
     StaticJsonDocument<1000> doc;
     doc["name"] = name;
     doc["ip"] = WiFi.localIP().toString();
@@ -361,7 +366,9 @@ void status()
     doc["dhtbuffer.time"] = dhtbuffer.count;
     doc["type"] = type;
     doc["message"] = message;
-
+    doc["havedht"] = configdata.havedht;
+    doc["haveds"] = configdata.haveds;
+    doc["havea0"] = configdata.havea0;
     doc["tmp"] = tmpvalue;
     //  int readtmpvalue = 120;
     // int a0readtime = 120;
@@ -384,14 +391,14 @@ void status()
         o["value"] = ports[i].value;
     }
 
-    doc["D1"] = digitalRead(D1);
-    doc["D2"] = digitalRead(D2);
-    doc["D3"] = digitalRead(D3);
-    doc["D4"] = digitalRead(D4);
-    doc["D5"] = digitalRead(D5);
-    doc["D6"] = digitalRead(D6);
-    doc["D7"] = digitalRead(D7);
-    doc["D8"] = digitalRead(D8);
+    doc["d1"] = digitalRead(D1);
+    doc["d2"] = digitalRead(D2);
+    doc["d3"] = digitalRead(D3);
+    doc["d4"] = digitalRead(D4);
+    doc["d5"] = digitalRead(D5);
+    doc["d6"] = digitalRead(D6);
+    doc["d7"] = digitalRead(D7);
+    doc["d8"] = digitalRead(D8);
 
     char jsonChar[1000];
     serializeJsonPretty(doc, jsonChar, 1000);
@@ -928,9 +935,9 @@ void setvalue()
     else if (v.equals("D5"))
     {
 
-        portconfig.D5value = value.toInt();
+        portconfig.D5value = value.toInt(); // mode of port
         if (value2 != NULL)
-            portconfig.D5initvalue = value2.toInt();
+            portconfig.D5initvalue = value2.toInt(); //init port
     }
     else if (v.equals("D6"))
     {
@@ -948,7 +955,18 @@ void setvalue()
     {
         configdata.sensorvalue = value.toFloat();
     }
-
+    else if (v.equals("havedht"))
+    {
+        configdata.havedht = value.toInt();
+    }
+    else if (v.equals("haveds"))
+    {
+        configdata.haveds = value.toInt();
+    }
+    else if (v.equals("havea0"))
+    {
+        configdata.havea0 = value.toInt();
+    }
     EEPROM.put(ADDR + 100, configdata);
     EEPROM.put(ADDR + 200, portconfig);
     EEPROM.commit();
@@ -1002,9 +1020,11 @@ void printIPAddressOfHost(const char *host)
     IPAddress resolvedIP;
     if (!WiFi.hostByName(host, resolvedIP))
     {
-        Serial.println("DNS lookup failed.  Rebooting...");
+        Serial.println("DNS lookup failed.  Count..." + String(wifitimeout));
         Serial.flush();
-        ESP.reset();
+        wifitimeout++;
+        if (wifitimeout > 5)
+            ESP.reset();
     }
     Serial.print(host);
     Serial.print(" IP: ");
@@ -1098,7 +1118,7 @@ void setup()
     WiFiMulti.addAP("forpi", "04qwerty");
     WiFiMulti.addAP("forpi2", "04qwerty");
     // WiFiMulti.addAP("forpi3", "04qwerty");
-    // WiFiMulti.addAP("Sirifarm", "0932154741");
+    WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("test", "12345678");
 
     // WiFiMulti.addAP("forgame", "0894297443");
@@ -1113,7 +1133,7 @@ void setup()
         delay(500);
         Serial.print(".");
         co++;
-        if (co > 50)
+        if (co > 100)
         {
             setAPMode();
             break;
@@ -1160,20 +1180,21 @@ void loop()
     {
         otatime = 0;
         ota();
+        printIPAddressOfHost("fw1.pixka.me");
     }
-    if (readdhttime > 5 && dhtbuffer.count < 1)
+    if (readdhttime > 5 && dhtbuffer.count < 1 && configdata.havedht)
     {
         readdhttime = 0;
         message = "Read DHT";
         // readDHT();
         readAm2320();
     }
-    if (readdstime > configdata.readtmpvalue)
+    if (readdstime > configdata.readtmpvalue && configdata.haveds)
     {
         readdstime = 0;
         readTmp();
     }
-    if (reada0time > configdata.a0readtime)
+    if (reada0time > configdata.a0readtime && configdata.havea0)
     {
         reada0time = 0;
         reada0();
