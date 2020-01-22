@@ -35,7 +35,8 @@
         "streambuf": "cpp",
         "tuple": "cpp",
         "utility": "cpp",
-        "string": "cpp"
+        "string": "cpp",
+        "algorithm": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "Enabled"
 }

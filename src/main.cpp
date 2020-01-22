@@ -20,10 +20,10 @@ long counttime = 0;
 #include <EEPROM.h>
 #include "Adafruit_Sensor.h"
 #include "Adafruit_AM2320.h"
-
+#define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "34";
+const String version = "40";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -34,7 +34,13 @@ String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
 #define ioport 3
+StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
+extern "C"
+{
+#include "user_interface.h"
+}
+
 class Portio
 {
 public:
@@ -70,6 +76,7 @@ struct
     boolean havedht = false;
     boolean haveds = false;
     boolean havea0 = false;
+    boolean havetorestart = false; //สำหรับบอกว่าถ้าติดต่อ wifi ไม่ได้ให้ restart
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
@@ -114,7 +121,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     SSID: <input type="text" name="ssid">
     PASSWORD: <input type="password" name="password">
     <input type="submit" value="Submit">
-  </form><br>
+  </form><br> contract ky@pixka.me 
 </body></html>)rawliteral";
 class Wifidata
 {
@@ -254,7 +261,7 @@ void get()
     Serial.println("Set ok");
     EEPROM.put(ADDR, wifidata);
     EEPROM.commit();
-    server.send(200, "application/json", "SSID" + ssd + " P:" + password);
+    server.send(200, "application/json", "{\"SSID\": \"" + ssd + "\" ,\"P\":\"" + password + "\"}");
 }
 void setwifi()
 {
@@ -343,14 +350,20 @@ void readDHT()
 }
 void status()
 {
-    if (configdata.haveds)
+    doc.clear();
+    if (configdata.havea0)
         readA0();
-    StaticJsonDocument<1000> doc;
+    // DynamicJsonDocument<jsonbuffersize>ddoc;
+
+    // StaticJsonDocument<jsonbuffersize> doc;
+    doc["freemem"] = system_get_free_heap_size();
+    doc["version"] = version;
     doc["name"] = name;
     doc["ip"] = WiFi.localIP().toString();
     doc["mac"] = WiFi.macAddress();
     doc["ssid"] = WiFi.SSID();
-    doc["version"] = version;
+    doc["wifitimeout"] = wifitimeout;
+
     doc["sensorvalue"] = configdata.sensorvalue;
     doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
@@ -369,6 +382,7 @@ void status()
     doc["havedht"] = configdata.havedht;
     doc["haveds"] = configdata.haveds;
     doc["havea0"] = configdata.havea0;
+    doc["havetorestart"] = configdata.havetorestart;
     doc["tmp"] = tmpvalue;
     //  int readtmpvalue = 120;
     // int a0readtime = 120;
@@ -382,14 +396,6 @@ void status()
     doc["D6init"] = portconfig.D6initvalue;
     doc["D7config"] = portconfig.D7value;
     doc["D7init"] = portconfig.D7initvalue;
-    for (int i = 0; i < ioport; i++)
-    {
-        JsonObject o = doc.createNestedObject(new String(i));
-        o["port"] = ports[i].port;
-        o["closetime"] = ports[i].closetime;
-        o["delay"] = ports[i].delay;
-        o["value"] = ports[i].value;
-    }
 
     doc["d1"] = digitalRead(D1);
     doc["d2"] = digitalRead(D2);
@@ -399,14 +405,24 @@ void status()
     doc["d6"] = digitalRead(D6);
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
+    
+    // for (int i = 0; i < ioport; i++)
+    // {
+    //     JsonObject o = doc.createNestedObject(new String(i));
+    //     o["port"] = ports[i].port;
+    //     o["closetime"] = ports[i].closetime;
+    //     o["delay"] = ports[i].delay;
+    //     o["value"] = ports[i].value;
+    // }
 
-    char jsonChar[1000];
-    serializeJsonPretty(doc, jsonChar, 1000);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
     server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     server.sendHeader("Access-Control-Allow-Headers", "application/json");
     // 'Access-Control-Allow-Headers':'application/json'
     server.send(200, "application/json", jsonChar);
+    
 }
 void addTorun(int port, int delay, int value, int wait)
 {
@@ -591,12 +607,13 @@ DS18b20 DS()
 void readDS()
 {
     DS18b20 v = DS();
-    StaticJsonDocument<500> doc;
+    doc.clear();
+    // StaticJsonDocument<jsonbuffersize> doc;
     doc["c"] = v.c;
     doc["f"] = v.f;
     doc["t"] = v.t;
-    char jsonChar[500];
-    serializeJsonPretty(doc, jsonChar, 500);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
 
@@ -611,7 +628,8 @@ void read40()
 }
 void reset()
 {
-    StaticJsonDocument<1000> doc;
+    // StaticJsonDocument<jsonbuffersize> doc;
+    doc.clear();
     doc["name"] = name;
     doc["ip"] = WiFi.localIP().toString();
     doc["mac"] = WiFi.macAddress();
@@ -622,8 +640,8 @@ void reset()
     doc["uptime"] = uptime;
     doc["type"] = type;
     doc["reset"] = "OK";
-    char jsonChar[1000];
-    serializeJsonPretty(doc, jsonChar, 1000);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
     server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     server.sendHeader("Access-Control-Allow-Headers", "application/json");
@@ -656,7 +674,8 @@ void ota()
 
 void checkin()
 {
-    StaticJsonDocument<500> doc;
+    // StaticJsonDocument<jsonbuffersize> doc;
+    doc.clear();
     doc["mac"] = WiFi.macAddress();
     doc["password"] = "";
     doc["ip"] = WiFi.localIP().toString();
@@ -668,8 +687,8 @@ void checkin()
     //test
 
     //Test commit
-    char JSONmessageBuffer[300];
-    serializeJsonPretty(doc, JSONmessageBuffer, 300);
+    char JSONmessageBuffer[jsonbuffersize];
+    serializeJsonPretty(doc, JSONmessageBuffer, jsonbuffersize);
     Serial.println(JSONmessageBuffer);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
@@ -686,7 +705,7 @@ void checkin()
     {
         Serial.print(" Play load:");
         Serial.println(payload); //Print request response payload
-        DynamicJsonDocument doc(1024);
+        DynamicJsonDocument doc(jsonbuffersize);
         deserializeJson(doc, payload);
         JsonObject obj = doc.as<JsonObject>();
         name = obj["pidevice"]["name"].as<String>();
@@ -742,12 +761,13 @@ void runCommand()
     digitalWrite(p, set.toInt());
     addTorun(p, d.toInt(), set.toInt(), 0);
 
-    StaticJsonDocument<500> doc;
+    //StaticJsonDocument<jsonbuffersize> doc;
+    doc.clear();
     doc["add"] = "ok";
     doc["port"] = s;
     doc["set"] = set;
-    char jsonChar[100];
-    serializeJsonPretty(doc, jsonChar, 100);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
     Serial.println("Set port " + s + " to " + set);
 }
@@ -769,22 +789,24 @@ void reada0()
 }
 void a0()
 {
-    StaticJsonDocument<500> doc;
+    // StaticJsonDocument<jsonbuffersize> doc;
+    doc.clear();
     doc["a0"] = a0value;
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
-    char jsonChar[500];
-    serializeJsonPretty(doc, jsonChar, 500);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
 
 void DHTtoJSON()
 {
-    StaticJsonDocument<500> doc;
+    //  StaticJsonDocument<jsonbuffersize> doc;
+    doc.clear();
     doc["t"] = pfTemp;
     doc["h"] = pfHum;
-    char jsonChar[100];
-    serializeJsonPretty(doc, jsonChar, 100);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
 void PressuretoJSON()
@@ -792,7 +814,8 @@ void PressuretoJSON()
     digitalWrite(LED_BUILTIN, LOW);
     readA0();
     digitalWrite(LED_BUILTIN, HIGH);
-    StaticJsonDocument<500> doc;
+    // StaticJsonDocument<jsonbuffersize> doc;
+    doc.clear();
     doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
     doc["psi"] = a0value;
@@ -800,8 +823,8 @@ void PressuretoJSON()
     doc["volts"] = analog.getReadVolts();
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
-    char jsonChar[200];
-    serializeJsonPretty(doc, jsonChar, 200);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
 void readTmp()
@@ -821,11 +844,12 @@ void KtypetoJSON()
 {
 
     //  digitalWrite(D3, 1);
-    StaticJsonDocument<500> doc;
+    // StaticJsonDocument<jsonbuffersize> doc;
     //root["mac"] = WiFi.macAddress();
     // root["mac"] = WiFi.macAddress();
     //root["pressurevalue"] = a0value;
     // JsonObject &ds18value = root.createNestedObject("ds18value");
+    doc.clear();
     doc["t"] = tmpvalue;
 
     JsonObject pidevice = doc.createNestedObject("pidevice");
@@ -838,8 +862,8 @@ void KtypetoJSON()
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
 
-    char jsonChar[500];
-    serializeJsonPretty(doc, jsonChar, 500);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
 void info()
@@ -850,7 +874,8 @@ void info()
     Serial.println(WiFi.localIP());
     Serial.print("Version:");
     Serial.println(version);
-    StaticJsonDocument<500> doc;
+    doc.clear();
+    // StaticJsonDocument<jsonbuffersize> doc;
     //root["mac"] = WiFi.macAddr ess();
     // root["mac"] = WiFi.macAddress();
     //root["pressurevalue"] = a0value;
@@ -858,9 +883,9 @@ void info()
     doc["mac"] = WiFi.macAddress();
     doc["IP"] = WiFi.localIP().toString();
     doc["version"] = version;
-    char jsonChar[500];
+    char jsonChar[jsonbuffersize];
     // root.printTo((char *)jsonChar, root.measureLength() + 1);
-    serializeJsonPretty(doc, jsonChar, 500);
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
 void readAm2320()
@@ -967,11 +992,16 @@ void setvalue()
     {
         configdata.havea0 = value.toInt();
     }
+    else if (v.equals("havetorestart"))
+    {
+        configdata.havetorestart = value.toInt();
+    }
     EEPROM.put(ADDR + 100, configdata);
     EEPROM.put(ADDR + 200, portconfig);
     EEPROM.commit();
-    readA0();
-    StaticJsonDocument<1000> doc;
+    if (configdata.havea0)
+        readA0();
+    doc.clear();
     doc["message"] = "set value " + v + "TO " + value;
     doc["name"] = name;
     doc["ip"] = WiFi.localIP().toString();
@@ -993,22 +1023,17 @@ void setvalue()
     doc["dhtbuffer.time"] = dhtbuffer.count;
     doc["type"] = type;
     doc["message"] = message;
-
     doc["tmp"] = tmpvalue;
-    //  int readtmpvalue = 120;
-    // int a0readtime = 120;
     doc["reada0time"] = configdata.a0readtime;
     doc["readtmptime"] = configdata.readtmpvalue;
-
     doc["D5config"] = portconfig.D5value;
     doc["D5init"] = portconfig.D5initvalue;
-
     doc["D6config"] = portconfig.D6value;
     doc["D6init"] = portconfig.D6initvalue;
     doc["D7config"] = portconfig.D7value;
     doc["D7init"] = portconfig.D7initvalue;
-    char jsonChar[1000];
-    serializeJsonPretty(doc, jsonChar, 1000);
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
     server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     server.sendHeader("Access-Control-Allow-Headers", "application/json");
@@ -1023,7 +1048,7 @@ void printIPAddressOfHost(const char *host)
         Serial.println("DNS lookup failed.  Count..." + String(wifitimeout));
         Serial.flush();
         wifitimeout++;
-        if (wifitimeout > 5)
+        if (wifitimeout > 5 && configdata.havetorestart)
             ESP.reset();
     }
     Serial.print(host);
@@ -1050,6 +1075,7 @@ void setHttp()
     server.on("/reset", reset);
     server.on("/restart", reset);
     server.on("/setp", setvalue);
+    server.on("/update", ota);
 
     server.on("/", status);
     server.begin(); //เปิด TCP Server
@@ -1103,7 +1129,18 @@ void setup()
     Serial.println(wifidata.password);
     Serial.println("-----------------------------------------------");
     WiFiMulti.addAP(wifidata.ssid, wifidata.password);
+    int ft = 0;
+    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+    {
 
+        delay(500);
+        Serial.print(".");
+        ft++;
+        if (ft > 10)
+        {
+            break;
+        }
+    }
     // WiFi.mode(WIFI_STA);
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
@@ -1123,6 +1160,7 @@ void setup()
 
     // WiFiMulti.addAP("forgame", "0894297443");
     WiFiMulti.addAP("pksy", "04qwerty");
+    WiFiMulti.addAP("test", "12345678");
     // WiFiMulti.addAP("SP", "04qwerty");
     // WiFiMulti.addAP("SP3", "04qwerty");
 
@@ -1141,8 +1179,8 @@ void setup()
     }
     if (!apmode)
     {
-        checkin();
         ota();
+        checkin();
         Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
         String mac = WiFi.macAddress();
         Serial.println(mac); // แสดงหมายเลข IP ของ Server
@@ -1161,8 +1199,12 @@ void setup()
     pinMode(D4, OUTPUT);
     // t.every(60000, senddata);
     flipper.attach(1, inden);
-    am2320.begin();
-    readAm2320();
+    if (configdata.havedht)
+    {
+        am2320.begin();
+        readAm2320();
+    }
+    // ota();
 }
 
 void loop()
