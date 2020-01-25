@@ -36,7 +36,10 @@
         "tuple": "cpp",
         "utility": "cpp",
         "string": "cpp",
-        "algorithm": "cpp"
+        "algorithm": "cpp",
+        "atomic": "cpp",
+        "bitset": "cpp",
+        "regex": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "Enabled"
 }

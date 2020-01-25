@@ -23,7 +23,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "40";
+const String version = "43";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -363,7 +363,8 @@ void status()
     doc["mac"] = WiFi.macAddress();
     doc["ssid"] = WiFi.SSID();
     doc["wifitimeout"] = wifitimeout;
-
+    doc["ssid"] = WiFi.SSID();
+    doc["signal"] = WiFi.RSSI();
     doc["sensorvalue"] = configdata.sensorvalue;
     doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
@@ -405,7 +406,7 @@ void status()
     doc["d6"] = digitalRead(D6);
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
-    
+
     // for (int i = 0; i < ioport; i++)
     // {
     //     JsonObject o = doc.createNestedObject(new String(i));
@@ -422,7 +423,6 @@ void status()
     server.sendHeader("Access-Control-Allow-Headers", "application/json");
     // 'Access-Control-Allow-Headers':'application/json'
     server.send(200, "application/json", jsonChar);
-    
 }
 void addTorun(int port, int delay, int value, int wait)
 {
@@ -942,11 +942,17 @@ void inden()
 
 void setAPMode()
 {
-    String mac = WiFi.macAddress();
-    WiFi.softAP("ESP" + mac, "12345678");
-    IPAddress IP = WiFi.softAPIP();
-    Serial.println(IP.toString());
-    apmode = 1;
+    if (WiFiMulti.run() != WL_CONNECTED)
+    {
+        String mac = WiFi.macAddress();
+        WiFi.softAP("ESP-Sensor" + mac, "12345678");
+        IPAddress IP = WiFi.softAPIP();
+        Serial.println(IP.toString());
+        apmode = 1;
+    }
+    else
+    {
+    }
 }
 void setvalue()
 {
@@ -1134,10 +1140,12 @@ void setup()
     {
 
         delay(500);
-        Serial.print(".");
+        Serial.print("#");
         ft++;
         if (ft > 10)
         {
+            Serial.println("Connect main wifi timeout");
+            apmode = 1;
             break;
         }
     }
@@ -1177,8 +1185,11 @@ void setup()
             break;
         }
     }
+    if (WiFiMulti.run() == WL_CONNECTED)
+        apmode = 0;
     if (!apmode)
     {
+
         ota();
         checkin();
         Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
@@ -1220,6 +1231,8 @@ void loop()
     }
     if (otatime > 60)
     {
+        if (WiFiMulti.run() == WL_CONNECTED)
+            WiFi.softAPdisconnect(true);
         otatime = 0;
         ota();
         printIPAddressOfHost("fw1.pixka.me");
