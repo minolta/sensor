@@ -1,0 +1,50 @@
+{
+    "name": "Grove - I2C High Accuracy Temp_Humi Sensor SHT35", 
+    "version": "1.0.0", 
+    "keywords": [
+        "sensors"
+    ], 
+    "description": "Arduino library to control Grove Temperature sensor SHT35.", 
+    "frameworks": [
+        "arduino"
+    ], 
+    "platforms": [
+        "atmelavr", 
+        "atmelsam", 
+        "espressif32", 
+        "espressif8266", 
+        "intel_arc32", 
+        "microchippic32", 
+        "nordicnrf51", 
+        "nordicnrf52", 
+        "ststm32", 
+        "ststm8", 
+        "teensy", 
+        "timsp430"
+    ], 
+    "authors": [
+        {
+            "email": "techsupport@seeed.cc", 
+            "url": null, 
+            "maintainer": true, 
+            "name": "Seeed Studio"
+        }
+    ], 
+    "repository": {
+        "type": "git", 
+        "url": "https://github.com/Seeed-Studio/Seeed_SHT35"
+    }, 
+    "homepage": null, 
+    "export": {
+        "include": null, 
+        "exclude": [
+            "extras", 
+            "docs", 
+            "tests", 
+            "test", 
+            "*.doxyfile", 
+            "*.pdf"
+        ]
+    }, 
+    "id": 5873
+}

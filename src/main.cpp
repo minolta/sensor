@@ -20,6 +20,7 @@ long counttime = 0;
 #include <EEPROM.h>
 #include "Adafruit_Sensor.h"
 #include "Adafruit_AM2320.h"
+
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
@@ -676,13 +677,69 @@ void checkin()
 {
     // StaticJsonDocument<jsonbuffersize> doc;
     doc.clear();
-    doc["mac"] = WiFi.macAddress();
-    doc["password"] = "";
+    if (configdata.havea0)
+        readA0();
+    // DynamicJsonDocument<jsonbuffersize>ddoc;
+
+    // StaticJsonDocument<jsonbuffersize> doc;
+    doc["freemem"] = system_get_free_heap_size();
+    doc["version"] = version;
+    doc["name"] = name;
     doc["ip"] = WiFi.localIP().toString();
+    doc["mac"] = WiFi.macAddress();
+    doc["ssid"] = WiFi.SSID();
+    doc["wifitimeout"] = wifitimeout;
+    doc["ssid"] = WiFi.SSID();
+    doc["signal"] = WiFi.RSSI();
+    doc["sensorvalue"] = configdata.sensorvalue;
+    doc["rawvalue"] = analog.getRawvalue();
+    doc["pressurevalue"] = a0value;
+    doc["psi"] = a0value;
+    doc["bar"] = a0value / 14.504;
+    doc["volts"] = analog.getReadVolts();
+    doc["a0"] = a0value;
+    doc["VA0"] = configdata.va0;
+    // readDHT();
+    doc["h"] = pfHum;
+    doc["t"] = pfTemp;
     doc["uptime"] = uptime;
-    JsonObject dht = doc.createNestedObject("dhtvalue");
-    dht["t"] = pfTemp;
-    dht["h"] = pfHum;
+    doc["dhtbuffer.time"] = dhtbuffer.count;
+    doc["type"] = type;
+    doc["message"] = message;
+    doc["havedht"] = configdata.havedht;
+    doc["haveds"] = configdata.haveds;
+    doc["havea0"] = configdata.havea0;
+    doc["havetorestart"] = configdata.havetorestart;
+    doc["tmp"] = tmpvalue;
+    //  int readtmpvalue = 120;
+    // int a0readtime = 120;
+    doc["reada0time"] = configdata.a0readtime;
+    doc["readtmptime"] = configdata.readtmpvalue;
+
+    doc["D5config"] = portconfig.D5value;
+    doc["D5init"] = portconfig.D5initvalue;
+
+    doc["D6config"] = portconfig.D6value;
+    doc["D6init"] = portconfig.D6initvalue;
+    doc["D7config"] = portconfig.D7value;
+    doc["D7init"] = portconfig.D7initvalue;
+
+    doc["d1"] = digitalRead(D1);
+    doc["d2"] = digitalRead(D2);
+    doc["d3"] = digitalRead(D3);
+    doc["d4"] = digitalRead(D4);
+    doc["d5"] = digitalRead(D5);
+    doc["d6"] = digitalRead(D6);
+    doc["d7"] = digitalRead(D7);
+    doc["d8"] = digitalRead(D8);
+
+    // doc["mac"] = WiFi.macAddress();
+    // doc["password"] = "";
+    // doc["ip"] = WiFi.localIP().toString();
+    // doc["uptime"] = uptime;
+    // JsonObject dht = doc.createNestedObject("dhtvalue");
+    // dht["t"] = pfTemp;
+    // dht["h"] = pfHum;
     doc["type"] = type;
     //test
 
@@ -1218,6 +1275,68 @@ void setup()
     // ota();
 }
 
+
+//This code is a modified version of the code posted on the Arduino forum and other places
+
+void check_if_exist_I2C()
+{
+
+    byte error, address;
+
+    int nDevices;
+
+    nDevices = 0;
+
+    for (address = 1; address < 127; address++)
+    {
+
+        // The i2c_scanner uses the return value of
+
+        // the Write.endTransmisstion to see if
+
+        // a device did acknowledge to the address.
+
+        Wire.beginTransmission(address);
+
+        error = Wire.endTransmission();
+
+        if (error == 0)
+        {
+
+            Serial.print("I2C device found at address 0x");
+
+            if (address < 16)
+
+                Serial.print("0");
+
+            Serial.print(address, HEX);
+
+            Serial.println(" !");
+
+            nDevices++;
+        }
+        else if (error == 4)
+        {
+
+            Serial.print("Unknow error at address 0x");
+
+            if (address < 16)
+
+                Serial.print("0");
+
+            Serial.println(address, HEX);
+        }
+
+    } //for loop
+
+    if (nDevices == 0)
+
+        Serial.println("No I2C devices found");
+
+    else
+
+        Serial.println("**********************************\n");
+}
 void loop()
 {
 
@@ -1229,6 +1348,7 @@ void loop()
         checkintime = 0;
         checkin();
     }
+
     if (otatime > 60)
     {
         if (WiFiMulti.run() == WL_CONNECTED)
