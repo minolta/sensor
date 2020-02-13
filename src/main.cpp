@@ -10,6 +10,8 @@
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266httpUpdate.h>
 #include <OneWire.h>
+#include <Wire.h>
+#include "SHTSensor.h"
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
 // #include "Timer.h"
@@ -24,7 +26,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "43";
+const String version = "44";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -35,6 +37,7 @@ String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
 #define ioport 3
+SHTSensor sht;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
 extern "C"
@@ -78,6 +81,7 @@ struct
     boolean haveds = false;
     boolean havea0 = false;
     boolean havetorestart = false; //สำหรับบอกว่าถ้าติดต่อ wifi ไม่ได้ให้ restart
+    boolean havesht = false;
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
@@ -385,6 +389,7 @@ void status()
     doc["haveds"] = configdata.haveds;
     doc["havea0"] = configdata.havea0;
     doc["havetorestart"] = configdata.havetorestart;
+    doc["havetosht"] = configdata.havesht;
     doc["tmp"] = tmpvalue;
     //  int readtmpvalue = 120;
     // int a0readtime = 120;
@@ -1059,6 +1064,10 @@ void setvalue()
     {
         configdata.havetorestart = value.toInt();
     }
+    else if (v.equals("havesht"))
+    {
+        configdata.havesht = value.toInt();
+    }
     EEPROM.put(ADDR + 100, configdata);
     EEPROM.put(ADDR + 200, portconfig);
     EEPROM.commit();
@@ -1177,6 +1186,37 @@ void setEEPROM()
         }
     }
 }
+void readSht()
+{
+    if (sht.readSample())
+    {
+        pfHum = sht.getHumidity();
+        pfTemp = sht.getTemperature();
+        Serial.print("SHT value H ");
+        Serial.print(pfHum);
+        Serial.print(" T ");
+        Serial.println(pfTemp);
+    }
+    else
+    {
+        pfTemp = pfHum = 0;
+        Serial.println("SHT ERROR");
+    }
+}
+void setSht()
+{
+    //D1,D2
+    Wire.begin();
+    if (sht.init())
+    {
+        Serial.print("init(): success\n");
+    }
+    else
+    {
+        Serial.print("init(): failed\n");
+    }
+    sht.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
+}
 void setup()
 {
 
@@ -1272,9 +1312,13 @@ void setup()
         am2320.begin();
         readAm2320();
     }
+
+    if (configdata.havesht)
+    {
+        setSht();
+    }
     // ota();
 }
-
 
 //This code is a modified version of the code posted on the Arduino forum and other places
 
@@ -1373,6 +1417,11 @@ void loop()
     {
         reada0time = 0;
         reada0();
+    }
+
+    if (configdata.havesht)
+    {
+        readSht();
     }
     if (porttrick > 0 && counttime >= 0)
     {
