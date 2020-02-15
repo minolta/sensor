@@ -361,7 +361,7 @@ void status()
     // DynamicJsonDocument<jsonbuffersize>ddoc;
 
     // StaticJsonDocument<jsonbuffersize> doc;
-    doc["freemem"] = system_get_free_heap_size();
+    doc["heap"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
     doc["ip"] = WiFi.localIP().toString();
@@ -687,6 +687,8 @@ void checkin()
     // DynamicJsonDocument<jsonbuffersize>ddoc;
 
     // StaticJsonDocument<jsonbuffersize> doc;
+    doc.clear();
+    
     doc["freemem"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
@@ -767,7 +769,7 @@ void checkin()
     {
         Serial.print(" Play load:");
         Serial.println(payload); //Print request response payload
-        DynamicJsonDocument doc(jsonbuffersize);
+        doc.clear();
         deserializeJson(doc, payload);
         JsonObject obj = doc.as<JsonObject>();
         name = obj["pidevice"]["name"].as<String>();
@@ -1192,10 +1194,10 @@ void readSht()
     {
         pfHum = sht.getHumidity();
         pfTemp = sht.getTemperature();
-        Serial.print("SHT value H ");
-        Serial.print(pfHum);
-        Serial.print(" T ");
-        Serial.println(pfTemp);
+        // Serial.print("SHT value H ");
+        // Serial.print(pfHum);
+        // Serial.print(" T ");
+        // Serial.println(pfTemp);
     }
     else
     {
