@@ -26,7 +26,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "44";
+const String version = "45";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -687,8 +687,6 @@ void checkin()
     // DynamicJsonDocument<jsonbuffersize>ddoc;
 
     // StaticJsonDocument<jsonbuffersize> doc;
-    doc.clear();
-    
     doc["freemem"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
@@ -739,6 +737,7 @@ void checkin()
     doc["d6"] = digitalRead(D6);
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
+    doc["password"] = "";
 
     // doc["mac"] = WiFi.macAddress();
     // doc["password"] = "";
@@ -758,6 +757,7 @@ void checkin()
     HTTPClient http; //Declare object of class HTTPClient
 
     http.begin(checkinhost);                            //Specify request destination
+    Serial.println(checkinhost);
     http.addHeader("Content-Type", "application/json"); //Specify content-type header
     // http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
 
