@@ -12,6 +12,14 @@
 #include <OneWire.h>
 #include <Wire.h>
 #include "SHTSensor.h"
+#include <WiFiUdp.h>
+#include <RtcDS3231.h>              //RTC library
+RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
+#include <NTPClient.h>
+#define TIME_ZONE (+7)
+WiFiUDP ntpUDP;
+// NTPClient timeClient(ntpUDP);
+NTPClient timeClient(ntpUDP, "th.pool.ntp.org", 3600, 60000);
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
 // #include "Timer.h"
@@ -26,7 +34,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "45";
+const String version = "46";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -36,6 +44,7 @@ long readdstime = 0;
 String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
+static char buf[100] = {'\0'};
 #define ioport 3
 SHTSensor sht;
 StaticJsonDocument<jsonbuffersize> doc;
@@ -413,6 +422,22 @@ void status()
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
 
+    RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
+
+    if (currentTime.Year() != 2000)
+    {
+        char str[20]; //declare a string as an array of chars
+
+        sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+                currentTime.Year(),       //get year method
+                currentTime.Month(),      //get month method
+                currentTime.Day(),        //get day method
+                currentTime.Hour(),       //get hour method
+                currentTime.Minute(),     //get minute method
+                currentTime.Second()      //get second method
+        );
+        doc["rtctime"] = str;
+    }
     // for (int i = 0; i < ioport; i++)
     // {
     //     JsonObject o = doc.createNestedObject(new String(i));
@@ -756,7 +781,7 @@ void checkin()
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
-    http.begin(checkinhost);                            //Specify request destination
+    http.begin(checkinhost); //Specify request destination
     Serial.println(checkinhost);
     http.addHeader("Content-Type", "application/json"); //Specify content-type header
     // http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
@@ -1002,6 +1027,29 @@ void inden()
 
     if (!readdhtstate)
         digitalWrite(b_led, !digitalRead(b_led));
+
+    // timeClient.update();
+
+    // int cur_hour = timeClient.getHours();
+    // int cur_min = timeClient.getMinutes();
+    // int cur_sec = timeClient.getSeconds();
+    // sprintf(buf, "%02d:%02d:%02d", cur_hour, cur_min, cur_sec);
+    // Serial.println(buf);
+
+    RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
+
+    char str[20]; //declare a string as an array of chars
+
+    sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+            currentTime.Year(),       //get year method
+            currentTime.Month(),      //get month method
+            currentTime.Day(),        //get day method
+            currentTime.Hour(),       //get hour method
+            currentTime.Minute(),     //get minute method
+            currentTime.Second()      //get second method
+    );
+
+    Serial.println(str); //print the string to the serial port
 }
 
 void setAPMode()
@@ -1219,9 +1267,23 @@ void setSht()
     }
     sht.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
 }
-void setup()
+void settime()
 {
 
+    if (timeClient.update())
+    {
+        Serial.println("Update time");
+        long t = timeClient.getEpochTime();
+        Serial.print("T: ");
+        Serial.println(t);
+        RtcDateTime currentTime = RtcDateTime(t - 946684800); //define date and time object
+        rtcObject.SetDateTime(currentTime);                   //configure the RTC with object
+    }
+}
+
+void setup()
+{
+    rtcObject.Begin(); //Starts I2C
     //WiFi.hostname("D1-sensor-1");
     Serial.begin(9600);
     Serial.println();
@@ -1234,7 +1296,9 @@ void setup()
     Serial.println(wifidata.password);
     Serial.println("-----------------------------------------------");
     WiFiMulti.addAP(wifidata.ssid, wifidata.password);
+
     int ft = 0;
+
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
 
@@ -1248,6 +1312,9 @@ void setup()
             break;
         }
     }
+    timeClient.begin();
+    timeClient.setTimeOffset(TIME_ZONE * (60 * 60));
+    timeClient.setUpdateInterval(300 * 1000);
     // WiFi.mode(WIFI_STA);
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
@@ -1320,6 +1387,8 @@ void setup()
         setSht();
     }
     // ota();
+
+    settime();
 }
 
 //This code is a modified version of the code posted on the Arduino forum and other places
@@ -1383,6 +1452,7 @@ void check_if_exist_I2C()
 
         Serial.println("**********************************\n");
 }
+
 void loop()
 {
 
@@ -1402,6 +1472,7 @@ void loop()
         otatime = 0;
         ota();
         printIPAddressOfHost("fw1.pixka.me");
+        settime();
     }
     if (readdhttime > 5 && dhtbuffer.count < 1 && configdata.havedht)
     {
