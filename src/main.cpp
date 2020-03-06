@@ -34,13 +34,14 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "46";
+const String version = "49";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
 //run port ได้
 long porttrick = 0;
 long readdstime = 0;
+
 String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
@@ -191,7 +192,7 @@ uint32_t delayMS;
 float pfDew, pfHum, pfTemp, pfVcc;
 float a0value;
 float rawvalue = 0;
-
+int readshtcount = 0;
 // int ktcSO = D6;
 // int ktcCS = D7;
 // int ktcCLK = D5;
@@ -512,7 +513,20 @@ void run()
     Serial.println("Port: " + p + " value : " + v + " delay: " + d);
     int port = getPort(p);
     addTorun(port, d.toInt(), v.toInt(), w.toInt());
-    server.send(200, "application/json", "ok :" + p + " setto:" + v + " delay:" + d);
+    doc.clear();
+    doc["port"] = p;
+    doc["value"] = v;
+    doc["delay"] = d;
+    doc["status"] = "ok";
+    char jsonChar[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    server.sendHeader("Access-Control-Allow-Headers", "application/json");
+    // 'Access-Control-Allow-Headers':'application/json'
+    server.send(200, "application/json", jsonChar);
+
+    // server.send(200, "application/json", "ok :" + p + " setto:" + v + " delay:" + d);
 }
 void updateCheckin()
 {
@@ -1020,6 +1034,7 @@ void inden()
     readdstime++;
     dhtbuffer.count--;
     reada0time++;
+    readshtcount++;
     porttrick++; //บอกว่า 1 วิละ
 
     if (counttime > 0)
@@ -1492,8 +1507,9 @@ void loop()
         reada0();
     }
 
-    if (configdata.havesht)
+    if (configdata.havesht && readshtcount>2)
     {
+        readshtcount = 0;
         readSht();
     }
     if (porttrick > 0 && counttime >= 0)
