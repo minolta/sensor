@@ -34,7 +34,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "49";
+const String version = "50";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -138,6 +138,106 @@ const char index_html[] PROGMEM = R"rawliteral(
     <input type="submit" value="Submit">
   </form><br> contract ky@pixka.me 
 </body></html>)rawliteral";
+
+const char setupconfig[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML>
+<html>
+<style>
+    input[type=text],
+    select {
+        width: 100%;
+        padding: 12px 20px;
+        margin: 8px 0;
+        display: inline-block;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    input[type=password] {
+  width: 100%;
+  padding: 12px 20px;
+  margin: 8px 0;
+  display: inline-block;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+    input[type=submit] {
+        width: 100%;
+        background-color: #4CAF50;
+        color: white;
+        padding: 14px 20px;
+        margin: 8px 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    
+    input[type=submit]:hover {
+        background-color: #45a049;
+    }
+    
+    div {
+        border-radius: 5px;
+        background-color: #f2f2f2;
+        padding: 20px;
+    }
+</style>
+<script>
+</script>
+
+<head>
+    <title>ESP WIFI Config</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+
+<div>
+<h3>Set config</h3>
+    <form action="/setp">
+       Have<select id="cars" name="p">
+            <option value="havedht">Dht</option>
+            <option value="havesht">SHT</option>
+            <option value="haveds">DS</option>
+            <option value="havea0">A0</option>
+            <option value="havetorestart">Auto restart</option>
+          </select>
+
+        Set to<select name="value">
+            <option value="1">Enable</option>
+            <option value="0">Disable</option>
+          </select>
+        <input type="submit" value="Set">
+    </form>
+    <form action="/restart">
+        <input type="submit" value="Restart">
+    </form>
+
+
+    <form action="/get">
+    SSID: <input type="text" name="ssid">
+    PASSWORD: <input type="password" name="password">
+    <input type="submit" value="setwifi">
+  </form>
+
+
+
+   <form action="/setp">
+       Set value : <select id="cars" name="p">
+            <option value="sensorvalue">Sensor value</option>
+            
+          </select>
+
+        Set to <input type="text" name="value">
+        <input type="submit" value="Set">
+    </form>
+    </div>
+    <br> contract ky@pixka.me
+</body>
+
+</html>
+)rawliteral";
 class Wifidata
 {
 public:
@@ -165,7 +265,7 @@ ESP8266WebServer server(80);
 //#define ONE_WIRE_BUS D4
 OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
 
-#define DHTPIN D4 // Pin which is connected to the DHT sensor.
+#define DHTPIN D3 // Pin which is connected to the DHT sensor.
 
 uint8_t deviceCount = 0;
 float tempC;
@@ -193,6 +293,11 @@ float pfDew, pfHum, pfTemp, pfVcc;
 float a0value;
 float rawvalue = 0;
 int readshtcount = 0;
+#define DHT
+
+#ifdef DHT
+DHT_Unified dht(DHTPIN, DHTTYPE);
+#endif
 // int ktcSO = D6;
 // int ktcCS = D7;
 // int ktcCLK = D5;
@@ -282,6 +387,10 @@ void setwifi()
 {
     server.send(200, "text/html", index_html);
 }
+void setconfig()
+{
+    server.send(200, "text/html", setupconfig);
+}
 void setReadtmplimit()
 {
     String v = server.arg("value");
@@ -321,14 +430,13 @@ void setport()
 }
 void readDHT()
 {
-#ifdef DHT
     readdhtstate = 1;
-    pinMode(D4, INPUT);
-    // dht.begin();
+
     // Delay between measurements.
     // delay(delayMS);
     // Get temperature event and print its value.
     sensors_event_t event;
+    dht.begin();
     dht.temperature().getEvent(&event);
     if (isnan(event.temperature))
     {
@@ -359,9 +467,7 @@ void readDHT()
         dhtbuffer.count = 120; //update buffer life time
     }
 
-    pinMode(D4, OUTPUT);
     readdhtstate = 0;
-#endif
 }
 void status()
 {
@@ -1139,36 +1245,37 @@ void setvalue()
     if (configdata.havea0)
         readA0();
     doc.clear();
+    status();
     doc["message"] = "set value " + v + "TO " + value;
-    doc["name"] = name;
-    doc["ip"] = WiFi.localIP().toString();
-    doc["mac"] = WiFi.macAddress();
-    doc["ssid"] = WiFi.SSID();
-    doc["version"] = version;
-    doc["sensorvalue"] = configdata.sensorvalue;
-    doc["rawvalue"] = analog.getRawvalue();
-    doc["pressurevalue"] = a0value;
-    doc["psi"] = a0value;
-    doc["bar"] = a0value / 14.504;
-    doc["volts"] = analog.getReadVolts();
-    doc["a0"] = a0value;
-    doc["VA0"] = configdata.va0;
-    // readDHT();
-    doc["h"] = pfHum;
-    doc["t"] = pfTemp;
-    doc["uptime"] = uptime;
-    doc["dhtbuffer.time"] = dhtbuffer.count;
-    doc["type"] = type;
-    doc["message"] = message;
-    doc["tmp"] = tmpvalue;
-    doc["reada0time"] = configdata.a0readtime;
-    doc["readtmptime"] = configdata.readtmpvalue;
-    doc["D5config"] = portconfig.D5value;
-    doc["D5init"] = portconfig.D5initvalue;
-    doc["D6config"] = portconfig.D6value;
-    doc["D6init"] = portconfig.D6initvalue;
-    doc["D7config"] = portconfig.D7value;
-    doc["D7init"] = portconfig.D7initvalue;
+    // doc["name"] = name;
+    // doc["ip"] = WiFi.localIP().toString();
+    // doc["mac"] = WiFi.macAddress();
+    // doc["ssid"] = WiFi.SSID();
+    // doc["version"] = version;
+    // doc["sensorvalue"] = configdata.sensorvalue;
+    // doc["rawvalue"] = analog.getRawvalue();
+    // doc["pressurevalue"] = a0value;
+    // doc["psi"] = a0value;
+    // doc["bar"] = a0value / 14.504;
+    // doc["volts"] = analog.getReadVolts();
+    // doc["a0"] = a0value;
+    // doc["VA0"] = configdata.va0;
+    // // readDHT();
+    // doc["h"] = pfHum;
+    // doc["t"] = pfTemp;
+    // doc["uptime"] = uptime;
+    // doc["dhtbuffer.time"] = dhtbuffer.count;
+    // doc["type"] = type;
+    // doc["message"] = message;
+    // doc["tmp"] = tmpvalue;
+    // doc["reada0time"] = configdata.a0readtime;
+    // doc["readtmptime"] = configdata.readtmpvalue;
+    // doc["D5config"] = portconfig.D5value;
+    // doc["D5init"] = portconfig.D5initvalue;
+    // doc["D6config"] = portconfig.D6value;
+    // doc["D6init"] = portconfig.D6initvalue;
+    // doc["D7config"] = portconfig.D7value;
+    // doc["D7init"] = portconfig.D7initvalue;
     char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
@@ -1203,6 +1310,7 @@ void setHttp()
     server.on("/run", run);
     server.on("/a0", a0);
     server.on("/setwifi", setwifi);
+    server.on("/setconfig", setconfig);
     server.on("/setreadtmp", setReadtmplimit);
     server.on("/setreada0", setReada0limit);
     server.on("/get", get);
@@ -1387,14 +1495,15 @@ void setup()
     Serial.print("DNS");
     Serial.println(WiFi.dnsIP().toString());
     printIPAddressOfHost("fw1.pixka.me");
-
     pinMode(D4, OUTPUT);
     // t.every(60000, senddata);
     flipper.attach(1, inden);
     if (configdata.havedht)
     {
-        am2320.begin();
-        readAm2320();
+        dht.begin();
+        readDHT();
+        // am2320.begin();
+        // readAm2320();
     }
 
     if (configdata.havesht)
@@ -1493,8 +1602,8 @@ void loop()
     {
         readdhttime = 0;
         message = "Read DHT";
-        // readDHT();
-        readAm2320();
+        readDHT();
+        // readAm2320();
     }
     if (readdstime > configdata.readtmpvalue && configdata.haveds)
     {
@@ -1507,7 +1616,7 @@ void loop()
         reada0();
     }
 
-    if (configdata.havesht && readshtcount>2)
+    if (configdata.havesht && readshtcount > 2)
     {
         readshtcount = 0;
         readSht();
