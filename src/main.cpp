@@ -34,7 +34,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "50";
+const String version = "52";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
