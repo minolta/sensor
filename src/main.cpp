@@ -1247,35 +1247,6 @@ void setvalue()
     doc.clear();
     status();
     doc["message"] = "set value " + v + "TO " + value;
-    // doc["name"] = name;
-    // doc["ip"] = WiFi.localIP().toString();
-    // doc["mac"] = WiFi.macAddress();
-    // doc["ssid"] = WiFi.SSID();
-    // doc["version"] = version;
-    // doc["sensorvalue"] = configdata.sensorvalue;
-    // doc["rawvalue"] = analog.getRawvalue();
-    // doc["pressurevalue"] = a0value;
-    // doc["psi"] = a0value;
-    // doc["bar"] = a0value / 14.504;
-    // doc["volts"] = analog.getReadVolts();
-    // doc["a0"] = a0value;
-    // doc["VA0"] = configdata.va0;
-    // // readDHT();
-    // doc["h"] = pfHum;
-    // doc["t"] = pfTemp;
-    // doc["uptime"] = uptime;
-    // doc["dhtbuffer.time"] = dhtbuffer.count;
-    // doc["type"] = type;
-    // doc["message"] = message;
-    // doc["tmp"] = tmpvalue;
-    // doc["reada0time"] = configdata.a0readtime;
-    // doc["readtmptime"] = configdata.readtmpvalue;
-    // doc["D5config"] = portconfig.D5value;
-    // doc["D5init"] = portconfig.D5initvalue;
-    // doc["D6config"] = portconfig.D6value;
-    // doc["D6init"] = portconfig.D6initvalue;
-    // doc["D7config"] = portconfig.D7value;
-    // doc["D7init"] = portconfig.D7initvalue;
     char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
@@ -1468,7 +1439,7 @@ void setup()
         delay(500);
         Serial.print(".");
         co++;
-        if (co > 100)
+        if (co > 200)
         {
             setAPMode();
             break;
