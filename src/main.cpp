@@ -34,7 +34,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "52";
+const String version = "53";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -1084,11 +1084,6 @@ void info()
     Serial.print("Version:");
     Serial.println(version);
     doc.clear();
-    // StaticJsonDocument<jsonbuffersize> doc;
-    //root["mac"] = WiFi.macAddr ess();
-    // root["mac"] = WiFi.macAddress();
-    //root["pressurevalue"] = a0value;
-    // JsonObject &ds18value = root.createNestedObject("ds18value");
     doc["mac"] = WiFi.macAddress();
     doc["IP"] = WiFi.localIP().toString();
     doc["version"] = version;
@@ -1148,15 +1143,6 @@ void inden()
 
     if (!readdhtstate)
         digitalWrite(b_led, !digitalRead(b_led));
-
-    // timeClient.update();
-
-    // int cur_hour = timeClient.getHours();
-    // int cur_min = timeClient.getMinutes();
-    // int cur_sec = timeClient.getSeconds();
-    // sprintf(buf, "%02d:%02d:%02d", cur_hour, cur_min, cur_sec);
-    // Serial.println(buf);
-
     RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
 
     char str[20]; //declare a string as an array of chars
@@ -1252,7 +1238,6 @@ void setvalue()
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
     server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     server.sendHeader("Access-Control-Allow-Headers", "application/json");
-    // 'Access-Control-Allow-Headers':'application/json'
     server.send(200, "application/json", jsonChar);
 }
 void printIPAddressOfHost(const char *host)
@@ -1336,10 +1321,6 @@ void readSht()
     {
         pfHum = sht.getHumidity();
         pfTemp = sht.getTemperature();
-        // Serial.print("SHT value H ");
-        // Serial.print(pfHum);
-        // Serial.print(" T ");
-        // Serial.println(pfTemp);
     }
     else
     {
@@ -1422,6 +1403,8 @@ void setup()
     // connect();
     WiFiMulti.addAP("forpi", "04qwerty");
     WiFiMulti.addAP("forpi2", "04qwerty");
+    WiFiMulti.addAP("forpi4", "04qwerty");
+    WiFiMulti.addAP("forpi5", "04qwerty");
     // WiFiMulti.addAP("forpi3", "04qwerty");
     WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("test", "12345678");
