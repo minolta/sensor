@@ -4,6 +4,7 @@
 #include <DHT.h>
 #include <DHT_U.h>
 #include <OneWire.h>
+#include <SPI.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
@@ -34,14 +35,14 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "53";
+const String version = "54";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
 //run port ได้
 long porttrick = 0;
 long readdstime = 0;
-
+long apmodetime = 0;
 String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
@@ -469,7 +470,7 @@ void readDHT()
 
     readdhtstate = 0;
 }
-void status()
+void makeStatus()
 {
     doc.clear();
     if (configdata.havea0)
@@ -545,15 +546,11 @@ void status()
         );
         doc["rtctime"] = str;
     }
-    // for (int i = 0; i < ioport; i++)
-    // {
-    //     JsonObject o = doc.createNestedObject(new String(i));
-    //     o["port"] = ports[i].port;
-    //     o["closetime"] = ports[i].closetime;
-    //     o["delay"] = ports[i].delay;
-    //     o["value"] = ports[i].value;
-    // }
+}
+void status()
+{
 
+    makeStatus();
     char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
@@ -1138,6 +1135,10 @@ void inden()
     readshtcount++;
     porttrick++; //บอกว่า 1 วิละ
 
+    if (apmode)
+    {
+        apmodetime++;
+    }
     if (counttime > 0)
         counttime--;
 
@@ -1541,6 +1542,11 @@ void loop()
     {
         checkintime = 0;
         checkin();
+    }
+
+    if (apmodetime > 600)
+    {
+        ESP.restart();
     }
 
     if (otatime > 60)
