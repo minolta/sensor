@@ -35,7 +35,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "54";
+const String version = "55";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -46,8 +46,10 @@ long apmodetime = 0;
 String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
+long rtctime = 0;
 static char buf[100] = {'\0'};
-#define ioport 3
+long h, m, s, Y, M, d;
+#define ioport 6
 SHTSensor sht;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
@@ -93,6 +95,7 @@ struct
     boolean havea0 = false;
     boolean havetorestart = false; //สำหรับบอกว่าถ้าติดต่อ wifi ไม่ได้ให้ restart
     boolean havesht = false;
+    boolean havertc = false;
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
@@ -202,6 +205,7 @@ const char setupconfig[] PROGMEM = R"rawliteral(
             <option value="havesht">SHT</option>
             <option value="haveds">DS</option>
             <option value="havea0">A0</option>
+              <option value="havertc">RTC</option>
             <option value="havetorestart">Auto restart</option>
           </select>
 
@@ -413,6 +417,8 @@ void setReada0limit()
 void setport()
 {
 
+    pinMode(D1, OUTPUT);
+    pinMode(D2, OUTPUT);
     pinMode(D5, portconfig.D5value);
     digitalWrite(D5, portconfig.D5initvalue);
     pinMode(D6, portconfig.D6value);
@@ -425,9 +431,12 @@ void setport()
     ports[0].name = "D5";
     ports[1].port = D6;
     ports[1].name = "D6";
-
     ports[2].port = D7;
     ports[2].name = "D7";
+    ports[3].port = D1;
+    ports[3].name = "D1";
+    ports[4].port = D2;
+    ports[4].name = "D2";
 }
 void readDHT()
 {
@@ -507,6 +516,8 @@ void makeStatus()
     doc["havea0"] = configdata.havea0;
     doc["havetorestart"] = configdata.havetorestart;
     doc["havetosht"] = configdata.havesht;
+    doc["havetortc"] = configdata.havertc;
+
     doc["tmp"] = tmpvalue;
     //  int readtmpvalue = 120;
     // int a0readtime = 120;
@@ -530,21 +541,24 @@ void makeStatus()
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
 
-    RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
-
-    if (currentTime.Year() != 2000)
+    if (configdata.havertc)
     {
-        char str[20]; //declare a string as an array of chars
+        RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
 
-        sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-                currentTime.Year(),       //get year method
-                currentTime.Month(),      //get month method
-                currentTime.Day(),        //get day method
-                currentTime.Hour(),       //get hour method
-                currentTime.Minute(),     //get minute method
-                currentTime.Second()      //get second method
-        );
-        doc["rtctime"] = str;
+        if (currentTime.Year() != 2000)
+        {
+            char str[20]; //declare a string as an array of chars
+
+            sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+                    currentTime.Year(),       //get year method
+                    currentTime.Month(),      //get month method
+                    currentTime.Day(),        //get day method
+                    currentTime.Hour(),       //get hour method
+                    currentTime.Minute(),     //get minute method
+                    currentTime.Second()      //get second method
+            );
+            doc["rtctime"] = str;
+        }
     }
 }
 void status()
@@ -559,7 +573,7 @@ void status()
     // 'Access-Control-Allow-Headers':'application/json'
     server.send(200, "application/json", jsonChar);
 }
-void addTorun(int port, int delay, int value, int wait)
+boolean addTorun(int port, int delay, int value, int wait)
 {
 
     if (delay > counttime)
@@ -575,8 +589,11 @@ void addTorun(int port, int delay, int value, int wait)
             ports[i].run = 1;
             digitalWrite(ports[i].port, value);
             Serial.println("Set port");
+            return true;
         }
     }
+
+    return false;
 }
 int getPort(String p)
 {
@@ -615,20 +632,36 @@ void run()
     String w = server.arg("wait");
     Serial.println("Port: " + p + " value : " + v + " delay: " + d);
     int port = getPort(p);
-    addTorun(port, d.toInt(), v.toInt(), w.toInt());
-    doc.clear();
-    doc["port"] = p;
-    doc["value"] = v;
-    doc["delay"] = d;
-    doc["status"] = "ok";
-    char jsonChar[jsonbuffersize];
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    server.sendHeader("Access-Control-Allow-Headers", "application/json");
-    // 'Access-Control-Allow-Headers':'application/json'
-    server.send(200, "application/json", jsonChar);
-
+    if (!addTorun(port, d.toInt(), v.toInt(), w.toInt()))
+    {
+        doc.clear();
+        doc["port"] = p;
+        doc["value"] = v;
+        doc["delay"] = d;
+        doc["status"] = "error";
+        char jsonChar[jsonbuffersize];
+        serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+        server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+        server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        server.sendHeader("Access-Control-Allow-Headers", "application/json");
+        // 'Access-Control-Allow-Headers':'application/json'
+        server.send(500, "application/json", jsonChar);
+    }
+    else
+    {
+        doc.clear();
+        doc["port"] = p;
+        doc["value"] = v;
+        doc["delay"] = d;
+        doc["status"] = "ok";
+        char jsonChar[jsonbuffersize];
+        serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+        server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
+        server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+        server.sendHeader("Access-Control-Allow-Headers", "application/json");
+        // 'Access-Control-Allow-Headers':'application/json'
+        server.send(200, "application/json", jsonChar);
+    }
     // server.send(200, "application/json", "ok :" + p + " setto:" + v + " delay:" + d);
 }
 void updateCheckin()
@@ -1123,6 +1156,32 @@ void senddata()
 
     // readKtype();
 }
+void readRTC()
+{
+    if (configdata.havertc)
+    {
+        RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
+
+        char str[20]; //declare a string as an array of chars
+
+        sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+                currentTime.Year(),       //get year method
+                currentTime.Month(),      //get month method
+                currentTime.Day(),        //get day method
+                currentTime.Hour(),       //get hour method
+                currentTime.Minute(),     //get minute method
+                currentTime.Second()      //get second method
+        );
+        Serial.println(str); //print the string to the serial port
+
+        m = currentTime.Minute();
+        h = currentTime.Hour();
+        s = currentTime.Second();
+        Y = currentTime.Year();
+        M = currentTime.Month();
+        d = currentTime.Day();
+    }
+}
 void inden()
 {
     uptime++;
@@ -1134,7 +1193,7 @@ void inden()
     reada0time++;
     readshtcount++;
     porttrick++; //บอกว่า 1 วิละ
-
+    rtctime++;
     if (apmode)
     {
         apmodetime++;
@@ -1144,20 +1203,11 @@ void inden()
 
     if (!readdhtstate)
         digitalWrite(b_led, !digitalRead(b_led));
-    RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
 
-    char str[20]; //declare a string as an array of chars
-
-    sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-            currentTime.Year(),       //get year method
-            currentTime.Month(),      //get month method
-            currentTime.Day(),        //get day method
-            currentTime.Hour(),       //get hour method
-            currentTime.Minute(),     //get minute method
-            currentTime.Second()      //get second method
-    );
-
-    Serial.println(str); //print the string to the serial port
+    if (configdata.havertc && rtctime > 10)
+    {
+        readRTC();
+    }
 }
 
 void setAPMode()
@@ -1213,6 +1263,10 @@ void setvalue()
     else if (v.equals("haveds"))
     {
         configdata.haveds = value.toInt();
+    }
+    else if (v.equals("havertc"))
+    {
+        configdata.havertc = value.toInt();
     }
     else if (v.equals("havea0"))
     {
@@ -1285,6 +1339,44 @@ void setHttp()
 }
 void connect()
 {
+    WiFiMulti.addAP("forpi", "04qwerty");
+    WiFiMulti.addAP("forpi2", "04qwerty");
+    WiFiMulti.addAP("forpi4", "04qwerty");
+    WiFiMulti.addAP("forpi5", "04qwerty");
+    // WiFiMulti.addAP("forpi3", "04qwerty");
+    WiFiMulti.addAP("Sirifarm", "0932154741");
+    WiFiMulti.addAP("test", "12345678");
+
+    // WiFiMulti.addAP("forgame", "0894297443");
+    WiFiMulti.addAP("pksy", "04qwerty");
+    WiFiMulti.addAP("test", "12345678");
+    // WiFiMulti.addAP("SP", "04qwerty");
+    // WiFiMulti.addAP("SP3", "04qwerty");
+
+    int co = 0;
+    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+    {
+
+        delay(500);
+        Serial.print(".");
+        co++;
+        if (co > 200)
+        {
+            setAPMode();
+            break;
+        }
+    }
+    if (WiFiMulti.run() == WL_CONNECTED)
+        apmode = 0;
+    if (!apmode)
+    {
+
+        ota();
+        checkin();
+        Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
+        String mac = WiFi.macAddress();
+        Serial.println(mac); // แสดงหมายเลข IP ของ Server
+    }
 }
 void setEEPROM()
 {
@@ -1350,16 +1442,28 @@ void settime()
     {
         Serial.println("Update time");
         long t = timeClient.getEpochTime();
-        Serial.print("T: ");
+
+        h = timeClient.getHours();
+        m = timeClient.getMinutes();
+        s = timeClient.getSeconds();
+        Y = timeClient.Serial.print("T: ");
         Serial.println(t);
-        RtcDateTime currentTime = RtcDateTime(t - 946684800); //define date and time object
-        rtcObject.SetDateTime(currentTime);                   //configure the RTC with object
+        if (configdata.havertc)
+        {
+            RtcDateTime currentTime = RtcDateTime(t - 946684800); //define date and time object
+            rtcObject.SetDateTime(currentTime);                   //configure the RTC with object
+        }
     }
 }
 
+void setRTC()
+{
+    if (configdata.havertc)
+        rtcObject.Begin(); //Starts I2C
+}
 void setup()
 {
-    rtcObject.Begin(); //Starts I2C
+
     //WiFi.hostname("D1-sensor-1");
     Serial.begin(9600);
     Serial.println();
@@ -1397,49 +1501,11 @@ void setup()
                             // pinMode(LED_BUILTIN, OUTPUT);
                             //pinMode(D6, OUTPUT);
                             //pinMode(D5, OUTPUT);
-    //pinMode(D1, OUTPUT);
-    //  pinMode(D3, OUTPUT);
-    // digitalWrite(D3,0);
+                            //pinMode(D1, OUTPUT);
+                            //  pinMode(D3, OUTPUT);
+                            // digitalWrite(D3,0);
 
-    // connect();
-    WiFiMulti.addAP("forpi", "04qwerty");
-    WiFiMulti.addAP("forpi2", "04qwerty");
-    WiFiMulti.addAP("forpi4", "04qwerty");
-    WiFiMulti.addAP("forpi5", "04qwerty");
-    // WiFiMulti.addAP("forpi3", "04qwerty");
-    WiFiMulti.addAP("Sirifarm", "0932154741");
-    WiFiMulti.addAP("test", "12345678");
-
-    // WiFiMulti.addAP("forgame", "0894297443");
-    WiFiMulti.addAP("pksy", "04qwerty");
-    WiFiMulti.addAP("test", "12345678");
-    // WiFiMulti.addAP("SP", "04qwerty");
-    // WiFiMulti.addAP("SP3", "04qwerty");
-
-    int co = 0;
-    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
-    {
-
-        delay(500);
-        Serial.print(".");
-        co++;
-        if (co > 200)
-        {
-            setAPMode();
-            break;
-        }
-    }
-    if (WiFiMulti.run() == WL_CONNECTED)
-        apmode = 0;
-    if (!apmode)
-    {
-
-        ota();
-        checkin();
-        Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
-        String mac = WiFi.macAddress();
-        Serial.println(mac); // แสดงหมายเลข IP ของ Server
-    }
+    connect();
 
     setHttp();
 
