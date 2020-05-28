@@ -47,6 +47,7 @@ String message = "";
 long reada0time = 0;
 float tmpvalue = 0;
 long rtctime = 0;
+int ntptime = 0;
 static char buf[100] = {'\0'};
 long h, m, s, Y, M, d;
 #define ioport 6
@@ -560,6 +561,9 @@ void makeStatus()
             doc["rtctime"] = str;
         }
     }
+
+    doc["ntptime"] = timeClient.getFormattedTime();
+    doc["ntptimelong"]=timeClient.getEpochTime();
 }
 void status()
 {
@@ -1193,6 +1197,7 @@ void inden()
     reada0time++;
     readshtcount++;
     porttrick++; //บอกว่า 1 วิละ
+    ntptime++;
     rtctime++;
     if (apmode)
     {
@@ -1446,7 +1451,8 @@ void settime()
         h = timeClient.getHours();
         m = timeClient.getMinutes();
         s = timeClient.getSeconds();
-        Y = timeClient.Serial.print("T: ");
+
+        Serial.print("T: ");
         Serial.println(t);
         if (configdata.havertc)
         {
@@ -1651,5 +1657,12 @@ void loop()
     {
         porttrick = 0;
         portcheck();
+    }
+    if (ntptime > 60)
+    {
+        timeClient.update();
+        ntptime = 0;
+        Serial.print("Update time:");
+        Serial.println(timeClient.getFormattedTime());
     }
 }
