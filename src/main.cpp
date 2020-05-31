@@ -14,7 +14,9 @@
 #include <Wire.h>
 #include "SHTSensor.h"
 #include <WiFiUdp.h>
-#include <RtcDS3231.h>              //RTC library
+#include <RtcDS3231.h> //RTC library
+#include <ESP8266Ping.h>
+
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 #include <NTPClient.h>
 #define TIME_ZONE (+7)
@@ -35,7 +37,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "55";
+const String version = "57";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -54,6 +56,8 @@ long h, m, s, Y, M, d;
 SHTSensor sht;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
+boolean checkconnect();
+
 extern "C"
 {
 #include "user_interface.h"
@@ -563,7 +567,7 @@ void makeStatus()
     }
 
     doc["ntptime"] = timeClient.getFormattedTime();
-    doc["ntptimelong"]=timeClient.getEpochTime();
+    doc["ntptimelong"] = timeClient.getEpochTime();
 }
 void status()
 {
@@ -1344,6 +1348,28 @@ void setHttp()
 }
 void connect()
 {
+    Serial.println();
+    Serial.println("-----------------------------------------------");
+    Serial.println(wifidata.ssid);
+    Serial.println(wifidata.password);
+    Serial.println("-----------------------------------------------");
+    WiFiMulti.addAP(wifidata.ssid, wifidata.password);
+
+    int ft = 0;
+
+    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+    {
+
+        delay(500);
+        Serial.print("#");
+        ft++;
+        if (ft > 10)
+        {
+            Serial.println("Connect main wifi timeout");
+            apmode = 1;
+            break;
+        }
+    }
     WiFiMulti.addAP("forpi", "04qwerty");
     WiFiMulti.addAP("forpi2", "04qwerty");
     WiFiMulti.addAP("forpi4", "04qwerty");
@@ -1470,37 +1496,14 @@ void setRTC()
 void setup()
 {
 
+    // WiFi.mode(WIFI_NONE_SLEEP);
     //WiFi.hostname("D1-sensor-1");
     Serial.begin(9600);
     Serial.println();
     Serial.println();
     setEEPROM();
     setport();
-    Serial.println();
-    Serial.println("-----------------------------------------------");
-    Serial.println(wifidata.ssid);
-    Serial.println(wifidata.password);
-    Serial.println("-----------------------------------------------");
-    WiFiMulti.addAP(wifidata.ssid, wifidata.password);
 
-    int ft = 0;
-
-    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
-    {
-
-        delay(500);
-        Serial.print("#");
-        ft++;
-        if (ft > 10)
-        {
-            Serial.println("Connect main wifi timeout");
-            apmode = 1;
-            break;
-        }
-    }
-    timeClient.begin();
-    timeClient.setTimeOffset(TIME_ZONE * (60 * 60));
-    timeClient.setUpdateInterval(300 * 1000);
     // WiFi.mode(WIFI_STA);
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
@@ -1512,7 +1515,10 @@ void setup()
                             // digitalWrite(D3,0);
 
     connect();
-
+    timeClient.begin();
+    timeClient.setTimeOffset(TIME_ZONE * (60 * 60));
+    timeClient.setUpdateInterval(300 * 1000);
+    checkconnect();
     setHttp();
 
     Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
@@ -1623,11 +1629,17 @@ void loop()
 
     if (otatime > 60)
     {
-        if (WiFiMulti.run() == WL_CONNECTED)
-            WiFi.softAPdisconnect(true);
+        //     if (WiFiMulti.run() == WL_CONNECTED)
+        //         WiFi.softAPdisconnect(true);
+        if (!checkconnect())
+        {
+            if (wifitimeout > 60)
+                ESP.restart();
+        }
         otatime = 0;
         ota();
-        printIPAddressOfHost("fw1.pixka.me");
+        // printIPAddressOfHost("fw1.pixka.me");
+
         settime();
     }
     if (readdhttime > 5 && dhtbuffer.count < 1 && configdata.havedht)
@@ -1665,4 +1677,21 @@ void loop()
         Serial.print("Update time:");
         Serial.println(timeClient.getFormattedTime());
     }
+}
+
+boolean checkconnect()
+
+{
+    // IPAddress ip(192, 168, 88, 1); // The remote ip to ping
+    bool ret = Ping.ping(WiFi.gatewayIP());
+    if (ret)
+    {
+        Serial.println("Success!!");
+        return true;
+    }
+    else
+    {
+        Serial.println("Error :(");
+    }
+    return false;
 }
