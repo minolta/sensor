@@ -37,7 +37,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "57";
+const String version = "59";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -276,7 +276,7 @@ ESP8266WebServer server(80);
 OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
 
 #define DHTPIN D3 // Pin which is connected to the DHT sensor.
-
+boolean haveportrun();
 uint8_t deviceCount = 0;
 float tempC;
 // Timer t;
@@ -1193,6 +1193,7 @@ void readRTC()
 void inden()
 {
     uptime++;
+    wifitimeout++;
     checkintime++;
     otatime++;
     readdhttime++; //บอกเวลา สำหรับอ่าน DHT
@@ -1634,7 +1635,13 @@ void loop()
         if (!checkconnect())
         {
             if (wifitimeout > 60)
-                ESP.restart();
+            {
+
+                if (!haveportrun())
+                    ESP.restart();
+            }
+
+            wifitimeout = 0;
         }
         otatime = 0;
         ota();
@@ -1692,6 +1699,16 @@ boolean checkconnect()
     else
     {
         Serial.println("Error :(");
+    }
+    return false;
+}
+
+boolean haveportrun()
+{
+    for (int i = 0; i < ioport; i++)
+    {
+        if (ports[i].delay > 0)
+            return true;
     }
     return false;
 }
