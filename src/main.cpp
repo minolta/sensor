@@ -17,6 +17,7 @@
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
 
+
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 #include <NTPClient.h>
 #define TIME_ZONE (+7)
