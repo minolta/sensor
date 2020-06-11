@@ -17,7 +17,6 @@
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
 
-
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 #include <NTPClient.h>
 #define TIME_ZONE (+7)
@@ -38,7 +37,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "59";
+const String version = "60";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -102,6 +101,7 @@ struct
     boolean havetorestart = false; //สำหรับบอกว่าถ้าติดต่อ wifi ไม่ได้ให้ restart
     boolean havesht = false;
     boolean havertc = false;
+    int wifitimeout = 60;
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
@@ -236,9 +236,9 @@ const char setupconfig[] PROGMEM = R"rawliteral(
 
    <form action="/setp">
        Set value : <select id="cars" name="p">
-            <option value="sensorvalue">Sensor value</option>
-            
-          </select>
+        <option value="sensorvalue">Sensor value</option>
+        <option value="wifitimeout">Wifi timeout</option>    
+        </select>
 
         Set to <input type="text" name="value">
         <input type="submit" value="Set">
@@ -523,6 +523,7 @@ void makeStatus()
     doc["havetorestart"] = configdata.havetorestart;
     doc["havetosht"] = configdata.havesht;
     doc["havetortc"] = configdata.havertc;
+    doc["config.wifitimeout"] = configdata.wifitimeout;
 
     doc["tmp"] = tmpvalue;
     //  int readtmpvalue = 120;
@@ -1251,6 +1252,11 @@ void setvalue()
         if (value2 != NULL)
             portconfig.D5initvalue = value2.toInt(); //init port
     }
+    else if (v.equals("wifitimeout"))
+    {
+
+        configdata.wifitimeout = value.toInt(); // mode of port
+    }
     else if (v.equals("D6"))
     {
         portconfig.D6value = value.toInt();
@@ -1296,8 +1302,9 @@ void setvalue()
     EEPROM.commit();
     if (configdata.havea0)
         readA0();
-    doc.clear();
-    status();
+    // doc.clear();
+    // status();
+    makeStatus();
     doc["message"] = "set value " + v + "TO " + value;
     char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
@@ -1635,7 +1642,7 @@ void loop()
         //         WiFi.softAPdisconnect(true);
         if (!checkconnect())
         {
-            if (wifitimeout > 60)
+            if (wifitimeout > configdata.wifitimeout)
             {
 
                 if (!haveportrun())
