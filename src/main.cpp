@@ -37,7 +37,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "60";
+const String version = "62";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -52,7 +52,7 @@ long rtctime = 0;
 int ntptime = 0;
 static char buf[100] = {'\0'};
 long h, m, s, Y, M, d;
-#define ioport 6
+#define ioport 7
 SHTSensor sht;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
@@ -125,6 +125,9 @@ struct
 
     int D7value = OUTPUT;
     int D7initvalue = 0;
+
+    int D8value = OUTPUT;
+    int D8initvalue = 0;
 
 } portconfig;
 
@@ -241,6 +244,28 @@ const char setupconfig[] PROGMEM = R"rawliteral(
         </select>
 
         Set to <input type="text" name="value">
+        <input type="submit" value="Set">
+    </form>
+
+
+     <form action="/setp">
+       Pin mode : <select id="ports" name="p">
+        <option value="D5">D5</option>
+        <option value="D6">D6</option>
+        <option value="D7">D7</option>
+        <option value="D8">D8</option>
+        </select>
+
+         Mode :<select id="mode" name="value">
+        <option value="1">OUTPUT</option>
+        <option value="0">INPUT</option>
+        </select>
+        
+        Init value :<select id="mode" name="value2">
+        <option value="1">High</option>
+        <option value="0">Low</option>
+        </select>
+        
         <input type="submit" value="Set">
     </form>
     </div>
@@ -432,7 +457,8 @@ void setport()
 
     pinMode(D7, portconfig.D7value);
     digitalWrite(D7, portconfig.D7initvalue);
-
+    pinMode(D8, portconfig.D8value);
+    digitalWrite(D8, portconfig.D8initvalue);
     ports[0].port = D5;
     ports[0].name = "D5";
     ports[1].port = D6;
@@ -443,6 +469,8 @@ void setport()
     ports[3].name = "D1";
     ports[4].port = D2;
     ports[4].name = "D2";
+    ports[5].port = D8;
+    ports[5].name = "D8";
 }
 void readDHT()
 {
@@ -1249,8 +1277,23 @@ void setvalue()
     {
 
         portconfig.D5value = value.toInt(); // mode of port
+        pinMode(D5, portconfig.D5value);
         if (value2 != NULL)
+        {
             portconfig.D5initvalue = value2.toInt(); //init port
+            digitalWrite(D5, portconfig.D5initvalue);
+        }
+    }
+    else if (v.equals("D8"))
+    {
+
+        portconfig.D8value = value.toInt(); // mode of port
+        pinMode(D8, portconfig.D8value);
+        if (value2 != NULL)
+        {
+            portconfig.D8initvalue = value2.toInt(); //init port
+            digitalWrite(D8, portconfig.D8initvalue);
+        }
     }
     else if (v.equals("wifitimeout"))
     {
@@ -1260,14 +1303,22 @@ void setvalue()
     else if (v.equals("D6"))
     {
         portconfig.D6value = value.toInt();
+        pinMode(D6, portconfig.D6value);
         if (value2 != NULL)
+        {
             portconfig.D6initvalue = value2.toInt();
+            digitalWrite(D6, portconfig.D6initvalue);
+        }
     }
     else if (v.equals("D7"))
     {
         portconfig.D7value = value.toInt();
+        pinMode(D7, portconfig.D7value);
         if (value2 != NULL)
+        {
             portconfig.D7initvalue = value2.toInt();
+            digitalWrite(D7, portconfig.D7initvalue);
+        }
     }
     else if (v.equals("sensorvalue"))
     {
