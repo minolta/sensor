@@ -37,7 +37,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "62";
+const String version = "63";
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
@@ -1434,6 +1434,8 @@ void connect()
     WiFiMulti.addAP("forpi2", "04qwerty");
     WiFiMulti.addAP("forpi4", "04qwerty");
     WiFiMulti.addAP("forpi5", "04qwerty");
+    WiFiMulti.addAP("forpi6", "04qwerty");
+    WiFiMulti.addAP("forpi7", "04qwerty");
     // WiFiMulti.addAP("forpi3", "04qwerty");
     WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("test", "12345678");
@@ -1682,7 +1684,7 @@ void loop()
         checkin();
     }
 
-    if (apmodetime > 600)
+    if (apmodetime > 120)
     {
         ESP.restart();
     }
@@ -1702,6 +1704,7 @@ void loop()
 
             wifitimeout = 0;
         }
+        wifitimeout = 0;
         otatime = 0;
         ota();
         // printIPAddressOfHost("fw1.pixka.me");
