@@ -16,7 +16,7 @@
 #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-
+const String version = "64";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 #include <NTPClient.h>
 #define TIME_ZONE (+7)
@@ -37,7 +37,7 @@ long counttime = 0;
 #define jsonbuffersize 1200
 #define ADDR 100
 #define someofio 5
-const String version = "63";
+
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
