@@ -13,16 +13,27 @@
 #include <OneWire.h>
 #include <Wire.h>
 #include "SHTSensor.h"
+
+//ntp
+#include <NTPClient.h>
 #include <WiFiUdp.h>
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+String formattedDate;
+String dayStamp;
+String timeStamp;
+
+// #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "64";
+
+const String version = "66";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
-#include <NTPClient.h>
-#define TIME_ZONE (+7)
-WiFiUDP ntpUDP;
+// #include <NTPClient.h>
+// #define TIME_ZONE (+7)
+// WiFiUDP ntpUDP;
 // NTPClient timeClient(ntpUDP);
-NTPClient timeClient(ntpUDP, "th.pool.ntp.org", 3600, 60000);
+// NTPClient timeClient(ntpUDP, "th.pool.ntp.org", 3600, 60000);
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
 // #include "Timer.h"
@@ -342,6 +353,24 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 ESP8266WiFiMulti WiFiMulti;
 float ktypevalue = 0;
 Ticker flipper;
+
+void updateNTP()
+{
+    timeClient.update();
+    formattedDate = timeClient.getFormattedDate();
+    Serial.println(formattedDate);
+
+    // Extract date
+    int splitT = formattedDate.indexOf("T");
+    dayStamp = formattedDate.substring(0, splitT);
+    Serial.print("DATE: ");
+    Serial.println(dayStamp);
+    // Extract time
+    timeStamp = formattedDate.substring(splitT + 1, formattedDate.length() - 1);
+    Serial.print("HOUR: ");
+    Serial.println(timeStamp);
+}
+
 void portcheck()
 {
     for (int i = 0; i < ioport; i++)
@@ -575,7 +604,10 @@ void makeStatus()
     doc["d6"] = digitalRead(D6);
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
-
+    updateNTP();
+    doc["datetime"] = formattedDate;
+    doc["date"] = dayStamp;
+    doc["time"] = timeStamp;
     if (configdata.havertc)
     {
         RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
@@ -1578,8 +1610,9 @@ void setup()
 
     connect();
     timeClient.begin();
-    timeClient.setTimeOffset(TIME_ZONE * (60 * 60));
-    timeClient.setUpdateInterval(300 * 1000);
+    timeClient.setTimeOffset(25200); //Thailand +7 = 25200
+    // timeClient.setTimeOffset(TIME_ZONE * (60 * 60));
+    // timeClient.setUpdateInterval(300 * 1000);
     checkconnect();
     setHttp();
 
@@ -1741,7 +1774,7 @@ void loop()
     }
     if (ntptime > 60)
     {
-        timeClient.update();
+        updateNTP();
         ntptime = 0;
         Serial.print("Update time:");
         Serial.println(timeClient.getFormattedTime());
