@@ -49,7 +49,7 @@ String html = "
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
     <meta charset=\"UTF-8\">
 </head> Config in " + String(name) + " version:" + String(version) + " SSID:"+WiFi.SSID()+" Signel:
-"+String(WiFi.RSSI())+"<table id=\"customres\">
+"+String(WiFi.RSSI())+" type: "+String(type)+"<table id=\"customres\">
     <tr>
         <td>Parameter</td>
         <td>value</td>
@@ -101,8 +101,7 @@ String html = "
         <td>" + intToEnable(configdata.havetorestart) + "</td>
         <td>
             <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\"
-                    name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button>
-            </form>
+                    name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form>
             <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\"
                     name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form>
         </td>
@@ -110,96 +109,59 @@ String html = "
     <tr>
         <td>D5</td>
         <td>" + intToPinmode(portconfig.D5value) + " /init "+intToLogic(portconfig.D5initvalue)+"</td>
-        <form action=\"/setp\">
-            <input type=\"hidden\" name=\"p\" value=\"D5\">
-            <td>
-                <select name=\"value\">
+        <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\">
+            <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
                     <option value=\"0\">INPUT</option>
-                </select>
-
-
-                <select name=\"value2\">
+                </select> <select name=\"value2\">
                     <option value=\"1\">High</option>
                     <option value=\"0\">Low</option>s
-                </select>
-                <button type=\"submit\">Save</button>
-            </td>
-
+                </select> <button type=\"submit\">Save</button> </td>
             </td>
         </form>
-
     </tr>
     <tr>
         <td>D6</td>
         <td>" + intToPinmode(portconfig.D6value) + " /init "+intToLogic(portconfig.D6initvalue)+"</td>
-        <form action=\"/setp\">
-            <input type=\"hidden\" name=\"p\" value=\"D6\">
-            <td>
-                <select name=\"value\">
+        <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\">
+            <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
                     <option value=\"0\">INPUT</option>
-                </select>
-
-
-                <select name=\"value2\">
+                </select> <select name=\"value2\">
                     <option value=\"1\">High</option>
                     <option value=\"0\">Low</option>s
-                </select>
-                <button type=\"submit\">Save</button>
-            </td>
-
+                </select> <button type=\"submit\">Save</button> </td>
             </td>
         </form>
-
     </tr>
     <tr>
         <td>D7</td>
         <td>" + intToPinmode(portconfig.D7value) + " /init "+intToLogic(portconfig.D7initvalue)+"</td>
-        <form action=\"/setp\">
-            <input type=\"hidden\" name=\"p\" value=\"D7\">
-            <td>
-                <select name=\"value\">
+        <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\">
+            <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
                     <option value=\"0\">INPUT</option>
-                </select>
-
-
-                <select name=\"value2\">
+                </select> <select name=\"value2\">
                     <option value=\"1\">High</option>
                     <option value=\"0\">Low</option>s
-                </select>
-                <button type=\"submit\">Save</button>
-            </td>
-
+                </select> <button type=\"submit\">Save</button> </td>
             </td>
         </form>
-
     </tr>
     <tr>
         <td>D8</td>
         <td>" + intToPinmode(portconfig.D8value) + " /init "+intToLogic(portconfig.D8initvalue)+"</td>
-        <form action=\"/setp\">
-            <input type=\"hidden\" name=\"p\" value=\"D8\">
-            <td>
-                <select name=\"value\">
+        <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\">
+            <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
                     <option value=\"0\">INPUT</option>
-                </select>
-
-
-                <select name=\"value2\">
+                </select> <select name=\"value2\">
                     <option value=\"1\">High</option>
                     <option value=\"0\">Low</option>s
-                </select>
-                <button type=\"submit\">Save</button>
-            </td>
-
+                </select> <button type=\"submit\">Save</button> </td>
             </td>
         </form>
-
     </tr>
-
     <tr>
         <td>Sensor value </td>
         <td>" + String(configdata.sensorvalue) + "</td>
@@ -213,8 +175,7 @@ String html = "
         <td>" + String(configdata.wifitimeout) + "</td>
         <td>
             <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"wifitimeout\"> <input type=\"number\"
-                    name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button>
-            </form>
+                    name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form>
         </td>
     </tr>
 </table>
