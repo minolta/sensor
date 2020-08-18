@@ -87,7 +87,7 @@ String html = "
         </td>
     </tr>
     <tr>
-        <td>A0</td>
+        <td>Have A0</td>
         <td>" + intToEnable(configdata.havea0) + "</td>
         <td>
             <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\"
@@ -168,6 +168,14 @@ String html = "
         <td>
             <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\"
                     name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form>
+        </td>
+    </tr>
+    <tr>
+        <td>สำหรับปรับค่าแรงดัน VA0</td>
+        <td>" + String(configdata.va0) + "</td>
+        <td>
+            <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\" > <input type=\"number\"
+                    name=\"value\" step='0.01' value=\"" + String(configdata.va0) + "\"  > <button type=\"submit\" >Save</button> </form>
         </td>
     </tr>
     <tr>
