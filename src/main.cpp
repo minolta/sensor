@@ -30,7 +30,7 @@ String timeStamp;
 73 add test port
 */
 
-const String version = "73";
+const String version = "74";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 // #include <NTPClient.h>
 // #define TIME_ZONE (+7)
@@ -556,6 +556,7 @@ void readDHT()
     if (isnan(event.temperature))
     {
         Serial.println("Error reading temperature!");
+        message = "ERROR reading temperature";
     }
     else
     {
@@ -564,6 +565,7 @@ void readDHT()
         Serial.println(" *C");
         pfTemp = event.temperature;
         dhtbuffer.t = pfTemp;
+
         dhtbuffer.count = 120; //update buffer life time
     }
     // Get humidity event and print its value.
@@ -580,6 +582,7 @@ void readDHT()
         pfHum = event.relative_humidity;
         dhtbuffer.h = pfHum;
         dhtbuffer.count = 120; //update buffer life time
+        message = "Read DHT T:" + String(pfTemp) + " H: " + String(pfHum);
     }
 
     readdhtstate = 0;
@@ -773,6 +776,7 @@ void run()
     int port = getPort(p);
     if (!addTorun(port, d.toInt(), v.toInt(), w.toInt()))
     {
+        message = "Run Port ERROR";
         doc.clear();
         doc["port"] = p;
         doc["value"] = v;
@@ -788,7 +792,9 @@ void run()
     }
     else
     {
+        message = "Run port ok Port:"+String(p)+" Value:"+String(v)+" Delay:"+String(d);
         doc.clear();
+
         doc["port"] = p;
         doc["value"] = v;
         doc["delay"] = d;
@@ -1610,11 +1616,13 @@ void readSht()
     {
         pfHum = sht.getHumidity();
         pfTemp = sht.getTemperature();
+        message = "Read SHT H:" + String(pfHum) + " T:" + String(pfTemp);
     }
     else
     {
         pfTemp = pfHum = 0;
         Serial.println("SHT ERROR");
+        message = "Sht Error";
     }
 }
 void setSht()
@@ -1637,6 +1645,7 @@ void settime()
     if (timeClient.update())
     {
         Serial.println("Update time");
+        message = "Update Time";
         long t = timeClient.getEpochTime();
 
         h = timeClient.getHours();
@@ -1727,17 +1736,8 @@ void check_if_exist_I2C()
 
     for (address = 1; address < 127; address++)
     {
-
-        // The i2c_scanner uses the return value of
-
-        // the Write.endTransmisstion to see if
-
-        // a device did acknowledge to the address.
-
         Wire.beginTransmission(address);
-
         error = Wire.endTransmission();
-
         if (error == 0)
         {
 
@@ -1795,8 +1795,6 @@ void loop()
 
     if (otatime > 60)
     {
-        //     if (WiFiMulti.run() == WL_CONNECTED)
-        //         WiFi.softAPdisconnect(true);
         if (!checkconnect())
         {
             if (wifitimeout > configdata.wifitimeout)
@@ -1860,11 +1858,13 @@ boolean checkconnect()
     if (ret)
     {
         Serial.println("Success!!");
+        message = "Connect is ok";
         return true;
     }
     else
     {
         Serial.println("Error :(");
+        message = "Connect have problem";
     }
     return false;
 }
