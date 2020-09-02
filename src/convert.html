@@ -48,8 +48,8 @@ String html = "
 <head>
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
     <meta charset=\"UTF-8\">
-</head> Config in " + String(name) + " version:" + String(version) + " SSID:"+WiFi.SSID()+" Signel:
-"+String(WiFi.RSSI())+" type: "+String(type)+"<table id=\"customres\">
+</head> Config in " + String(name) + " version:" + String(version) + " SSID:" + WiFi.SSID() + " Signel: " +
+String(WiFi.RSSI()) + " type: " + String(type) + "<table id=\"customres\">
     <tr>
         <td>Parameter</td>
         <td>value</td>
@@ -97,6 +97,16 @@ String html = "
         </td>
     </tr>
     <tr>
+        <td>Have to RTC</td>
+        <td>" + intToEnable(configdata.havertc) + "</td>
+        <td>
+            <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\"
+                    name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form>
+            <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\"
+                    name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form>
+        </td>
+    </tr>
+    <tr>
         <td>Have to restart</td>
         <td>" + intToEnable(configdata.havetorestart) + "</td>
         <td>
@@ -107,8 +117,18 @@ String html = "
         </td>
     </tr>
     <tr>
+        <td>Have PM Sensor</td>
+        <td>" + intToEnable(configdata.havepmsensor) + "</td>
+        <td>
+            <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\"
+                    name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form>
+            <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\"
+                    name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form>
+        </td>
+    </tr>
+    <tr>
         <td>D5</td>
-        <td>" + intToPinmode(portconfig.D5value) + " /init "+intToLogic(portconfig.D5initvalue)+"</td>
+        <td>" + intToPinmode(portconfig.D5value) + " /init " + intToLogic(portconfig.D5initvalue) + "</td>
         <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\">
             <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
@@ -122,7 +142,7 @@ String html = "
     </tr>
     <tr>
         <td>D6</td>
-        <td>" + intToPinmode(portconfig.D6value) + " /init "+intToLogic(portconfig.D6initvalue)+"</td>
+        <td>" + intToPinmode(portconfig.D6value) + " /init " + intToLogic(portconfig.D6initvalue) + "</td>
         <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\">
             <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
@@ -136,7 +156,7 @@ String html = "
     </tr>
     <tr>
         <td>D7</td>
-        <td>" + intToPinmode(portconfig.D7value) + " /init "+intToLogic(portconfig.D7initvalue)+"</td>
+        <td>" + intToPinmode(portconfig.D7value) + " /init " + intToLogic(portconfig.D7initvalue) + "</td>
         <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\">
             <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
@@ -150,7 +170,7 @@ String html = "
     </tr>
     <tr>
         <td>D8</td>
-        <td>" + intToPinmode(portconfig.D8value) + " /init "+intToLogic(portconfig.D8initvalue)+"</td>
+        <td>" + intToPinmode(portconfig.D8value) + " /init " + intToLogic(portconfig.D8initvalue) + "</td>
         <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\">
             <td> <select name=\"value\">
                     <option value=\"1\">OUTPUT</option>
@@ -167,15 +187,16 @@ String html = "
         <td>" + String(configdata.sensorvalue) + "</td>
         <td>
             <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\"
-                    name=\"value\" step='0.01' value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form>
+                    name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form>
         </td>
     </tr>
     <tr>
         <td>สำหรับปรับค่าแรงดัน VA0</td>
         <td>" + String(configdata.va0) + "</td>
         <td>
-            <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\" > <input type=\"number\"
-                    name=\"value\" step='0.01' value=\"" + String(configdata.va0) + "\"  > <button type=\"submit\" >Save</button> </form>
+            <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\"> <input type=\"number\"
+                    name=\"value\" step='0.01' value=\"" + String(configdata.va0) + "\"> <button
+                    type=\"submit\">Save</button> </form>
         </td>
     </tr>
     <tr>
