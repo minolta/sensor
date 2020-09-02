@@ -1631,11 +1631,11 @@ void setSht()
     Wire.begin();
     if (sht.init())
     {
-        Serial.print("init(): success\n");
+        Serial.print("SHT init(): success\n");
     }
     else
     {
-        Serial.print("init(): failed\n");
+        Serial.print("SHT init(): failed\n");
     }
     sht.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
 }
