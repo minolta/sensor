@@ -546,7 +546,8 @@ void makeStatus()
     doc["bar"] = a0value / 14.504;
     doc["volts"] = analog.getReadVolts();
     doc["a0"] = a0value;
-    doc["VA0"] = configdata.va0;
+    // doc["VA0"] = configdata.va0;
+    doc["va0"] = configdata.va0;
     // readDHT();
     doc["h"] = pfHum;
     doc["t"] = pfTemp;
