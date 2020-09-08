@@ -32,7 +32,7 @@ String timeStamp;
 73 add test port
 */
 
-const String version = "76";
+const String version = "82";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -64,6 +64,10 @@ int ntptime = 0;
 static char buf[100] = {'\0'};
 long h, m, s, Y, M, d;
 #define ioport 7
+long load = 0;
+long loadcount = 0;
+double loadav = 0;
+double loadtotal = 0;
 SHTSensor sht;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
@@ -375,9 +379,10 @@ void readPm()
     int index = 0;
     char value;
     char previousValue;
-
+    int have = 0;
     while (mySerial.available())
     {
+        have = 1;
         value = mySerial.read();
         if ((index == 0 && value != 0x42) || (index == 1 && value != 0x4d))
         {
@@ -393,26 +398,26 @@ void readPm()
         else if (index == 5)
         {
             pmdata.pm1 = 256 * previousValue + value;
-            Serial.print("{ ");
-            Serial.print("\"pm1\": ");
-            Serial.print(pmdata.pm1);
-            Serial.print(" ug/m3");
-            Serial.print(", ");
+            // Serial.print("{ ");
+            // Serial.print("\"pm1\": ");
+            // Serial.print(pmdata.pm1);
+            // Serial.print(" ug/m3");
+            // Serial.print(", ");
         }
         else if (index == 7)
         {
             pmdata.pm2_5 = 256 * previousValue + value;
-            Serial.print("\"pm2_5\": ");
-            Serial.print(pmdata.pm2_5);
-            Serial.print(" ug/m3");
-            Serial.print(", ");
+            // Serial.print("\"pm2_5\": ");
+            // Serial.print(pmdata.pm2_5);
+            // Serial.print(" ug/m3");
+            // Serial.print(", ");
         }
         else if (index == 9)
         {
             pmdata.pm10 = 256 * previousValue + value;
-            Serial.print("\"pm10\": ");
-            Serial.print(pmdata.pm10);
-            Serial.print(" ug/m3");
+            // Serial.print("\"pm10\": ");
+            // Serial.print(pmdata.pm10);
+            // Serial.print(" ug/m3");
         }
         else if (index > 15)
         {
@@ -420,10 +425,17 @@ void readPm()
         }
         index++;
     }
-    while (mySerial.available())
-        mySerial.read();
-    Serial.println(" }");
-    delay(1000);
+
+    if (have)
+    {
+        while (mySerial.available())
+            mySerial.read();
+        delay(1000); //ถ้ามีการอ่านให้
+    }
+    // while (mySerial.available())
+    //     mySerial.read();
+    // Serial.println(" }");
+    // delay(1000);
 }
 void setconfig()
 {
@@ -618,6 +630,8 @@ void makeStatus()
 
     doc["ntptime"] = timeClient.getFormattedTime();
     doc["ntptimelong"] = timeClient.getEpochTime();
+    doc["load"] = load;
+    doc["loadav"] = loadav;
 }
 void status()
 {
@@ -1753,7 +1767,7 @@ void check_if_exist_I2C()
 
 void loop()
 {
-
+    long s = millis();
     // t.update();
     server.handleClient();
     //  delay(100);
@@ -1829,6 +1843,11 @@ void loop()
     {
         readPm();
     }
+
+    load = millis() - s;
+    loadcount++;
+    loadtotal += load;
+    loadav = loadtotal / loadcount;
 }
 
 boolean checkconnect()
