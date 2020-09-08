@@ -32,7 +32,7 @@ String timeStamp;
 73 add test port
 */
 
-const String version = "75";
+const String version = "76";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -589,6 +589,7 @@ void makeStatus()
     doc["datetime"] = formattedDate;
     doc["date"] = dayStamp;
     doc["time"] = timeStamp;
+
     if (configdata.havepmsensor)
     {
         doc["pm25"] = pmdata.pm2_5;
@@ -1412,10 +1413,12 @@ void setvalue()
             {
                 configdata.havesht = value.toInt();
             }
+            else
+                configdata.havesht = 0;
         }
         else
         {
-            /* code */
+            configdata.havesht = 0;
         }
     }
     EEPROM.put(ADDR + 100, configdata);
