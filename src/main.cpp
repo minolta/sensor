@@ -32,7 +32,7 @@ String timeStamp;
 73 add test port
 */
 
-const String version = "82";
+const String version = "85";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -708,15 +708,11 @@ void run()
     {
         message = "test port ";
         canuseled = 0;
-        doc.clear();
+        makeStatus();
         doc["status"] = "ok";
         doc["port"] = p;
         doc["mac"] = WiFi.macAddress();
         doc["ip"] = WiFi.localIP().toString();
-        doc["name"] = name;
-        doc["uptime"] = uptime;
-        doc["ntptime"] = timeClient.getFormattedTime();
-        doc["ntptimelong"] = timeClient.getEpochTime();
         char jsonChar[jsonbuffersize];
         serializeJsonPretty(doc, jsonChar, jsonbuffersize);
         server.send(200, "application/json", jsonChar);
@@ -734,7 +730,7 @@ void run()
     if (!addTorun(port, d.toInt(), v.toInt(), w.toInt()))
     {
         message = "Run Port ERROR";
-        doc.clear();
+        makeStatus();
         doc["port"] = p;
         doc["value"] = v;
         doc["delay"] = d;
@@ -750,7 +746,7 @@ void run()
     else
     {
         message = "Run port ok Port:" + String(p) + " Value:" + String(v) + " Delay:" + String(d);
-        doc.clear();
+        makeStatus();
 
         doc["port"] = p;
         doc["value"] = v;
