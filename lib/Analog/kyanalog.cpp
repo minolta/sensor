@@ -69,8 +69,17 @@ float KAnalog::readVolts(void)
 {
 
     float volts = 0;
-    
-    float value = readA0();
+
+    float value = 0;
+
+    //อ่านแบบหาค่าเฉลี่ย
+    for (i = 0; i < 16; i++)
+    {
+        value += readA0();
+    }
+    value = value/16;
+
+
     Serial.print("RAW : ");
     rawvalue = value;
     Serial.println(value);

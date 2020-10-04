@@ -32,7 +32,7 @@ String timeStamp;
 73 add test port
 */
 
-const String version = "85";
+const String version = "86";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
