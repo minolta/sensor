@@ -14,6 +14,7 @@
 #include "SHTSensor.h"
 #define pingPin D1
 #define inPin D2
+
 long distance = 0;
 
 //ntp
@@ -30,11 +31,8 @@ String timeStamp;
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-/*
-73 add test port
-*/
 
-const String version = "87";
+const String version = "89";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -71,6 +69,7 @@ long loadcount = 0;
 double loadav = 0;
 double loadtotal = 0;
 SHTSensor sht;
+int readdistance = 0;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
 boolean checkconnect();
@@ -82,6 +81,7 @@ public:
     char password[50];
 };
 Wifidata wifidata;
+
 class DS18b20
 {
 public:
@@ -144,7 +144,6 @@ struct
     boolean havetorestart = false; //สำหรับบอกว่าถ้าติดต่อ wifi ไม่ได้ให้ restart
     boolean havesht = false;
     boolean havertc = false;
-
     boolean havepmsensor = 0;
     int wifitimeout = 60;
 
@@ -245,6 +244,52 @@ ESP8266WiFiMulti WiFiMulti;
 float ktypevalue = 0;
 Ticker flipper;
 
+#define CONFIGADDRESS 500
+#define PORTADDRESS 400
+#define WIFIADDRESS 50
+void saveEEPROM()
+{
+    Serial.println("SAVE ERRPROM");
+    EEPROM.put(0, "savedeeprom");
+    EEPROM.put(ADDR + WIFIADDRESS, wifidata);
+    EEPROM.put(ADDR + PORTADDRESS, portconfig);
+    EEPROM.put(ADDR + CONFIGADDRESS, configdata); //เอาไว้ท้ายสุด
+    EEPROM.commit();
+}
+void readEEPROM()
+{
+    Serial.println("READ ERRPROM");
+    EEPROM.get(ADDR + WIFIADDRESS, wifidata);
+    EEPROM.get(ADDR + PORTADDRESS, portconfig);
+    EEPROM.get(ADDR + CONFIGADDRESS, configdata);
+}
+void setEEPROM()
+{
+
+    EEPROM.begin(1000); // Use 1k for save value
+    char eepromsaved[50];
+    EEPROM.get(0, eepromsaved);
+    Serial.print("EEPROM:");
+    Serial.println(eepromsaved);
+    String ee = String(eepromsaved);
+    if (ee.indexOf("savedeeprom") != -1)
+    {
+        Serial.println("READ EEPROM----");
+        readEEPROM();
+        //ถ้าไม่อยู่ในช่วงนี้
+        if (!(configdata.va0 > 0.1 && configdata.va0 < 1))
+        {
+            configdata.va0 = 0.5;
+            saveEEPROM();
+        }
+    }
+    else
+    {
+        Serial.println("Not save EEPROM");
+        // EEPROM.put(0, "savedeeprom");
+        saveEEPROM();
+    }
+}
 void updateNTP()
 {
     timeClient.update();
@@ -336,8 +381,8 @@ void get()
         password.toCharArray(wifidata.password, 50);
 
     Serial.println("Set ok");
-    EEPROM.put(ADDR, wifidata);
-    EEPROM.commit();
+
+    saveEEPROM();
     String re = "<html> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><h3>set WIFI TO " + ssd + " <h3><hr><a href='/setconfig'>back</a></html>";
     server.send(200, "text/html", re);
 }
@@ -457,8 +502,7 @@ void setReadtmplimit()
     String v = server.arg("value");
     if (v != NULL)
         configdata.readtmpvalue = v.toInt();
-    EEPROM.put(ADDR + 100, configdata);
-    EEPROM.commit();
+    saveEEPROM();
     server.send(200, "text/html", "OK:" + v);
 }
 void setReada0limit()
@@ -466,8 +510,7 @@ void setReada0limit()
     String v = server.arg("value");
     if (v != NULL)
         configdata.a0readtime = v.toInt();
-    EEPROM.put(ADDR + 100, configdata);
-    EEPROM.commit();
+    saveEEPROM();
     server.send(200, "text/html", "OK:" + v);
 }
 void setport()
@@ -1329,6 +1372,7 @@ void inden()
     porttrick++; //บอกว่า 1 วิละ
     ntptime++;
     rtctime++;
+    readdistance++;
     if (apmode)
     {
         apmodetime++;
@@ -1470,9 +1514,7 @@ void setvalue()
             configdata.havesht = 0;
         }
     }
-    EEPROM.put(ADDR + 100, configdata);
-    EEPROM.put(ADDR + 200, portconfig);
-    EEPROM.commit();
+    saveEEPROM();
     // if (configdata.havea0)
     //     readA0();
     // // doc.clear();
@@ -1596,36 +1638,7 @@ void connect()
         Serial.println(mac); // แสดงหมายเลข IP ของ Server
     }
 }
-void setEEPROM()
-{
-    EEPROM.begin(1000); // Use 1k for save value
-    int flag = EEPROM.read(0);
-    // EEPROM.get(ADDR + 200, saveconfig);
-    // String v = saveconfig.save;
-    if (flag != 22)
-    {
-        EEPROM.write(0, 22);
-        EEPROM.put(ADDR, wifidata);
-        EEPROM.put(ADDR + 100, configdata);
-        EEPROM.put(ADDR + 400, portconfig);
 
-        EEPROM.commit();
-    }
-    else
-    {
-        EEPROM.get(ADDR, wifidata);
-        EEPROM.get(ADDR + 100, configdata);
-        EEPROM.get(ADDR + 400, portconfig);
-
-        //ถ้าไม่อยู่ในช่วงนี้
-        if (!(configdata.va0 > 0.1 && configdata.va0 < 1))
-        {
-            configdata.va0 = 0.5;
-            EEPROM.put(ADDR + 100, configdata);
-            EEPROM.commit();
-        }
-    }
-}
 void readSht()
 {
     if (sht.readSample())
@@ -1685,16 +1698,12 @@ void setRTC()
 }
 void setup()
 {
-
-    // WiFi.mode(WIFI_NONE_SLEEP);
-    //WiFi.hostname("D1-sensor-1");
     Serial.begin(9600);
     Serial.println();
     Serial.println();
     setEEPROM();
     setport();
 
-    // WiFi.mode(WIFI_STA);
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
                             // pinMode(LED_BUILTIN, OUTPUT);
@@ -1707,8 +1716,6 @@ void setup()
     connect();
     timeClient.begin();
     timeClient.setTimeOffset(25200); //Thailand +7 = 25200
-    // timeClient.setTimeOffset(TIME_ZONE * (60 * 60));
-    // timeClient.setUpdateInterval(300 * 1000);
     checkconnect();
     setHttp();
 
@@ -1720,14 +1727,11 @@ void setup()
     Serial.println(WiFi.dnsIP().toString());
     printIPAddressOfHost("fw1.pixka.me");
     pinMode(D4, OUTPUT);
-    // t.every(60000, senddata);
     flipper.attach(1, inden);
     if (configdata.havedht)
     {
         dht.begin();
         readDHT();
-        // am2320.begin();
-        // readAm2320();
     }
 
     if (configdata.havesht)
@@ -1884,8 +1888,9 @@ void loop()
     loadtotal += load;
     loadav = loadtotal / loadcount;
 
-    if (configdata.havesonic)
+    if (configdata.havesonic && readdistance > 10)
     {
+        readdistance = 0;
         distance = ma();
     }
 }
