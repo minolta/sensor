@@ -1,0 +1,21 @@
+{
+    "name": "Analog read",
+    "version": "1.0.1",
+    "description": "Function for Esp8266 and ESP32 to read A0",
+    "keywords": "ds18b20,esp8266,esp32",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/minolta/espds18b20.git"
+    },
+    "authors": [{
+            "name": "Kritchai Phromros",
+            "email": "ky@pixka.me",
+            "url": "https://fc.com/rokkor"
+        }
+
+    ],
+    "license": "MIT",
+    "homepage": "https://www.helloworld.org/",
+    "frameworks": "*",
+    "platforms": "*"
+}
