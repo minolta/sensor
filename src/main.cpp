@@ -15,7 +15,8 @@
 #include "KDs18b20.h"
 #define pingPin D1
 #define inPin D2
-
+#define jsonbuffersize 1200
+char jsonChar[jsonbuffersize];
 long distance = 0;
 
 //ntp
@@ -32,7 +33,7 @@ String timeStamp;
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "90";
+const String version = "94";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -45,7 +46,7 @@ long counttime = 0;
 #include "Adafruit_Sensor.h"
 #include "Adafruit_AM2320.h"
 KDS ds(D3);
-#define jsonbuffersize 1200
+
 #define ADDR 100
 #define someofio 5
 int canuseled = 1;
@@ -70,8 +71,10 @@ double loadav = 0;
 double loadtotal = 0;
 SHTSensor sht;
 int readdistance = 0;
+int a0readcount = 0;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
+int makestatuscount = 0;
 boolean checkconnect();
 
 class Wifidata
@@ -587,11 +590,6 @@ void readDHT()
 void makeStatus()
 {
     doc.clear();
-    if (configdata.havea0)
-        readA0();
-    // DynamicJsonDocument<jsonbuffersize>ddoc;
-
-    // StaticJsonDocument<jsonbuffersize> doc;
     doc["heap"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
@@ -651,7 +649,7 @@ void makeStatus()
     doc["d6"] = digitalRead(D6);
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
-    updateNTP();
+    // updateNTP();
     doc["datetime"] = formattedDate;
     doc["date"] = dayStamp;
     doc["time"] = timeStamp;
@@ -686,13 +684,12 @@ void makeStatus()
     doc["ntptimelong"] = timeClient.getEpochTime();
     doc["load"] = load;
     doc["loadav"] = loadav;
+
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
 }
 void status()
 {
-
-    makeStatus();
-    char jsonChar[jsonbuffersize];
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    // makeStatus();
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
     server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
     server.sendHeader("Access-Control-Allow-Headers", "application/json");
@@ -762,12 +759,12 @@ void run()
     {
         message = "test port ";
         canuseled = 0;
-        makeStatus();
+        // makeStatus();
         doc["status"] = "ok";
         doc["port"] = p;
         doc["mac"] = WiFi.macAddress();
         doc["ip"] = WiFi.localIP().toString();
-        char jsonChar[jsonbuffersize];
+        // char jsonChar[jsonbuffersize];
         serializeJsonPretty(doc, jsonChar, jsonbuffersize);
         server.send(200, "application/json", jsonChar);
         for (int i = 0; i < 40; i++)
@@ -784,12 +781,12 @@ void run()
     if (!addTorun(port, d.toInt(), v.toInt(), w.toInt()))
     {
         message = "Run Port ERROR";
-        makeStatus();
+        // makeStatus();
         doc["port"] = p;
         doc["value"] = v;
         doc["delay"] = d;
         doc["status"] = "error";
-        char jsonChar[jsonbuffersize];
+        // char jsonChar[jsonbuffersize];
         serializeJsonPretty(doc, jsonChar, jsonbuffersize);
         server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
         server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -800,13 +797,13 @@ void run()
     else
     {
         message = "Run port ok Port:" + String(p) + " Value:" + String(v) + " Delay:" + String(d);
-        makeStatus();
+        // makeStatus();
 
         doc["port"] = p;
         doc["value"] = v;
         doc["delay"] = d;
         doc["status"] = "ok";
-        char jsonChar[jsonbuffersize];
+        // char jsonChar[jsonbuffersize];
         serializeJsonPretty(doc, jsonChar, jsonbuffersize);
         server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
         server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -821,122 +818,7 @@ void updateCheckin()
     String s = server.arg("newurl");
     s.toCharArray(checkinhost, s.length());
 }
-// int foundds = 0;
-// byte addr[8];
-// byte type_s;
-// int searchDs()
-// {
-//     if (!ds.search(addr))
-//     {
-//         Serial.println("No more addresses.");
-//         Serial.println();
-//         ds.reset_search();
-//         delay(250);
-//         return 0;
-//     }
-//     foundds = 1; //เจอแล้ว
-//                  // the first ROM byte indicates which chip
-//     switch (addr[0])
-//     {
-//     case 0x10:
-//         Serial.println("  Chip = DS18S20"); // or old DS1820
-//         type_s = 1;
-//         break;
-//     case 0x28:
-//         Serial.println("  Chip = DS18B20");
-//         type_s = 0;
-//         break;
-//     case 0x22:
-//         Serial.println("  Chip = DS1822");
-//         type_s = 0;
-//         break;
-//     default:
-//         Serial.println("Device is not a DS18x20 family device.");
-//         return 0;
-//     }
-//     return 1;
-// }
-//อ่านค่าของ DS18b20
-// DS18b20 DS()
-// {
-//     DS18b20 value;
-//     value.c = -1;
-//     value.f = -1;
-//     value.t = -1;
-//     byte i;
-//     byte present = 0;
 
-//     byte data[12];
-
-//     float celsius, fahrenheit;
-//     if (!foundds)
-//         searchDs();
-
-//     if (OneWire::crc8(addr, 7) != addr[7])
-//     {
-//         Serial.println("CRC is not valid!");
-//         return value;
-//     }
-//     Serial.println();
-
-//     ds.reset();
-//     ds.select(addr);
-//     ds.write(0x44, 1); // start conversion, with parasite power on at the end
-
-//     delay(750); // maybe 750ms is enough, maybe not
-//     // we might do a ds.depower() here, but the reset will take care of it.
-
-//     present = ds.reset();
-//     ds.select(addr);
-//     ds.write(0xBE); // Read Scratchpad
-
-//     Serial.print("  Data = ");
-//     Serial.print(present, HEX);
-//     Serial.print(" ");
-//     for (i = 0; i < 9; i++)
-//     { // we need 9 bytes
-//         data[i] = ds.read();
-//         Serial.print(data[i], HEX);
-//         Serial.print(" ");
-//     }
-//     Serial.print(" CRC=");
-//     Serial.print(OneWire::crc8(data, 8), HEX);
-//     Serial.println();
-
-//     // Convert the data to actual temperature
-//     // because the result is a 16 bit signed integer, it should
-//     // be stored to an "int16_t" type, which is always 16 bits
-//     // even when compiled on a 32 bit processor.
-//     int16_t raw = (data[1] << 8) | data[0];
-//     if (type_s)
-//     {
-//         raw = raw << 3; // 9 bit resolution default
-//         if (data[7] == 0x10)
-//         {
-//             // "count remain" gives full 12 bit resolution
-//             raw = (raw & 0xFFF0) + 12 - data[6];
-//         }
-//     }
-//     else
-//     {
-//         byte cfg = (data[4] & 0x60);
-//         // at lower res, the low bits are undefined, so let's zero them
-//         if (cfg == 0x00)
-//             raw = raw & ~7; // 9 bit resolution, 93.75 ms
-//         else if (cfg == 0x20)
-//             raw = raw & ~3; // 10 bit res, 187.5 ms
-//         else if (cfg == 0x40)
-//             raw = raw & ~1; // 11 bit res, 375 ms
-//                             //// default is 12 bit resolution, 750 ms conversion time
-//     }
-//     celsius = (float)raw / 16.0;
-//     fahrenheit = celsius * 1.8 + 32.0;
-
-//     value.c = celsius;
-//     value.f = fahrenheit;
-//     value.t = celsius;
-//     return value;
-// }
 void readDS()
 {
     // DS18b20 v = DS();
@@ -945,7 +827,7 @@ void readDS()
     doc["c"] = ds.readDs();
     doc["f"] = ds.readDs();
     doc["t"] = ds.readDs();
-    char jsonChar[jsonbuffersize];
+    // char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
@@ -995,7 +877,7 @@ void reset()
     doc["uptime"] = uptime;
     doc["type"] = type;
     doc["reset"] = "OK";
-    char jsonChar[jsonbuffersize];
+    // char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
     server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -1030,63 +912,63 @@ void ota()
 void checkin()
 {
     // StaticJsonDocument<jsonbuffersize> doc;
-    doc.clear();
+    // doc.clear();
     if (configdata.havea0)
         readA0();
     // DynamicJsonDocument<jsonbuffersize>ddoc;
 
-    // StaticJsonDocument<jsonbuffersize> doc;
-    doc["freemem"] = system_get_free_heap_size();
-    doc["version"] = version;
-    doc["name"] = name;
-    doc["ip"] = WiFi.localIP().toString();
-    doc["mac"] = WiFi.macAddress();
-    doc["ssid"] = WiFi.SSID();
-    doc["wifitimeout"] = wifitimeout;
-    doc["ssid"] = WiFi.SSID();
-    doc["signal"] = WiFi.RSSI();
-    doc["sensorvalue"] = configdata.sensorvalue;
-    doc["rawvalue"] = analog.getRawvalue();
-    doc["pressurevalue"] = a0value;
-    doc["psi"] = a0value;
-    doc["bar"] = a0value / 14.504;
-    doc["volts"] = analog.getReadVolts();
-    doc["a0"] = a0value;
-    doc["VA0"] = configdata.va0;
+    StaticJsonDocument<jsonbuffersize> doc1;
+    doc1["freemem"] = system_get_free_heap_size();
+    doc1["version"] = version;
+    doc1["name"] = name;
+    doc1["ip"] = WiFi.localIP().toString();
+    doc1["mac"] = WiFi.macAddress();
+    doc1["ssid"] = WiFi.SSID();
+    doc1["wifitimeout"] = wifitimeout;
+    doc1["ssid"] = WiFi.SSID();
+    doc1["signal"] = WiFi.RSSI();
+    doc1["sensorvalue"] = configdata.sensorvalue;
+    doc1["rawvalue"] = analog.getRawvalue();
+    doc1["pressurevalue"] = a0value;
+    doc1["psi"] = a0value;
+    doc1["bar"] = a0value / 14.504;
+    doc1["volts"] = analog.getReadVolts();
+    doc1["a0"] = a0value;
+    doc1["VA0"] = configdata.va0;
     // readDHT();
-    doc["h"] = pfHum;
-    doc["t"] = pfTemp;
-    doc["uptime"] = uptime;
-    doc["dhtbuffer.time"] = dhtbuffer.count;
-    doc["type"] = type;
-    doc["message"] = message;
-    doc["havedht"] = configdata.havedht;
-    doc["haveds"] = configdata.haveds;
-    doc["havea0"] = configdata.havea0;
-    doc["havetorestart"] = configdata.havetorestart;
-    doc["tmp"] = tmpvalue;
+    doc1["h"] = pfHum;
+    doc1["t"] = pfTemp;
+    doc1["uptime"] = uptime;
+    doc1["dhtbuffer.time"] = dhtbuffer.count;
+    doc1["type"] = type;
+    doc1["message"] = message;
+    doc1["havedht"] = configdata.havedht;
+    doc1["haveds"] = configdata.haveds;
+    doc1["havea0"] = configdata.havea0;
+    doc1["havetorestart"] = configdata.havetorestart;
+    doc1["tmp"] = tmpvalue;
     //  int readtmpvalue = 120;
     // int a0readtime = 120;
-    doc["reada0time"] = configdata.a0readtime;
-    doc["readtmptime"] = configdata.readtmpvalue;
+    doc1["reada0time"] = configdata.a0readtime;
+    doc1["readtmptime"] = configdata.readtmpvalue;
 
-    doc["D5config"] = portconfig.D5value;
-    doc["D5init"] = portconfig.D5initvalue;
+    doc1["D5config"] = portconfig.D5value;
+    doc1["D5init"] = portconfig.D5initvalue;
 
-    doc["D6config"] = portconfig.D6value;
-    doc["D6init"] = portconfig.D6initvalue;
-    doc["D7config"] = portconfig.D7value;
-    doc["D7init"] = portconfig.D7initvalue;
+    doc1["D6config"] = portconfig.D6value;
+    doc1["D6init"] = portconfig.D6initvalue;
+    doc1["D7config"] = portconfig.D7value;
+    doc1["D7init"] = portconfig.D7initvalue;
 
-    doc["d1"] = digitalRead(D1);
-    doc["d2"] = digitalRead(D2);
-    doc["d3"] = digitalRead(D3);
-    doc["d4"] = digitalRead(D4);
-    doc["d5"] = digitalRead(D5);
-    doc["d6"] = digitalRead(D6);
-    doc["d7"] = digitalRead(D7);
-    doc["d8"] = digitalRead(D8);
-    doc["password"] = "";
+    doc1["d1"] = digitalRead(D1);
+    doc1["d2"] = digitalRead(D2);
+    doc1["d3"] = digitalRead(D3);
+    doc1["d4"] = digitalRead(D4);
+    doc1["d5"] = digitalRead(D5);
+    doc1["d6"] = digitalRead(D6);
+    doc1["d7"] = digitalRead(D7);
+    doc1["d8"] = digitalRead(D8);
+    doc1["password"] = "";
 
     // doc["mac"] = WiFi.macAddress();
     // doc["password"] = "";
@@ -1095,12 +977,12 @@ void checkin()
     // JsonObject dht = doc.createNestedObject("dhtvalue");
     // dht["t"] = pfTemp;
     // dht["h"] = pfHum;
-    doc["type"] = type;
+    doc1["type"] = type;
     //test
 
     //Test commit
     char JSONmessageBuffer[jsonbuffersize];
-    serializeJsonPretty(doc, JSONmessageBuffer, jsonbuffersize);
+    serializeJsonPretty(doc1, JSONmessageBuffer, jsonbuffersize);
     Serial.println(JSONmessageBuffer);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
@@ -1118,9 +1000,9 @@ void checkin()
     {
         Serial.print(" Play load:");
         Serial.println(payload); //Print request response payload
-        doc.clear();
-        deserializeJson(doc, payload);
-        JsonObject obj = doc.as<JsonObject>();
+        doc1.clear();
+        deserializeJson(doc1, payload);
+        JsonObject obj = doc1.as<JsonObject>();
         name = obj["pidevice"]["name"].as<String>();
     }
 
@@ -1203,11 +1085,11 @@ void reada0()
 void a0()
 {
     // StaticJsonDocument<jsonbuffersize> doc;
-    doc.clear();
+    // doc.clear();
     doc["a0"] = a0value;
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
-    char jsonChar[jsonbuffersize];
+    // char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
@@ -1215,10 +1097,10 @@ void a0()
 void DHTtoJSON()
 {
     //  StaticJsonDocument<jsonbuffersize> doc;
-    doc.clear();
+    // doc.clear();
     doc["t"] = pfTemp;
     doc["h"] = pfHum;
-    char jsonChar[jsonbuffersize];
+    // char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
@@ -1228,7 +1110,7 @@ void PressuretoJSON()
     readA0();
     digitalWrite(LED_BUILTIN, HIGH);
     // StaticJsonDocument<jsonbuffersize> doc;
-    doc.clear();
+    // doc.clear();
     doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
     doc["psi"] = a0value;
@@ -1236,7 +1118,7 @@ void PressuretoJSON()
     doc["volts"] = analog.getReadVolts();
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
-    char jsonChar[jsonbuffersize];
+    // char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
@@ -1250,7 +1132,7 @@ void readTmp()
 }
 void KtypetoJSON()
 {
-    doc.clear();
+    // doc.clear();
     doc["t"] = tmpvalue;
 
     JsonObject pidevice = doc.createNestedObject("pidevice");
@@ -1263,7 +1145,7 @@ void KtypetoJSON()
     JsonObject device = doc.createNestedObject("device");
     device["mac"] = WiFi.macAddress();
 
-    char jsonChar[jsonbuffersize];
+    // char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
@@ -1275,11 +1157,11 @@ void info()
     Serial.println(WiFi.localIP());
     Serial.print("Version:");
     Serial.println(version);
-    doc.clear();
+    // doc.clear();
     doc["mac"] = WiFi.macAddress();
     doc["IP"] = WiFi.localIP().toString();
     doc["version"] = version;
-    char jsonChar[jsonbuffersize];
+    // char jsonChar[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
@@ -1345,6 +1227,8 @@ void readRTC()
 }
 void inden()
 {
+    a0readcount++;
+    makestatuscount++;
     uptime++;
     wifitimeout++;
     checkintime++;
@@ -1500,18 +1384,6 @@ void setvalue()
         }
     }
     saveEEPROM();
-    // if (configdata.havea0)
-    //     readA0();
-    // // doc.clear();
-    // // status();
-    // makeStatus();
-    // doc["message"] = "set value " + v + "TO " + value;
-    // char jsonChar[jsonbuffersize];
-    // serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    // server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-    // server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    // server.sendHeader("Access-Control-Allow-Headers", "application/json");
-    // server.send(200, "application/json", jsonChar);
     String re = "<html> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><h3>set " + v + " TO " + value + " <h3><hr><a href='/setconfig'>back</a> <script type=\"text/JavaScript\"> redirectTime = \"1500\"; redirectURL = \"/setconfig\"; function timedRedirect() { setTimeout(\"location.href = redirectURL;\",redirectTime); } </script></html>";
     server.send(200, "text/html", re);
 }
@@ -1800,7 +1672,11 @@ void loop()
         checkintime = 0;
         checkin();
     }
-
+   
+    if(configdata.havea0 && a0readcount>2)
+    {
+        reada0();
+    }
     if (apmodetime > 120)
     {
         ESP.restart();
@@ -1822,8 +1698,6 @@ void loop()
         wifitimeout = 0;
         otatime = 0;
         ota();
-        // printIPAddressOfHost("fw1.pixka.me");
-
         settime();
     }
     if (readdhttime > 5 && dhtbuffer.count < 1 && configdata.havedht)
@@ -1833,7 +1707,7 @@ void loop()
         readDHT();
         // readAm2320();
     }
-    if (readdstime > 2 && configdata.haveds)
+    if (readdstime > 1 && configdata.haveds)
     {
         readdstime = 0;
         readTmp();
@@ -1854,7 +1728,7 @@ void loop()
         porttrick = 0;
         portcheck();
     }
-    if (ntptime > 60)
+    if (ntptime > 600)
     {
 
         updateNTP();
@@ -1873,10 +1747,15 @@ void loop()
     loadtotal += load;
     loadav = loadtotal / loadcount;
 
-    if (configdata.havesonic && readdistance > 10)
+    if (configdata.havesonic && readdistance > 2)
     {
         readdistance = 0;
         distance = ma();
+    }
+    if(makestatuscount>0)
+    {
+        makeStatus();
+        makestatuscount = 0;
     }
 }
 
