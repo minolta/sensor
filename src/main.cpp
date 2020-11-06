@@ -33,7 +33,7 @@ String timeStamp;
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "94";
+const String version = "96";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -1686,14 +1686,9 @@ void loop()
     {
         if (!checkconnect())
         {
-            if (wifitimeout > configdata.wifitimeout)
-            {
-
-                if (!haveportrun())
-                    ESP.restart();
-            }
-
-            wifitimeout = 0;
+            WiFi.disconnect();
+            delay(1000);
+            WiFi.reconnect();
         }
         wifitimeout = 0;
         otatime = 0;
