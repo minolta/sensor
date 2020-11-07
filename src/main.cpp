@@ -18,7 +18,6 @@
 #define jsonbuffersize 1200
 char jsonChar[jsonbuffersize];
 long distance = 0;
-
 //ntp
 #include <NTPClient.h>
 #include <WiFiUdp.h>
@@ -149,7 +148,6 @@ struct
     boolean havertc = false;
     boolean havepmsensor = 0;
     int wifitimeout = 60;
-
     boolean havesonic = false;
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
