@@ -13,6 +13,7 @@
 #include <Wire.h>
 #include "SHTSensor.h"
 #include "KDs18b20.h"
+#include "ktimer.h"
 #define pingPin D1
 #define inPin D2
 #define jsonbuffersize 1200
@@ -45,7 +46,7 @@ long counttime = 0;
 #include "Adafruit_Sensor.h"
 #include "Adafruit_AM2320.h"
 KDS ds(D3);
-
+Ktimer kt;
 #define ADDR 100
 #define someofio 5
 int canuseled = 1;
@@ -1091,6 +1092,17 @@ void a0()
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
 }
+void runtimer()
+{
+    String time = server.arg("time"); //เวลาที่ทำงานงาน
+    String message = server.arg("closetime");
+    kt.setSec(time.toInt());
+    kt.setMessage(message);
+    kt.start();
+    doc["runtimer"] = time;
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    server.send(200, "application/json", jsonChar);
+}
 
 void DHTtoJSON()
 {
@@ -1254,6 +1266,8 @@ void inden()
     {
         readRTC();
     }
+
+    kt.run();
 }
 
 void setAPMode()
@@ -1423,6 +1437,10 @@ void setHttp()
     server.on("/restart", reset);
     server.on("/setp", setvalue);
     server.on("/update", ota);
+    server.on("/timer", runtimer);
+
+    //closetime parameter have to show on oled
+    server.on("/setclosetime", runtimer); //time parameter to count
 
     server.on("/", status);
     server.begin(); //เปิด TCP Server
@@ -1553,6 +1571,8 @@ void setRTC()
 }
 void setup()
 {
+
+    kt.run();
     Serial.begin(9600);
     Serial.println();
     Serial.println();
@@ -1670,8 +1690,8 @@ void loop()
         checkintime = 0;
         checkin();
     }
-   
-    if(configdata.havea0 && a0readcount>2)
+
+    if (configdata.havea0 && a0readcount > 2)
     {
         reada0();
     }
@@ -1745,10 +1765,16 @@ void loop()
         readdistance = 0;
         distance = ma();
     }
-    if(makestatuscount>0)
+    if (makestatuscount > 0)
     {
         makeStatus();
         makestatuscount = 0;
+    }
+
+    if(kt.getSec()>0)
+    {
+        Serial.print("Count:");
+        Serial.println(kt.getSec());
     }
 }
 
