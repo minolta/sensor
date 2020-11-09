@@ -14,6 +14,7 @@
 #include "SHTSensor.h"
 #include "KDs18b20.h"
 #include "ktimer.h"
+#include "SSD1306Wire.h"
 #define pingPin D1
 #define inPin D2
 #define jsonbuffersize 1200
@@ -29,11 +30,14 @@ NTPClient timeClient(ntpUDP);
 String formattedDate;
 String dayStamp;
 String timeStamp;
+int displaytmp = 0;
+int oledok = 0;
+int displaycounter = 0;
 
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "96";
+const String version = "98";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -47,6 +51,7 @@ long counttime = 0;
 #include "Adafruit_AM2320.h"
 KDS ds(D3);
 Ktimer kt;
+SSD1306Wire display(0x3c, D2, D1);
 #define ADDR 100
 #define someofio 5
 int canuseled = 1;
@@ -150,6 +155,7 @@ struct
     boolean havepmsensor = 0;
     int wifitimeout = 60;
     boolean havesonic = false;
+    int haveoled = false;
     /*float volts = 3.02 * (float)sensorValue / 1023.00;
     float pressure_kPa = (volts - 0.532) / 4.0 * 1200.0;
     float pressure_psi = pressure_kPa * 0.14503773773020923;
@@ -450,26 +456,14 @@ void readPm()
         else if (index == 5)
         {
             pmdata.pm1 = 256 * previousValue + value;
-            // Serial.print("{ ");
-            // Serial.print("\"pm1\": ");
-            // Serial.print(pmdata.pm1);
-            // Serial.print(" ug/m3");
-            // Serial.print(", ");
         }
         else if (index == 7)
         {
             pmdata.pm2_5 = 256 * previousValue + value;
-            // Serial.print("\"pm2_5\": ");
-            // Serial.print(pmdata.pm2_5);
-            // Serial.print(" ug/m3");
-            // Serial.print(", ");
         }
         else if (index == 9)
         {
             pmdata.pm10 = 256 * previousValue + value;
-            // Serial.print("\"pm10\": ");
-            // Serial.print(pmdata.pm10);
-            // Serial.print(" ug/m3");
         }
         else if (index > 15)
         {
@@ -484,19 +478,15 @@ void readPm()
             mySerial.read();
         delay(1000); //ถ้ามีการอ่านให้
     }
-    // while (mySerial.available())
-    //     mySerial.read();
-    // Serial.println(" }");
-    // delay(1000);
 }
+
 void setconfig()
 {
 
     // String html = " <!DOCTYPE html> <style> table { font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif; border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 8px; } tr:nth-child(even) { background-color: #f2f2f2; } tr:hover { background-color: #ddd; } th { padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #4CAF50; color: white; } button { /* width: 100%; */ background-color: #4CAF50; color: white; padding: 10px 15px; /* margin: 8px 0; */ border: none; border-radius: 4px; cursor: pointer; } .button3 { background-color: #f44336; } </style> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta charset=\"UTF-8\"> </head> Config in " + String(name) + " version:" + String(version) + " SSID:" + WiFi.SSID() + " Signel: " + String(WiFi.RSSI()) + " type: " + String(type) + "<table id=\"customres\"> <tr> <td>Parameter</td> <td>value</td> <td>Option</td> </tr> <tr> <td>DHT</td> <td>" + intToEnable(configdata.havedht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\" value=\"1\">Disable</button> </form> </td> </tr> <tr> <td>SHT</td> <td>" + intToEnable(configdata.havesht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>DS</td> <td>" + intToEnable(configdata.haveds) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have A0</td> <td>" + intToEnable(configdata.havea0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to restart</td> <td>" + intToEnable(configdata.havetorestart) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>D5</td> <td>" + intToPinmode(portconfig.D5value) + " /init " + intToLogic(portconfig.D5initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D6</td> <td>" + intToPinmode(portconfig.D6value) + " /init " + intToLogic(portconfig.D6initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D7</td> <td>" + intToPinmode(portconfig.D7value) + " /init " + intToLogic(portconfig.D7initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D8</td> <td>" + intToPinmode(portconfig.D8value) + " /init " + intToLogic(portconfig.D8initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>Sensor value </td> <td>" + String(configdata.sensorvalue) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> <tr> <td>สำหรับปรับค่าแรงดัน VA0</td> <td>" + String(configdata.va0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\" > <input type=\"number\" name=\"value\" step='0.01' value=\"" + String(configdata.va0) + "\" > <button type=\"submit\" >Save</button> </form> </td> </tr> <tr> <td>Auto restart value </td> <td>" + String(configdata.wifitimeout) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"wifitimeout\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> </table> <hr> <form action=\"/get\"> <table> <tr> <td colspan=\"3\">WIFI information</td> </tr> <tr> <td>SSID</td> <td>" + String(wifidata.ssid) + "</td> <td><input type=\"text\" name=\"ssid\"></td> </tr> <tr> <td>PASSWORD</td> <td>********</td> <td><input type=\"password\" name=\"password\"></td> </tr> <tr> <td colspan=\"3\" align=\"right\"><button type=\"submit\">Set wifi</button></td> </tr> </table> </form> <form action=\"/restart\"> <button type=\"submit\" class=\"button3\" value=\"Restart\">Restart</button> </form> ky@pixka.me 2020 </html>";
     // String html = " <!DOCTYPE html> <style> table { font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif; border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 8px; } tr:nth-child(even) { background-color: #f2f2f2; } tr:hover { background-color: #ddd; } th { padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #4CAF50; color: white; } button { /* width: 100%; */ background-color: #4CAF50; color: white; padding: 10px 15px; /* margin: 8px 0; */ border: none; border-radius: 4px; cursor: pointer; } .button3 { background-color: #f44336; } </style> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta charset=\"UTF-8\"> </head> Config in " + String(name) + " version:" + String(version) + " SSID:" + WiFi.SSID() + " Signel: " + String(WiFi.RSSI()) + " type: " + String(type) + "<table id=\"customres\"> <tr> <td>Parameter</td> <td>value</td> <td>Option</td> </tr> <tr> <td>DHT</td> <td>" + intToEnable(configdata.havedht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\" value=\"1\">Disable</button> </form> </td> </tr> <tr> <td>SHT</td> <td>" + intToEnable(configdata.havesht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>DS</td> <td>" + intToEnable(configdata.haveds) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have A0</td> <td>" + intToEnable(configdata.havea0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to restart</td> <td>" + intToEnable(configdata.havetorestart) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have PM Sensor</td> <td>" + intToEnable(configdata.havepmsensor) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>D5</td> <td>" + intToPinmode(portconfig.D5value) + " /init " + intToLogic(portconfig.D5initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D6</td> <td>" + intToPinmode(portconfig.D6value) + " /init " + intToLogic(portconfig.D6initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D7</td> <td>" + intToPinmode(portconfig.D7value) + " /init " + intToLogic(portconfig.D7initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D8</td> <td>" + intToPinmode(portconfig.D8value) + " /init " + intToLogic(portconfig.D8initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>Sensor value </td> <td>" + String(configdata.sensorvalue) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> <tr> <td>สำหรับปรับค่าแรงดัน VA0</td> <td>" + String(configdata.va0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\"> <input type=\"number\" name=\"value\" step='0.01' value=\"" + String(configdata.va0) + "\"> <button type=\"submit\">Save</button> </form> </td> </tr> <tr> <td>Auto restart value </td> <td>" + String(configdata.wifitimeout) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"wifitimeout\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> </table> <hr> <form action=\"/get\"> <table> <tr> <td colspan=\"3\">WIFI information</td> </tr> <tr> <td>SSID</td> <td>" + String(wifidata.ssid) + "</td> <td><input type=\"text\" name=\"ssid\"></td> </tr> <tr> <td>PASSWORD</td> <td>********</td> <td><input type=\"password\" name=\"password\"></td> </tr> <tr> <td colspan=\"3\" align=\"right\"><button type=\"submit\">Set wifi</button></td> </tr> </table> </form> <form action=\"/restart\"> <button type=\"submit\" class=\"button3\" value=\"Restart\">Restart</button> </form> ky@pixka.me 2020 </html>";
 
-    String html = " <!DOCTYPE html> <style> table { font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif; border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 8px; } tr:nth-child(even) { background-color: #f2f2f2; } tr:hover { background-color: #ddd; } th { padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #4CAF50; color: white; } button { /* width: 100%; */ background-color: #4CAF50; color: white; padding: 10px 15px; /* margin: 8px 0; */ border: none; border-radius: 4px; cursor: pointer; } .button3 { background-color: #f44336; } </style> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta charset=\"UTF-8\"> </head> Config in " + String(name) + " version:" + String(version) + " SSID:" + WiFi.SSID() + " Signel: " + String(WiFi.RSSI()) + " type: " + String(type) + " <table id=\"customres\"> <tr> <td>Parameter</td> <td>value</td> <td>Option</td> </tr> <tr> <td>DHT</td> <td>" + intToEnable(configdata.havedht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\" value=\"1\">Disable</button> </form> </td> </tr> <tr> <td>SHT</td> <td>" + intToEnable(configdata.havesht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>DS</td> <td>" + intToEnable(configdata.haveds) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Sonic</td> <td>" + intToEnable(configdata.havesonic) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have A0</td> <td>" + intToEnable(configdata.havea0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to RTC</td> <td>" + intToEnable(configdata.havertc) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to restart</td> <td>" + intToEnable(configdata.havetorestart) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have PM Sensor</td> <td>" + intToEnable(configdata.havepmsensor) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>D5</td> <td>" + intToPinmode(portconfig.D5value) + " /init " + intToLogic(portconfig.D5initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D6</td> <td>" + intToPinmode(portconfig.D6value) + " /init " + intToLogic(portconfig.D6initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D7</td> <td>" + intToPinmode(portconfig.D7value) + " /init " + intToLogic(portconfig.D7initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D8</td> <td>" + intToPinmode(portconfig.D8value) + " /init " + intToLogic(portconfig.D8initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>Sensor value </td> <td>" + String(configdata.sensorvalue) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> <tr> <td>สำหรับปรับค่าแรงดัน VA0</td> <td>" + String(configdata.va0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\"> <input type=\"number\" name=\"value\" step='0.01' value=\"" + String(configdata.va0) + "\"> <button type=\"submit\">Save</button> </form> </td> </tr> <tr> <td>Auto restart value </td> <td>" + String(configdata.wifitimeout) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"wifitimeout\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> </table> <hr> <form action=\"/get\"> <table> <tr> <td colspan=\"3\">WIFI information</td> </tr> <tr> <td>SSID</td> <td>" + String(wifidata.ssid) + "</td> <td><input type=\"text\" name=\"ssid\"></td> </tr> <tr> <td>PASSWORD</td> <td>********</td> <td><input type=\"password\" name=\"password\"></td> </tr> <tr> <td colspan=\"3\" align=\"right\"><button type=\"submit\">Set wifi</button></td> </tr> </table> </form> <form action=\"/restart\"> <button type=\"submit\" class=\"button3\" value=\"Restart\">Restart</button> </form> ky@pixka.me 2020 </html>";
-    ;
+    String html = " <!DOCTYPE html> <style> table { font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif; border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 8px; } tr:nth-child(even) { background-color: #f2f2f2; } tr:hover { background-color: #ddd; } th { padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #4CAF50; color: white; } button { /* width: 100%; */ background-color: #4CAF50; color: white; padding: 10px 15px; /* margin: 8px 0; */ border: none; border-radius: 4px; cursor: pointer; } .button3 { background-color: #f44336; } </style> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta charset=\"UTF-8\"> </head> Config in " + String(name) + " version:" + String(version) + " SSID:" + WiFi.SSID() + " Signel: " + String(WiFi.RSSI()) + " type: " + String(type) + " <table id=\"customres\"> <tr> <td>Parameter</td> <td>value</td> <td>Option</td> </tr> <tr> <td>DHT</td> <td>" + intToEnable(configdata.havedht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\" value=\"1\">Disable</button> </form> </td> </tr> <tr> <td>SHT</td> <td>" + intToEnable(configdata.havesht) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>DS</td> <td>" + intToEnable(configdata.haveds) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Sonic</td> <td>" + intToEnable(configdata.havesonic) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have A0</td> <td>" + intToEnable(configdata.havea0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to RTC</td> <td>" + intToEnable(configdata.havertc) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to restart</td> <td>" + intToEnable(configdata.havetorestart) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have PM Sensor</td> <td>" + intToEnable(configdata.havepmsensor) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have OLED</td> <td>" + intToEnable(configdata.haveoled) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>D5</td> <td>" + intToPinmode(portconfig.D5value) + " /init " + intToLogic(portconfig.D5initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D6</td> <td>" + intToPinmode(portconfig.D6value) + " /init " + intToLogic(portconfig.D6initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D7</td> <td>" + intToPinmode(portconfig.D7value) + " /init " + intToLogic(portconfig.D7initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D8</td> <td>" + intToPinmode(portconfig.D8value) + " /init " + intToLogic(portconfig.D8initvalue) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>Sensor value </td> <td>" + String(configdata.sensorvalue) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> <tr> <td>สำหรับปรับค่าแรงดัน VA0</td> <td>" + String(configdata.va0) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\"> <input type=\"number\" name=\"value\" step='0.01' value=\"" + String(configdata.va0) + "\"> <button type=\"submit\">Save</button> </form> </td> </tr> <tr> <td>Auto restart value </td> <td>" + String(configdata.wifitimeout) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"wifitimeout\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> </table> <hr> <form action=\"/get\"> <table> <tr> <td colspan=\"3\">WIFI information</td> </tr> <tr> <td>SSID</td> <td>" + String(wifidata.ssid) + "</td> <td><input type=\"text\" name=\"ssid\"></td> </tr> <tr> <td>PASSWORD</td> <td>********</td> <td><input type=\"password\" name=\"password\"></td> </tr> <tr> <td colspan=\"3\" align=\"right\"><button type=\"submit\">Set wifi</button></td> </tr> </table> </form> <form action=\"/restart\"> <button type=\"submit\" class=\"button3\" value=\"Restart\">Restart</button> </form> ky@pixka.me 2020 </html>"; // ;
     server.send(200, "text/html", html);
 }
 void setReadtmplimit()
@@ -851,6 +841,13 @@ long ma()
     duration = pulseIn(inPin, HIGH);
 
     cm = microsecondsToCentimeters(duration);
+    if (oledok)
+    {
+        display.clear();
+        display.print("distance:");
+        display.println(cm);
+        display.display();
+    }
     return cm;
 }
 void read40()
@@ -890,6 +887,12 @@ void ota()
 {
     Serial.println("OTA");
 
+    // if (oledok)
+    // {
+    //     display.println("Start OTA");
+    //     display.display();
+    // }
+
     Serial.println(urlupdate);
     t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 8080, urlupdate);
     // t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.88.15", 8889,"/espupdate/nodemcu/"+version, version);
@@ -900,9 +903,23 @@ void ota()
         Serial.println("[update] Update failed.");
         break;
     case HTTP_UPDATE_NO_UPDATES:
+        if (oledok)
+        {
+            display.clear();
+            display.println("No update");
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
         Serial.println("[update] Update no Update.");
         break;
     case HTTP_UPDATE_OK:
+        if (oledok)
+        {
+            display.clear();
+            display.println("Update new fw");
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
         Serial.println("[update] Update ok."); // may not called we reboot the ESP
         break;
     }
@@ -916,58 +933,14 @@ void checkin()
         readA0();
     // DynamicJsonDocument<jsonbuffersize>ddoc;
 
-    StaticJsonDocument<jsonbuffersize> doc1;
-    doc1["freemem"] = system_get_free_heap_size();
-    doc1["version"] = version;
-    doc1["name"] = name;
-    doc1["ip"] = WiFi.localIP().toString();
-    doc1["mac"] = WiFi.macAddress();
-    doc1["ssid"] = WiFi.SSID();
-    doc1["wifitimeout"] = wifitimeout;
-    doc1["ssid"] = WiFi.SSID();
-    doc1["signal"] = WiFi.RSSI();
-    doc1["sensorvalue"] = configdata.sensorvalue;
-    doc1["rawvalue"] = analog.getRawvalue();
-    doc1["pressurevalue"] = a0value;
-    doc1["psi"] = a0value;
-    doc1["bar"] = a0value / 14.504;
-    doc1["volts"] = analog.getReadVolts();
-    doc1["a0"] = a0value;
-    doc1["VA0"] = configdata.va0;
-    // readDHT();
-    doc1["h"] = pfHum;
-    doc1["t"] = pfTemp;
-    doc1["uptime"] = uptime;
-    doc1["dhtbuffer.time"] = dhtbuffer.count;
-    doc1["type"] = type;
-    doc1["message"] = message;
-    doc1["havedht"] = configdata.havedht;
-    doc1["haveds"] = configdata.haveds;
-    doc1["havea0"] = configdata.havea0;
-    doc1["havetorestart"] = configdata.havetorestart;
-    doc1["tmp"] = tmpvalue;
-    //  int readtmpvalue = 120;
-    // int a0readtime = 120;
-    doc1["reada0time"] = configdata.a0readtime;
-    doc1["readtmptime"] = configdata.readtmpvalue;
-
-    doc1["D5config"] = portconfig.D5value;
-    doc1["D5init"] = portconfig.D5initvalue;
-
-    doc1["D6config"] = portconfig.D6value;
-    doc1["D6init"] = portconfig.D6initvalue;
-    doc1["D7config"] = portconfig.D7value;
-    doc1["D7init"] = portconfig.D7initvalue;
-
-    doc1["d1"] = digitalRead(D1);
-    doc1["d2"] = digitalRead(D2);
-    doc1["d3"] = digitalRead(D3);
-    doc1["d4"] = digitalRead(D4);
-    doc1["d5"] = digitalRead(D5);
-    doc1["d6"] = digitalRead(D6);
-    doc1["d7"] = digitalRead(D7);
-    doc1["d8"] = digitalRead(D8);
-    doc1["password"] = "";
+    // StaticJsonDocument<jsonbuffersize> doc1;
+    doc["freemem"] = system_get_free_heap_size();
+    doc["version"] = version;
+    doc["name"] = name;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["mac"] = WiFi.macAddress();
+    doc["ssid"] = WiFi.SSID();
+    doc["password"] = "";
 
     // doc["mac"] = WiFi.macAddress();
     // doc["password"] = "";
@@ -976,13 +949,12 @@ void checkin()
     // JsonObject dht = doc.createNestedObject("dhtvalue");
     // dht["t"] = pfTemp;
     // dht["h"] = pfHum;
-    doc1["type"] = type;
     //test
 
     //Test commit
-    char JSONmessageBuffer[jsonbuffersize];
-    serializeJsonPretty(doc1, JSONmessageBuffer, jsonbuffersize);
-    Serial.println(JSONmessageBuffer);
+    // char JSONmessageBuffer[jsonbuffersize];
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    Serial.println(jsonChar);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
@@ -991,18 +963,23 @@ void checkin()
     http.addHeader("Content-Type", "application/json"); //Specify content-type header
     // http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
 
-    int httpCode = http.POST(JSONmessageBuffer); //Send the request
-    String payload = http.getString();           //Get the response payload
+    int httpCode = http.POST(jsonChar); //Send the request
+    String payload = http.getString();  //Get the response payload
     Serial.print(" Http Code:");
     Serial.println(httpCode); //Print HTTP return code
     if (httpCode == 200)
     {
         Serial.print(" Play load:");
         Serial.println(payload); //Print request response payload
-        doc1.clear();
-        deserializeJson(doc1, payload);
-        JsonObject obj = doc1.as<JsonObject>();
+        doc.clear();
+        deserializeJson(doc, payload);
+        JsonObject obj = doc.as<JsonObject>();
         name = obj["pidevice"]["name"].as<String>();
+        if (oledok)
+        {
+            display.println("Checkin ok");
+            display.display();
+        }
     }
 
     Serial.print(" Play load:");
@@ -1080,6 +1057,14 @@ void reada0()
     a0value = analog.readA0();
     Serial.print("A0 value:");
     Serial.println(a0value);
+    if (configdata.haveoled)
+    {
+        display.clear();
+        display.print("Read a0");
+        display.println(a0value);
+        display.drawLogBuffer(0, 0);
+        display.display();
+    }
 }
 void a0()
 {
@@ -1102,6 +1087,18 @@ void runtimer()
     doc["runtimer"] = time;
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
+    if (configdata.haveoled)
+    {
+        display.clear();
+        // Print to the screen
+        display.println("Timer run");
+        display.print("Count:");
+        display.println(time);
+        // Draw it to the internal screen buffer
+        display.drawLogBuffer(0, 0);
+        // Display it on the screen
+        display.display();
+    }
 }
 
 void DHTtoJSON()
@@ -1134,11 +1131,11 @@ void PressuretoJSON()
 }
 void readTmp()
 {
-    Serial.println("Read TMP");
+    // Serial.println("Read TMP");
     tmpvalue = ds.readDs();
-    Serial.print("READ");
-    Serial.println(tmpvalue);
-    Serial.println("End Read TMP");
+    // Serial.print("READ");
+    // Serial.println(tmpvalue);
+    // Serial.println("End Read TMP");
 }
 void KtypetoJSON()
 {
@@ -1237,6 +1234,8 @@ void readRTC()
 }
 void inden()
 {
+    displaycounter++;
+    displaytmp++;
     a0readcount++;
     makestatuscount++;
     uptime++;
@@ -1261,11 +1260,6 @@ void inden()
 
     if (!readdhtstate && canuseled)
         digitalWrite(b_led, !digitalRead(b_led));
-
-    if (configdata.havertc && rtctime > 10)
-    {
-        readRTC();
-    }
 
     kt.run();
 }
@@ -1351,6 +1345,17 @@ void setvalue()
     else if (v.equals("havesonic"))
     {
         configdata.havesonic = value.toInt();
+    }
+    else if (v.equals("haveoled"))
+    {
+        configdata.haveoled = value.toInt();
+        if (configdata.haveoled)
+        {
+            if (display.init())
+            {
+                Serial.println("Display ok");
+            }
+        }
     }
     else if (v.equals("havepmsensor"))
     {
@@ -1462,6 +1467,13 @@ void connect()
 
         delay(500);
         Serial.print("#");
+        if (oledok)
+        {
+            display.clear();
+            display.print("-");
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
         ft++;
         if (ft > 10)
         {
@@ -1492,6 +1504,13 @@ void connect()
 
         delay(500);
         Serial.print(".");
+        if (oledok)
+        {
+            // display.clear();
+            display.print(".");
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
         co++;
         if (co > 200)
         {
@@ -1504,11 +1523,20 @@ void connect()
     if (!apmode)
     {
 
-        ota();
-        checkin();
         Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
+        String ip = WiFi.localIP().toString();
         String mac = WiFi.macAddress();
         Serial.println(mac); // แสดงหมายเลข IP ของ Server
+        if (oledok)
+        {
+            display.clear();
+            display.print("IP:");
+            display.println(ip);
+            display.print("MAC:");
+            display.println(mac);
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
     }
 }
 
@@ -1577,6 +1605,28 @@ void setup()
     Serial.println();
     Serial.println();
     setEEPROM();
+    if (configdata.haveoled)
+    {
+        if (display.init())
+        {
+            Serial.println("Display ok");
+            display.setLogBuffer(3, 30);
+            display.drawLogBuffer(0, 0);
+            display.clear();
+            // Print to the screen
+            display.println("SiRI Farm");
+            // Draw it to the internal screen buffer
+
+            // Display it on the screen
+            display.display();
+            oledok = 1;
+        }
+        else
+        {
+            Serial.println("Display not ok");
+            oledok = 0;
+        }
+    }
     setport();
 
     pinMode(b_led, OUTPUT); //On Board LED
@@ -1624,6 +1674,8 @@ void setup()
 
     settime();
     ota();
+    // ota();
+    checkin();
 }
 
 //This code is a modified version of the code posted on the Arduino forum and other places
@@ -1690,6 +1742,26 @@ void loop()
         checkintime = 0;
         checkin();
     }
+    if (displaytmp > 30)
+    {
+        if (oledok)
+        {
+            display.clear();
+            display.print("Uptime:");
+            display.println(uptime);
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
+        if (oledok)
+        {
+            display.clear();
+            display.print("Tmp:");
+            display.println(tmpvalue);
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
+        displaytmp = 0;
+    }
 
     if (configdata.havea0 && a0readcount > 2)
     {
@@ -1697,19 +1769,37 @@ void loop()
     }
     if (apmodetime > 120)
     {
+        if (oledok)
+        {
+            display.clear();
+            display.println("Restart");
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
         ESP.restart();
     }
-
-    if (otatime > 60)
+    if (otatime % 30 == 0)
     {
         if (!checkconnect())
         {
+            if (oledok)
+            {
+                display.clear();
+                display.println("Reconnect");
+                display.drawLogBuffer(0, 0);
+                display.display();
+            }
             WiFi.disconnect();
             delay(1000);
             WiFi.reconnect();
         }
+    }
+    if (otatime > 60)
+    {
+
         wifitimeout = 0;
         otatime = 0;
+
         ota();
         settime();
     }
@@ -1748,8 +1838,19 @@ void loop()
         ntptime = 0;
         Serial.print("Update time:");
         Serial.println(timeClient.getFormattedTime());
+        if (oledok)
+        {
+            display.clear();
+            display.println(timeClient.getFormattedTime());
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
     }
-
+    if (configdata.havertc && rtctime > 10)
+    {
+        readRTC();
+        rtctime = 0;
+    }
     if (configdata.havepmsensor)
     {
         readPm();
@@ -1771,15 +1872,31 @@ void loop()
         makestatuscount = 0;
     }
 
-    if(kt.getSec()>0)
+    if (kt.getSec() >= 1 && displaycounter > 0)
     {
+        // display.setLogBuffer(1, 30);
         Serial.print("Count:");
         Serial.println(kt.getSec());
+        if (oledok)
+        {
+            display.clear();
+            // display.drawLogBuffer(0, 0);
+            // display.display();
+            // char buf[30];
+            // display.clearPixel(0,70);
+            // display.drawString(30, 45,"    ");
+            // display.display();
+            display.drawString(0, 45,"Run:");
+            String t = String(kt.getSec());
+            display.drawString(40, 45, t);
+            display.display();
+        }
+
+        displaycounter = 0;
     }
 }
 
 boolean checkconnect()
-
 {
     // IPAddress ip(192, 168, 88, 1); // The remote ip to ping
     bool ret = Ping.ping(WiFi.gatewayIP());
@@ -1787,12 +1904,26 @@ boolean checkconnect()
     {
         Serial.println("Success!!");
         message = "Connect is ok";
+        if (oledok)
+        {
+            display.clear();
+            display.println("Connect ok");
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
         return true;
     }
     else
     {
         Serial.println("Error :(");
         message = "Connect have problem";
+        if (oledok)
+        {
+            display.clear();
+            display.println("Connect ERROR");
+            display.drawLogBuffer(0, 0);
+            display.display();
+        }
     }
     return false;
 }
