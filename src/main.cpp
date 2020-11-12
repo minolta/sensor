@@ -17,7 +17,7 @@
 #include "SSD1306Wire.h"
 #define pingPin D1
 #define inPin D2
-#define jsonbuffersize 1200
+#define jsonbuffersize 1500
 char jsonChar[jsonbuffersize];
 long distance = 0;
 //ntp
@@ -37,7 +37,7 @@ int displaycounter = 0;
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "98";
+const String version = "99";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -839,7 +839,6 @@ long ma()
     digitalWrite(pingPin, LOW);
     pinMode(inPin, INPUT);
     duration = pulseIn(inPin, HIGH);
-
     cm = microsecondsToCentimeters(duration);
     if (oledok)
     {
@@ -1420,6 +1419,19 @@ void printIPAddressOfHost(const char *host)
     Serial.print(" IP: ");
     Serial.println(resolvedIP);
 }
+void scanwifi()
+{
+    int n = WiFi.scanNetworks();
+    for (int i = 0; i < n; i++)
+    {
+        String s = "wifi:"+String(i);
+        String ss = "wifisignel:"+String(i);
+        doc[s] = WiFi.SSID(i);
+        doc[ss] = WiFi.RSSI(i);
+    }
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    server.send(200, "application/json", jsonChar);
+}
 void setHttp()
 {
     server.on("/dht", DHTtoJSON);
@@ -1431,6 +1443,7 @@ void setHttp()
     server.on("/run", run);
     server.on("/a0", a0);
     server.on("/setwifi", setwifi);
+    server.on("/scanwifi", scanwifi);
     server.on("/setconfig", setconfig);
     server.on("/setreadtmp", setReadtmplimit);
     server.on("/setreada0", setReada0limit);
@@ -1453,6 +1466,7 @@ void setHttp()
 }
 void connect()
 {
+    WiFi.mode(WIFI_STA);
     Serial.println();
     Serial.println("-----------------------------------------------");
     Serial.println(wifidata.ssid);
@@ -1789,9 +1803,27 @@ void loop()
                 display.drawLogBuffer(0, 0);
                 display.display();
             }
+            WiFi.mode(WIFI_STA);
             WiFi.disconnect();
-            delay(1000);
+            delay(100);
             WiFi.reconnect();
+            int trytoconnect = 0;
+            while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+            {
+
+                delay(500);
+                Serial.print("#");
+                if (oledok)
+                {
+                    display.clear();
+                    display.print("-");
+                    display.drawLogBuffer(0, 0);
+                    display.display();
+                }
+                trytoconnect++;
+                if (trytoconnect > 20)
+                    ESP.restart();
+            }
         }
     }
     if (otatime > 60)
@@ -1886,7 +1918,7 @@ void loop()
             // display.clearPixel(0,70);
             // display.drawString(30, 45,"    ");
             // display.display();
-            display.drawString(0, 45,"Run:");
+            display.drawString(0, 45, "Run:");
             String t = String(kt.getSec());
             display.drawString(40, 45, t);
             display.display();
