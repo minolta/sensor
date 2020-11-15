@@ -15,6 +15,8 @@
 #include "KDs18b20.h"
 #include "ktimer.h"
 #include "SSD1306Wire.h"
+#define xs 40
+#define ys 15
 #define pingPin D1
 #define inPin D2
 #define jsonbuffersize 1500
@@ -37,7 +39,7 @@ int displaycounter = 0;
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "99";
+const String version = "102";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -74,9 +76,11 @@ long load = 0;
 long loadcount = 0;
 double loadav = 0;
 double loadtotal = 0;
+double psi = 0;
+int ledstatus = 0;
 SHTSensor sht;
 int readdistance = 0;
-int a0readcount = 0;
+// int a0readcount = 0;
 StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
 int makestatuscount = 0;
@@ -255,6 +259,41 @@ Ticker flipper;
 #define CONFIGADDRESS 500
 #define PORTADDRESS 400
 #define WIFIADDRESS 50
+
+class Displayslot
+{
+public:
+    String head;
+    String description;
+    String description1;
+    String foot;
+    String foot2;
+} displayslot;
+void dd()
+{
+    if (oledok)
+    {
+        display.clear();
+        //print head
+        display.setTextAlignment(TEXT_ALIGN_CENTER);
+        display.setFont(ArialMT_Plain_16);
+        display.drawString(xs + 22, ys, displayslot.head);
+
+        display.setTextAlignment(TEXT_ALIGN_LEFT);
+        display.setFont(ArialMT_Plain_10);
+        display.drawString(xs - 8, ys + 17, displayslot.description);
+
+        display.setTextAlignment(TEXT_ALIGN_LEFT);
+        display.setFont(ArialMT_Plain_10);
+        display.drawString(xs - 8, ys + 27, displayslot.description1);
+
+        display.setTextAlignment(TEXT_ALIGN_LEFT);
+        display.setFont(ArialMT_Plain_10);
+        display.drawString(xs - 8, ys + 39, displayslot.foot + displayslot.foot2);
+
+        display.display();
+    }
+}
 void saveEEPROM()
 {
     Serial.println("SAVE ERRPROM");
@@ -591,8 +630,8 @@ void makeStatus()
     doc["sensorvalue"] = configdata.sensorvalue;
     doc["rawvalue"] = analog.getRawvalue();
     doc["pressurevalue"] = a0value;
-    doc["psi"] = a0value;
-    doc["bar"] = a0value / 14.504;
+    doc["psi"] = psi;
+    doc["bar"] = psi / 14.504;
     doc["volts"] = analog.getReadVolts();
     doc["a0"] = a0value;
     // doc["VA0"] = configdata.va0;
@@ -849,15 +888,15 @@ long ma()
     }
     return cm;
 }
-void read40()
-{
-    // float v = hx711.read() / 100.0;
-    // StaticJsonDocument<500> doc;
-    // doc["value"] = v;
-    // char jsonChar[100];
-    // serializeJsonPretty(doc, jsonChar, 100);
-    // server.send(200, "application/json", jsonChar);
-}
+// void read40()
+// {
+//     // float v = hx711.read() / 100.0;
+//     // StaticJsonDocument<500> doc;
+//     // doc["value"] = v;
+//     // char jsonChar[100];
+//     // serializeJsonPretty(doc, jsonChar, 100);
+//     // server.send(200, "application/json", jsonChar);
+// }
 void reset()
 {
     // StaticJsonDocument<jsonbuffersize> doc;
@@ -884,17 +923,14 @@ void reset()
 }
 void ota()
 {
+    if (oledok)
+    {
+        displayslot.description = "OTA";
+        dd();
+    }
     Serial.println("OTA");
-
-    // if (oledok)
-    // {
-    //     display.println("Start OTA");
-    //     display.display();
-    // }
-
     Serial.println(urlupdate);
     t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 8080, urlupdate);
-    // t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.88.15", 8889,"/espupdate/nodemcu/"+version, version);
     Serial.println("return " + ret);
     switch (ret)
     {
@@ -904,20 +940,18 @@ void ota()
     case HTTP_UPDATE_NO_UPDATES:
         if (oledok)
         {
-            display.clear();
-            display.println("No update");
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.description = "No update";
+            displayslot.foot2 = " No update";
+            dd();
         }
         Serial.println("[update] Update no Update.");
         break;
     case HTTP_UPDATE_OK:
         if (oledok)
         {
-            display.clear();
-            display.println("Update new fw");
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.description = "New FW";
+            displayslot.foot2 = " New update";
+            dd();
         }
         Serial.println("[update] Update ok."); // may not called we reboot the ESP
         break;
@@ -926,13 +960,11 @@ void ota()
 
 void checkin()
 {
-    // StaticJsonDocument<jsonbuffersize> doc;
-    // doc.clear();
-    if (configdata.havea0)
-        readA0();
-    // DynamicJsonDocument<jsonbuffersize>ddoc;
-
-    // StaticJsonDocument<jsonbuffersize> doc1;
+    if (oledok)
+    {
+        displayslot.description = "checkin";
+        dd();
+    }
     doc["freemem"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
@@ -941,19 +973,7 @@ void checkin()
     doc["ssid"] = WiFi.SSID();
     doc["password"] = "";
 
-    // doc["mac"] = WiFi.macAddress();
-    // doc["password"] = "";
-    // doc["ip"] = WiFi.localIP().toString();
-    // doc["uptime"] = uptime;
-    // JsonObject dht = doc.createNestedObject("dhtvalue");
-    // dht["t"] = pfTemp;
-    // dht["h"] = pfHum;
-    //test
-
-    //Test commit
-    // char JSONmessageBuffer[jsonbuffersize];
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    Serial.println(jsonChar);
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
@@ -970,14 +990,13 @@ void checkin()
     {
         Serial.print(" Play load:");
         Serial.println(payload); //Print request response payload
-        doc.clear();
         deserializeJson(doc, payload);
         JsonObject obj = doc.as<JsonObject>();
         name = obj["pidevice"]["name"].as<String>();
         if (oledok)
         {
-            display.println("Checkin ok");
-            display.display();
+            displayslot.foot2 = "checkin ok";
+            dd();
         }
     }
 
@@ -1042,27 +1061,16 @@ void runCommand()
     Serial.println("Set port " + s + " to " + set);
 }
 
-// float readKtype()
-// {
-//     float DC = ktc.readCelsius();
-//     ktypevalue = DC;
-//     Serial.print("K type value ");
-//     Serial.println(DC);
-//     return DC;
-// }
 void reada0()
 {
-    Serial.println("READ A0");
+
     a0value = analog.readA0();
-    Serial.print("A0 value:");
-    Serial.println(a0value);
-    if (configdata.haveoled)
+    psi = analog.readPsi(configdata.va0, configdata.sensorvalue);
+    if (configdata.haveoled && otatime % 30 == 0)
     {
-        display.clear();
-        display.print("Read a0");
-        display.println(a0value);
-        display.drawLogBuffer(0, 0);
-        display.display();
+        Serial.println("READ A0");
+        Serial.print("A0 value:");
+        Serial.println(a0value);
     }
 }
 void a0()
@@ -1080,24 +1088,22 @@ void runtimer()
 {
     String time = server.arg("time"); //เวลาที่ทำงานงาน
     String message = server.arg("closetime");
+    String l = server.arg("l");
+    if (oledok)
+    {
+        displayslot.head = "Running";
+        displayslot.description = "start timer";
+        displayslot.description1 = time;
+        dd();
+    }
+    if (l != NULL)
+        kt.setLogic(l.toInt());
     kt.setSec(time.toInt());
     kt.setMessage(message);
     kt.start();
     doc["runtimer"] = time;
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
     server.send(200, "application/json", jsonChar);
-    if (configdata.haveoled)
-    {
-        display.clear();
-        // Print to the screen
-        display.println("Timer run");
-        display.print("Count:");
-        display.println(time);
-        // Draw it to the internal screen buffer
-        display.drawLogBuffer(0, 0);
-        // Display it on the screen
-        display.display();
-    }
 }
 
 void DHTtoJSON()
@@ -1130,11 +1136,7 @@ void PressuretoJSON()
 }
 void readTmp()
 {
-    // Serial.println("Read TMP");
     tmpvalue = ds.readDs();
-    // Serial.print("READ");
-    // Serial.println(tmpvalue);
-    // Serial.println("End Read TMP");
 }
 void KtypetoJSON()
 {
@@ -1235,7 +1237,6 @@ void inden()
 {
     displaycounter++;
     displaytmp++;
-    a0readcount++;
     makestatuscount++;
     uptime++;
     wifitimeout++;
@@ -1258,8 +1259,10 @@ void inden()
         counttime--;
 
     if (!readdhtstate && canuseled)
-        digitalWrite(b_led, !digitalRead(b_led));
-
+    {
+        ledstatus = !digitalRead(b_led);
+        digitalWrite(b_led, ledstatus);
+    }
     kt.run();
 }
 
@@ -1424,8 +1427,8 @@ void scanwifi()
     int n = WiFi.scanNetworks();
     for (int i = 0; i < n; i++)
     {
-        String s = "wifi:"+String(i);
-        String ss = "wifisignel:"+String(i);
+        String s = "wifi:" + String(i);
+        String ss = "wifisignel:" + String(i);
         doc[s] = WiFi.SSID(i);
         doc[ss] = WiFi.RSSI(i);
     }
@@ -1438,7 +1441,7 @@ void setHttp()
     server.on("/pressure", PressuretoJSON);
     server.on("/ktype", KtypetoJSON);
     server.on("/info", info);
-    server.on("/read40", read40);
+    // server.on("/read40", read40);
     server.on("/ds18b20", readDS);
     server.on("/run", run);
     server.on("/a0", a0);
@@ -1463,6 +1466,10 @@ void setHttp()
     server.on("/", status);
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
+    if (oledok)
+    {
+        displayslot.description = "Http started";
+    }
 }
 void connect()
 {
@@ -1472,22 +1479,34 @@ void connect()
     Serial.println(wifidata.ssid);
     Serial.println(wifidata.password);
     Serial.println("-----------------------------------------------");
+    if (oledok)
+    {
+        displayslot.description = "Connect to ";
+        displayslot.description1 = wifidata.ssid;
+        dd();
+    }
     WiFiMulti.addAP(wifidata.ssid, wifidata.password);
 
     int ft = 0;
-
+    // display.clear();
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
 
-        delay(500);
-        Serial.print("#");
+        delay(250);
         if (oledok)
         {
-            display.clear();
-            display.print("-");
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.foot = "connect";
+            displayslot.foot2 = "/";
+            dd();
         }
+        delay(250);
+        if (oledok)
+        {
+            displayslot.foot = "connect";
+            displayslot.foot2 = "\\";
+            dd();
+        }
+
         ft++;
         if (ft > 10)
         {
@@ -1516,14 +1535,20 @@ void connect()
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
 
-        delay(500);
         Serial.print(".");
+        delay(250);
         if (oledok)
         {
-            // display.clear();
-            display.print(".");
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.foot = "next ssid";
+            displayslot.foot2 = "+";
+            dd();
+        }
+        delay(250);
+        if (oledok)
+        {
+            displayslot.foot = "connect";
+            displayslot.foot2 = "-";
+            dd();
         }
         co++;
         if (co > 200)
@@ -1543,13 +1568,17 @@ void connect()
         Serial.println(mac); // แสดงหมายเลข IP ของ Server
         if (oledok)
         {
-            display.clear();
-            display.print("IP:");
-            display.println(ip);
-            display.print("MAC:");
-            display.println(mac);
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.description = ip;
+            displayslot.foot = mac;
+            dd();
+            delay(1000);
+            // display.clear();
+            // display.print("IP:");
+            // display.println(ip);
+            // display.print("MAC:");
+            // display.println(mac);
+            // display.drawLogBuffer(0, 0);
+            // display.display();
         }
     }
 }
@@ -1611,35 +1640,39 @@ void setRTC()
     if (configdata.havertc)
         rtcObject.Begin(); //Starts I2C
 }
+
+void setupoled()
+{
+    if (display.init())
+    {
+        oledok = 1;
+        displayslot.head = "Sirifarm";
+        displayslot.description = "start up";
+        displayslot.description1 = "display ok";
+        displayslot.foot = "version:";
+        displayslot.foot2 = version;
+        display.flipScreenVertically();
+        dd();
+        delay(1000);
+    }
+    else
+    {
+        Serial.println("Display not ok");
+        oledok = 0;
+    }
+}
 void setup()
 {
 
-    kt.run();
     Serial.begin(9600);
+
     Serial.println();
     Serial.println();
+    kt.run();
     setEEPROM();
     if (configdata.haveoled)
     {
-        if (display.init())
-        {
-            Serial.println("Display ok");
-            display.setLogBuffer(3, 30);
-            display.drawLogBuffer(0, 0);
-            display.clear();
-            // Print to the screen
-            display.println("SiRI Farm");
-            // Draw it to the internal screen buffer
-
-            // Display it on the screen
-            display.display();
-            oledok = 1;
-        }
-        else
-        {
-            Serial.println("Display not ok");
-            oledok = 0;
-        }
+        setupoled();
     }
     setport();
 
@@ -1692,95 +1725,31 @@ void setup()
     checkin();
 }
 
-//This code is a modified version of the code posted on the Arduino forum and other places
-
-void check_if_exist_I2C()
-{
-
-    byte error, address;
-
-    int nDevices;
-
-    nDevices = 0;
-
-    for (address = 1; address < 127; address++)
-    {
-        Wire.beginTransmission(address);
-        error = Wire.endTransmission();
-        if (error == 0)
-        {
-
-            Serial.print("I2C device found at address 0x");
-
-            if (address < 16)
-
-                Serial.print("0");
-
-            Serial.print(address, HEX);
-
-            Serial.println(" !");
-
-            nDevices++;
-        }
-        else if (error == 4)
-        {
-
-            Serial.print("Unknow error at address 0x");
-
-            if (address < 16)
-
-                Serial.print("0");
-
-            Serial.println(address, HEX);
-        }
-
-    } //for loop
-
-    if (nDevices == 0)
-
-        Serial.println("No I2C devices found");
-
-    else
-
-        Serial.println("**********************************\n");
-}
-
 void loop()
 {
     long s = millis();
     // t.update();
     server.handleClient();
     //  delay(100);
-    if (checkintime > 600)
+    if (checkintime > 60)
     {
         checkintime = 0;
         checkin();
     }
-    if (displaytmp > 30)
+    if (displaytmp > 30 && configdata.haveds)
     {
         if (oledok)
         {
-            display.clear();
-            display.print("Uptime:");
-            display.println(uptime);
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.description = "Tmp now";
+            displayslot.description1 = String(tmpvalue);
+            displayslot.foot2 = " tmp:" + String(tmpvalue);
+            dd();
         }
-        if (oledok)
-        {
-            display.clear();
-            display.print("Tmp:");
-            display.println(tmpvalue);
-            display.drawLogBuffer(0, 0);
-            display.display();
-        }
+        Serial.print("TMP:");
+        Serial.println(tmpvalue);
         displaytmp = 0;
     }
 
-    if (configdata.havea0 && a0readcount > 2)
-    {
-        reada0();
-    }
     if (apmodetime > 120)
     {
         if (oledok)
@@ -1798,10 +1767,11 @@ void loop()
         {
             if (oledok)
             {
-                display.clear();
-                display.println("Reconnect");
-                display.drawLogBuffer(0, 0);
-                display.display();
+
+                displayslot.description = "Reconnect";
+                dd();
+                // display.drawString(xs, ys + 10, "Reconnect");
+                // display.display();
             }
             WiFi.mode(WIFI_STA);
             WiFi.disconnect();
@@ -1812,47 +1782,41 @@ void loop()
             {
 
                 delay(500);
-                Serial.print("#");
+                Serial.print(trytoconnect);
                 if (oledok)
                 {
-                    display.clear();
-                    display.print("-");
-                    display.drawLogBuffer(0, 0);
-                    display.display();
+                    displayslot.description = "reconnect";
+                    displayslot.description1 = String(trytoconnect);
+                    dd();
                 }
                 trytoconnect++;
-                if (trytoconnect > 20)
+                //ต้องมี have run เพราะจะทำให้งานที่ยังทำอยู่เสร็จก่อน
+                if (trytoconnect > 50 && !haveportrun())
                     ESP.restart();
+
+                if (trytoconnect > 50)
+                    break;
             }
         }
     }
     if (otatime > 60)
     {
-
         wifitimeout = 0;
         otatime = 0;
-
         ota();
         settime();
     }
-    if (readdhttime > 5 && dhtbuffer.count < 1 && configdata.havedht)
+    if (readdhttime > 5 && configdata.havedht)
     {
         readdhttime = 0;
         message = "Read DHT";
         readDHT();
-        // readAm2320();
     }
     if (readdstime > 1 && configdata.haveds)
     {
         readdstime = 0;
         readTmp();
     }
-    if (reada0time > configdata.a0readtime && configdata.havea0)
-    {
-        reada0time = 0;
-        reada0();
-    }
-
     if (configdata.havesht && readshtcount > 2)
     {
         readshtcount = 0;
@@ -1872,10 +1836,9 @@ void loop()
         Serial.println(timeClient.getFormattedTime());
         if (oledok)
         {
-            display.clear();
-            display.println(timeClient.getFormattedTime());
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.description = "update time";
+            displayslot.description1 = "ok";
+            dd();
         }
     }
     if (configdata.havertc && rtctime > 10)
@@ -1897,6 +1860,12 @@ void loop()
     {
         readdistance = 0;
         distance = ma();
+        if (oledok)
+        {
+            displayslot.description = "Distance";
+            displayslot.description1 = String(distance);
+            dd();
+        }
     }
     if (makestatuscount > 0)
     {
@@ -1911,21 +1880,51 @@ void loop()
         Serial.println(kt.getSec());
         if (oledok)
         {
-            display.clear();
-            // display.drawLogBuffer(0, 0);
-            // display.display();
-            // char buf[30];
-            // display.clearPixel(0,70);
-            // display.drawString(30, 45,"    ");
-            // display.display();
-            display.drawString(0, 45, "Run:");
-            String t = String(kt.getSec());
-            display.drawString(40, 45, t);
-            display.display();
+            displayslot.description = kt.getMessage();
+            displayslot.description1 = String(kt.getSec());
+            dd();
         }
 
         displaycounter = 0;
     }
+    if (kt.getSec() == 1)
+    {
+        if (oledok)
+        {
+            displayslot.head = "SiriFarm";
+        }
+    }
+
+    if (configdata.havea0 && reada0time > 1)
+    {
+        reada0time = 0;
+        reada0();
+    }
+    if (configdata.havea0 && checkintime % 30 == 0)
+    {
+        if (oledok)
+        {
+            displayslot.description = "A0";
+            displayslot.description1 = String(a0value) + "PSI";
+            displayslot.foot2 = String(a0value) + "PSI";
+            dd();
+        }
+    }
+    if (oledok)
+    {
+
+        if (!ledstatus)
+        {
+            displayslot.foot = ".";
+        }
+        else
+        {
+            // display.clear();
+            displayslot.foot = " ";
+        }
+        dd();
+    }
+    // Serial.println("END loop");
 }
 
 boolean checkconnect()
@@ -1938,10 +1937,11 @@ boolean checkconnect()
         message = "Connect is ok";
         if (oledok)
         {
-            display.clear();
-            display.println("Connect ok");
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.description = "Connect ok";
+            // display.clear();
+            // display.println("Connect ok");
+            // display.drawLogBuffer(0, 0);
+            // display.display();
         }
         return true;
     }
@@ -1951,10 +1951,11 @@ boolean checkconnect()
         message = "Connect have problem";
         if (oledok)
         {
-            display.clear();
-            display.println("Connect ERROR");
-            display.drawLogBuffer(0, 0);
-            display.display();
+            displayslot.description = "connection error";
+            // display.clear();
+            // display.println("Connect ERROR");
+            // display.drawLogBuffer(0, 0);
+            // display.display();
         }
     }
     return false;

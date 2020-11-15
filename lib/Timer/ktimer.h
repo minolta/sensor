@@ -7,6 +7,7 @@ private:
     long sec;
     String msg;
     boolean running = false;
+    int logic = 0;
 
 public:
     void setSec(long);
@@ -14,6 +15,8 @@ public:
     void start();
     void stop();
     void setMessage(String);
+    void setLogic(int);
+    String getMessage();
     long getSec();
 };
 #endif
