@@ -39,7 +39,7 @@ int displaycounter = 0;
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "102";
+const String version = "103";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -712,6 +712,7 @@ void makeStatus()
     doc["ntptimelong"] = timeClient.getEpochTime();
     doc["load"] = load;
     doc["loadav"] = loadav;
+    doc["timer.message"] = kt.getMessage();
 
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
 }
