@@ -39,7 +39,7 @@ int displaycounter = 0;
 // #include <WiFiUdp.h>
 #include <RtcDS3231.h> //RTC library
 #include <ESP8266Ping.h>
-const String version = "103";
+const String version = "104";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -1671,11 +1671,12 @@ void setup()
     Serial.println();
     kt.run();
     setEEPROM();
+    setport();
     if (configdata.haveoled)
     {
         setupoled();
     }
-    setport();
+   
 
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
