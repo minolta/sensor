@@ -15,6 +15,17 @@
 #include "KDs18b20.h"
 #include "ktimer.h"
 #include "SSD1306Wire.h"
+#include "FS.h"
+#include <NTPClient.h>
+#include <WiFiUdp.h>
+#include <SoftwareSerial.h>
+#include <RtcDS3231.h> //RTC library
+#include <ESP8266Ping.h>
+#include <Ticker.h>
+#include "KAnalog.h"
+#include <EEPROM.h>
+#include "Adafruit_Sensor.h"
+#include "Adafruit_AM2320.h"
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -23,9 +34,7 @@
 char jsonChar[jsonbuffersize];
 long distance = 0;
 //ntp
-#include <NTPClient.h>
-#include <WiFiUdp.h>
-#include <SoftwareSerial.h>
+
 SoftwareSerial mySerial(D6, D5); // RX, TX
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
@@ -37,20 +46,16 @@ int oledok = 0;
 int displaycounter = 0;
 
 // #include <WiFiUdp.h>
-#include <RtcDS3231.h> //RTC library
-#include <ESP8266Ping.h>
+
 const String version = "104";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
 // #include "Timer.h"
 // #include <max6675.h>
-#include <Ticker.h>
-#include "KAnalog.h"
+
 // #include <Q2HX711.h>
-#include <EEPROM.h>
-#include "Adafruit_Sensor.h"
-#include "Adafruit_AM2320.h"
+
 KDS ds(D3);
 Ktimer kt;
 SSD1306Wire display(0x3c, D2, D1);
