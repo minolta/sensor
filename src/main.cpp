@@ -1145,7 +1145,6 @@ void senddata()
             ESP.restart();
         }
     }
-
 }
 void readRTC()
 {
@@ -1324,7 +1323,7 @@ void setValue2()
         }
         else if (p.equals("havertc"))
         {
-            cfg.addConfig("havertc", value.toInt()); 
+            cfg.addConfig("havertc", value.toInt());
         }
         else if (p.equals("havea0"))
         {
@@ -1357,136 +1356,7 @@ void setValue2()
         loadconfigtoram();
         return;
     }
-
-    // String re = "<html> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><h3>set <b>" + p + "</b> TO " + value + " <h3><hr><a href='/setconfig'>back</a> <script type=\"text/JavaScript\"> redirectTime = \"1500\"; redirectURL = \"/setconfig\"; function timedRedirect() { setTimeout(\"location.href = redirectURL;\",redirectTime); } </script></html>";
-    // server.send(200, "text/html", re);
 }
-// void setvalue()
-// {
-//     String v = server.arg("p");
-//     String value = server.arg("value");
-//     String value2 = server.arg("value2");
-//     if (v.equals("va0"))
-//     {
-//         configdata.va0 = value.toFloat();
-//     }
-//     else if (v.equals("D5"))
-//     {
-
-//         portconfig.D5value = value.toInt(); // mode of port
-//         pinMode(D5, portconfig.D5value);
-//         if (value2 != NULL)
-//         {
-//             portconfig.D5initvalue = value2.toInt(); //init port
-//             digitalWrite(D5, portconfig.D5initvalue);
-//         }
-//     }
-//     else if (v.equals("D8"))
-//     {
-
-//         portconfig.D8value = value.toInt(); // mode of port
-//         pinMode(D8, portconfig.D8value);
-//         if (value2 != NULL)
-//         {
-//             portconfig.D8initvalue = value2.toInt(); //init port
-//             digitalWrite(D8, portconfig.D8initvalue);
-//         }
-//     }
-//     else if (v.equals("wifitimeout"))
-//     {
-
-//         configdata.wifitimeout = value.toInt(); // mode of port
-//     }
-//     else if (v.equals("D6"))
-//     {
-//         portconfig.D6value = value.toInt();
-//         pinMode(D6, portconfig.D6value);
-//         if (value2 != NULL)
-//         {
-//             portconfig.D6initvalue = value2.toInt();
-//             digitalWrite(D6, portconfig.D6initvalue);
-//         }
-//     }
-//     else if (v.equals("D7"))
-//     {
-//         portconfig.D7value = value.toInt();
-//         pinMode(D7, portconfig.D7value);
-//         if (value2 != NULL)
-//         {
-//             portconfig.D7initvalue = value2.toInt();
-//             digitalWrite(D7, portconfig.D7initvalue);
-//         }
-//     }
-//     else if (v.equals("sensorvalue"))
-//     {
-//         configdata.sensorvalue = value.toFloat();
-//     }
-//     else if (v.equals("havedht"))
-//     {
-//         configdata.havedht = value.toInt();
-//     }
-//     else if (v.equals("havesonic"))
-//     {
-//         configdata.havesonic = value.toInt();
-//     }
-//     else if (v.equals("haveoled"))
-//     {
-//         configdata.haveoled = value.toInt();
-//         if (configdata.haveoled)
-//         {
-//             if (display.init())
-//             {
-//                 Serial.println("Display ok");
-//             }
-//         }
-//     }
-//     else if (v.equals("havepmsensor"))
-//     {
-//         configdata.havepmsensor = value.toInt();
-//         if (value.toInt())
-//             mySerial.begin(9600);
-//         else
-//         {
-//             mySerial.end();
-//         }
-//     }
-//     else if (v.equals("haveds"))
-//     {
-//         configdata.haveds = value.toInt();
-//     }
-//     else if (v.equals("havertc"))
-//     {
-//         configdata.havertc = value.toInt();
-//     }
-//     else if (v.equals("havea0"))
-//     {
-//         configdata.havea0 = value.toInt();
-//     }
-//     else if (v.equals("havetorestart"))
-//     {
-//         configdata.havetorestart = value.toInt();
-//     }
-//     else if (v.equals("havesht"))
-//     {
-//         if (value.toInt())
-//         {
-
-//             if (sht.init()) //ถ้า init sht ได้ ค่อย Save จะทำให้ระบบทำงานได้
-//             {
-//                 configdata.havesht = value.toInt();
-//             }
-//             else
-//                 configdata.havesht = 0;
-//         }
-//         else
-//         {
-//             configdata.havesht = 0;
-//         }
-//     }
-//     saveEEPROM();
-//     String re = "<html> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><h3>set " + v + " TO " + value + " <h3><hr><a href='/setconfig'>back</a> <script type=\"text/JavaScript\"> redirectTime = \"1500\"; redirectURL = \"/setconfig\"; function timedRedirect() { setTimeout(\"location.href = redirectURL;\",redirectTime); } </script></html>";
-//     server.send(200, "text/html", re);
-// }
 
 void printIPAddressOfHost(const char *host)
 {
@@ -1522,7 +1392,6 @@ void setHttp()
     server.on("/pressure", PressuretoJSON);
     server.on("/ktype", KtypetoJSON);
     server.on("/info", info);
-    // server.on("/read40", read40);
     server.on("/ds18b20", readDS);
     server.on("/run", run);
     server.on("/a0", a0);
@@ -1530,8 +1399,6 @@ void setHttp()
     server.on("/scanwifi", scanwifi);
     server.on("/setconfig", setconfig);
     server.on("/inconfigfile", allinfile);
-    // server.on("/setreadtmp", setReadtmplimit);
-    // server.on("/setreada0", setReada0limit);
     server.on("/get", get);
     server.on("/updatecheckin", updateCheckin);
     server.on("/readam", readam);
@@ -1603,15 +1470,11 @@ void connect()
     WiFiMulti.addAP("forpi5", "04qwerty");
     WiFiMulti.addAP("forpi6", "04qwerty");
     WiFiMulti.addAP("forpi7", "04qwerty");
-    // WiFiMulti.addAP("forpi3", "04qwerty");
     WiFiMulti.addAP("Sirifarm", "0932154741");
     WiFiMulti.addAP("test", "12345678");
 
-    // WiFiMulti.addAP("forgame", "0894297443");
     WiFiMulti.addAP("pksy", "04qwerty");
     WiFiMulti.addAP("test", "12345678");
-    // WiFiMulti.addAP("SP", "04qwerty");
-    // WiFiMulti.addAP("SP3", "04qwerty");
 
     int co = 0;
     while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
@@ -1654,13 +1517,6 @@ void connect()
             displayslot.foot = mac;
             dd();
             delay(1000);
-            // display.clear();
-            // display.print("IP:");
-            // display.println(ip);
-            // display.print("MAC:");
-            // display.println(mac);
-            // display.drawLogBuffer(0, 0);
-            // display.display();
         }
     }
 }
@@ -1760,17 +1616,6 @@ void initConfig()
     cfg.addConfig("va0", 0.5);
     cfg.addConfig("sensorvalue", 42.5);
 
-    /*
-    pinMode(D5, portconfig.D5value);
-    digitalWrite(D5, portconfig.D5initvalue);
-    pinMode(D6, portconfig.D6value);
-    digitalWrite(D6, portconfig.D6initvalue);
-
-    pinMode(D7, portconfig.D7value);
-    digitalWrite(D7, portconfig.D7initvalue);
-    pinMode(D8, portconfig.D8value);
-    digitalWrite(D8, portconfig.D8initvalue);
-*/
     cfg.addConfig("D5mode", OUTPUT);
     cfg.addConfig("D5initvalue", 0);
     cfg.addConfig("D6mode", OUTPUT);
@@ -1798,7 +1643,6 @@ void setup()
     Serial.println();
     Serial.println();
     kt.run();
-    // setEEPROM();
 
     pinMode(b_led, OUTPUT); //On Board LED
                             //  pinMode(D4, OUTPUT);
@@ -1862,9 +1706,7 @@ void setup()
 void loop()
 {
     long s = millis();
-    // t.update();
     server.handleClient();
-    //  delay(100);
     if (checkintime > 60)
     {
         checkintime = 0;
@@ -2006,7 +1848,6 @@ void loop()
 
     if (kt.getSec() >= 1 && displaycounter > 0)
     {
-        // display.setLogBuffer(1, 30);
         Serial.print("Count:");
         Serial.println(kt.getSec());
         if (oledok)
@@ -2050,12 +1891,10 @@ void loop()
         }
         else
         {
-            // display.clear();
             displayslot.foot = " ";
         }
         dd();
     }
-    // Serial.println("END loop");
 }
 
 boolean checkconnect()
@@ -2069,10 +1908,6 @@ boolean checkconnect()
         if (oledok)
         {
             displayslot.description = "Connect ok";
-            // display.clear();
-            // display.println("Connect ok");
-            // display.drawLogBuffer(0, 0);
-            // display.display();
         }
         return true;
     }
@@ -2083,10 +1918,6 @@ boolean checkconnect()
         if (oledok)
         {
             displayslot.description = "connection error";
-            // display.clear();
-            // display.println("Connect ERROR");
-            // display.drawLogBuffer(0, 0);
-            // display.display();
         }
     }
     return false;
