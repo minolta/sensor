@@ -49,7 +49,7 @@ Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "107";
+const String version = "108";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -419,11 +419,16 @@ void get()
     Serial.println(password);
 
     if (ssd != NULL)
+    {
         ssd.toCharArray(wifidata.ssid, 50);
+        cfg.addConfig("ssid",ssd);
+    }
 
     if (password != NULL)
+    {
+        cfg.addConfig("password",password);
         password.toCharArray(wifidata.password, 50);
-
+    }
     Serial.println("Set ok");
 
     // saveEEPROM();
@@ -1425,8 +1430,8 @@ void connect()
     WiFi.mode(WIFI_STA);
     Serial.println();
     Serial.println("-----------------------------------------------");
-    Serial.println(cfg.getConfig("ssid"));
-    Serial.println(cfg.getConfig("password"));
+    Serial.println(cfg.getConfig("ssid","forpi"));
+    Serial.println(cfg.getConfig("password","04qwerty"));
     Serial.println("-----------------------------------------------");
     if (oledok)
     {
@@ -1606,7 +1611,7 @@ void setupoled()
 void initConfig()
 {
     cfg.openFile();
-    cfg.loadConfig();
+    cfg.load();
     Serial.printf("\n***** Init config **** \n");
     delay(1000);
 
