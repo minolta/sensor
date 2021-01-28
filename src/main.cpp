@@ -44,12 +44,13 @@ String dayStamp;
 String timeStamp;
 int displaytmp = 0;
 int oledok = 0;
+int displayshtcount = 0;
 int displaycounter = 0;
 Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "108";
+const String version = "110";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -421,12 +422,12 @@ void get()
     if (ssd != NULL)
     {
         ssd.toCharArray(wifidata.ssid, 50);
-        cfg.addConfig("ssid",ssd);
+        cfg.addConfig("ssid", ssd);
     }
 
     if (password != NULL)
     {
-        cfg.addConfig("password",password);
+        cfg.addConfig("password", password);
         password.toCharArray(wifidata.password, 50);
     }
     Serial.println("Set ok");
@@ -1180,6 +1181,7 @@ void readRTC()
 void inden()
 {
     displaycounter++;
+    displayshtcount++;
     displaytmp++;
     makestatuscount++;
     uptime++;
@@ -1430,8 +1432,8 @@ void connect()
     WiFi.mode(WIFI_STA);
     Serial.println();
     Serial.println("-----------------------------------------------");
-    Serial.println(cfg.getConfig("ssid","forpi"));
-    Serial.println(cfg.getConfig("password","04qwerty"));
+    Serial.println(cfg.getConfig("ssid", "forpi"));
+    Serial.println(cfg.getConfig("password", "04qwerty"));
     Serial.println("-----------------------------------------------");
     if (oledok)
     {
@@ -1708,6 +1710,15 @@ void setup()
     checkin();
 }
 
+void displaySht()
+{
+    char buf[255];
+    sprintf(buf, "H:%.2f", pfHum);
+    displayslot.description1 = String(buf);
+    sprintf(buf, "T:%.2f", pfTemp);
+    displayslot.description = String(buf);
+}
+
 void loop()
 {
     long s = millis();
@@ -1795,10 +1806,16 @@ void loop()
         readdstime = 0;
         readTmp();
     }
-    if (configdata.havedht && readshtcount > 2)
+    if (configdata.havesht && readshtcount > 2)
     {
         readshtcount = 0;
         readSht();
+
+        if(displayshtcount>20)
+        {
+            displayshtcount=0;
+            displaySht();
+        }
     }
     if (porttrick > 0 && counttime >= 0)
     {
