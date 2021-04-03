@@ -696,7 +696,7 @@ void makeStatus()
     doc["havesonic"] = configdata.havesonic;
     doc["distance"] = distance;
     doc["config.wifitimeout"] = configdata.wifitimeout;
-
+    doc["fordisplay"] = fordisplay;
     if (configdata.havesonic)
         doc["distance"] = distance;
     else
