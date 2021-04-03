@@ -57,7 +57,7 @@ Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "110";
+const String version = "111";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -384,8 +384,8 @@ void openwater()
         
         displayTOTM((fordisplay*0.0022)+1);
         char buf[255];
-        sprintf(buf, "Open water %d", fordisplay);
-        server.send(200, "text/html", buf);
+        sprintf(buf, "{\"open\": %d}", fordisplay);
+        server.send(200, "application/json", buf);
     }
 }
 void updateNTP()
