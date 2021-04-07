@@ -57,7 +57,7 @@ Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "111";
+const String version = "112";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -381,8 +381,8 @@ void openwater()
         //เปิดน้ำเปิด Sonenoi
         digitalWrite(D1, 1);
         Serial.printf("Open water %d", fordisplay);
-        
-        displayTOTM((fordisplay*0.0022)+1);
+
+        displayTOTM((fordisplay * 0.0022) + 1);
         char buf[255];
         sprintf(buf, "{\"open\": %d}", fordisplay);
         server.send(200, "application/json", buf);
@@ -917,7 +917,14 @@ long ma()
     }
     return cm;
 }
-
+void stopfill()
+{
+    doc["fillwater"] = fordisplay;
+    fordisplay = 0;
+    doc["stopfill"] = "ok";
+    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    server.send(200, "application/json", jsonChar);
+}
 void reset()
 {
     doc.clear();
@@ -1479,6 +1486,7 @@ void setHttp()
     {
         Serial.println("Set http for function /openwater");
         server.on("/openwater", openwater);
+        server.on("/stopfill", stopfill);
     }
     //closetime parameter have to show on oled
     server.on("/setclosetime", runtimer); //time parameter to count
@@ -1998,9 +2006,9 @@ void loop()
         Serial.printf("Water %d\n", fordisplay);
         displaytmp = 0;
         int a = 1;
-        if(fordisplay<=0)
-          a =0;
-        displayTOTM((fordisplay * 0.0022)+a);
+        if (fordisplay <= 0)
+            a = 0;
+        displayTOTM((fordisplay * 0.0022) + a);
     }
 }
 
