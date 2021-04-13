@@ -57,7 +57,7 @@ Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "112";
+const String version = "113";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -1801,16 +1801,16 @@ void displaySht()
     sprintf(buf, "T:%.2f", pfTemp);
     displayslot.description = String(buf);
 }
-
-void loop()
+void checkintask()
 {
-    long s = millis();
-    server.handleClient();
-    if (checkintime > 60)
+    if (checkintime > 60 && fordisplay <= 0)
     {
         checkintime = 0;
         checkin();
     }
+}
+void displaytmptask()
+{
     if (displaytmp > 30 && configdata.haveds)
     {
         if (oledok)
@@ -1824,8 +1824,10 @@ void loop()
         Serial.println(tmpvalue);
         displaytmp = 0;
     }
-
-    if (apmodetime > 120)
+}
+void apmodetask()
+{
+    if (apmodetime > 120 && fordisplay <= 0)
     {
         if (oledok)
         {
@@ -1836,7 +1838,10 @@ void loop()
         }
         ESP.restart();
     }
-    if (otatime % 30 == 0)
+}
+void checkconnectiontask()
+{
+    if (otatime % 30 == 0 && fordisplay <= 0)
     {
         if (!checkconnect())
         {
@@ -1871,25 +1876,37 @@ void loop()
             }
         }
     }
-    if (otatime > 60)
+}
+void otatask()
+{
+    if (otatime > 60 && fordisplay <= 0)
     {
         wifitimeout = 0;
         otatime = 0;
         ota();
         settime();
     }
-    if (readdhttime > 5 && configdata.havedht)
+}
+void dhttask()
+{
+    if (readdhttime > 5 && configdata.havedht && fordisplay <=0)
     {
         readdhttime = 0;
         message = "Read DHT";
         readDHT();
     }
-    if (readdstime > 1 && configdata.haveds)
+}
+void dsreadtask()
+{
+    if (readdstime > 1 && configdata.haveds && fordisplay <= 0)
     {
         readdstime = 0;
         readTmp();
     }
-    if (configdata.havesht && readshtcount > 2)
+}
+void shtreadtask()
+{
+    if (configdata.havesht && readshtcount > 2 && fordisplay <= 0)
     {
         readshtcount = 0;
         readSht();
@@ -1900,12 +1917,18 @@ void loop()
             displaySht();
         }
     }
+}
+void porttask()
+{
     if (porttrick > 0 && counttime >= 0)
     {
         porttrick = 0;
         portcheck();
     }
-    if (ntptime > 600)
+}
+void ntptask()
+{
+    if (ntptime > 600 && fordisplay <= 0)
     {
 
         updateNTP();
@@ -1919,22 +1942,25 @@ void loop()
             dd();
         }
     }
-    if (configdata.havertc && rtctime > 10)
+}
+void rtctask()
+{
+    if (configdata.havertc && rtctime > 600 && fordisplay <= 0 )
     {
         readRTC();
         rtctime = 0;
     }
-    if (configdata.havepmsensor)
+}
+void pmtask()
+{
+    if (configdata.havepmsensor && fordisplay <= 0)
     {
         readPm();
     }
-
-    load = millis() - s;
-    loadcount++;
-    loadtotal += load;
-    loadav = loadtotal / loadcount;
-
-    if (configdata.havesonic && readdistance > 2)
+}
+void distancetask()
+{
+    if (configdata.havesonic && readdistance > 2 && fordisplay <= 0)
     {
         readdistance = 0;
         distance = ma();
@@ -1945,13 +1971,10 @@ void loop()
             dd();
         }
     }
-    if (makestatuscount > 0)
-    {
-        makeStatus();
-        makestatuscount = 0;
-    }
-
-    if (kt.getSec() >= 1 && displaycounter > 0)
+}
+void countertask()
+{
+    if (kt.getSec() >= 1 && displaycounter > 0 && fordisplay <= 0)
     {
         Serial.print("Count:");
         Serial.println(kt.getSec());
@@ -1971,8 +1994,18 @@ void loop()
             displayslot.head = "SiriFarm";
         }
     }
-
-    if (configdata.havea0 && reada0time > 1)
+}
+void makestatustask()
+{
+    if (makestatuscount > 15 && fordisplay <= 0)
+    {
+        makeStatus();
+        makestatuscount = 0;
+    }
+}
+void a0task()
+{
+    if (configdata.havea0 && reada0time > 1 && fordisplay <= 0)
     {
         reada0time = 0;
         reada0();
@@ -1987,6 +2020,28 @@ void loop()
             dd();
         }
     }
+}
+void watertask()
+{
+    if (configdata.havewater && displaytmp > 1)
+    {
+        Serial.printf("Water %d\n", fordisplay);
+        displaytmp = 0;
+        int a = 1;
+        if (fordisplay <= 0)
+            a = 0;
+        displayTOTM((fordisplay * 0.0022) + a);
+    }
+}
+void loadtask()
+{
+    load = millis() - s;
+    loadcount++;
+    loadtotal += load;
+    loadav = loadtotal / loadcount;
+}
+void oledtask()
+{
     if (oledok)
     {
 
@@ -2000,16 +2055,33 @@ void loop()
         }
         dd();
     }
+}
+void loop()
+{
+    long s = millis();
+    server.handleClient();
+    checkintask();
+    displaytmptask();
+    apmodetask();
+    checkconnectiontask();
+    otatask();
+    dhttask();
+    dsreadtask();
+    shtreadtask();
+    porttask();
+    ntptask();
+    rtctask();
 
-    if (configdata.havewater && displaytmp > 1)
-    {
-        Serial.printf("Water %d\n", fordisplay);
-        displaytmp = 0;
-        int a = 1;
-        if (fordisplay <= 0)
-            a = 0;
-        displayTOTM((fordisplay * 0.0022) + a);
-    }
+    pmtask();
+    distancetask();
+    countertask();
+    makestatustask();
+    loadtask();
+
+    a0task();
+    oledtask();
+
+    watertask();
 }
 
 boolean checkconnect()
