@@ -57,7 +57,7 @@ Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "118";
+const String version = "119";
 RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
