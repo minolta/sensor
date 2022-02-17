@@ -849,6 +849,8 @@ int getPort(String p)
     {
         return D8;
     }
+
+    return -1;
 }
 
 void run()
@@ -990,9 +992,10 @@ void ota()
         displayslot.description = "OTA";
         dd();
     }
+    WiFiClient client;
     Serial.println("OTA");
     Serial.println(urlupdate);
-    t_httpUpdate_return ret = ESPhttpUpdate.update(otahost, 8080, urlupdate);
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client,otahost, 8080, urlupdate);
     Serial.println("return " + ret);
     switch (ret)
     {
@@ -1036,10 +1039,11 @@ void checkin()
     doc["password"] = "";
 
     serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    WiFiClient client;
     // put your main code here, to run repeatedly:
     HTTPClient http; //Declare object of class HTTPClient
 
-    http.begin(checkinhost); //Specify request destination
+    http.begin(client,checkinhost); //Specify request destination
     Serial.println(checkinhost);
     http.addHeader("Content-Type", "application/json"); //Specify content-type header
     // http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
