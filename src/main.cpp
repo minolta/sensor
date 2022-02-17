@@ -35,6 +35,7 @@
 #define jsonbuffersize 1500
 #define TMCLK D7
 #define TMDIO D6
+#define REALYPORT D7 //สำหรับยกน้ำออก
 
 char jsonChar[jsonbuffersize];
 long distance = 0;
@@ -53,6 +54,7 @@ int displaytmp = 0;
 int oledok = 0;
 int displayshtcount = 0;
 int displaycounter = 0;
+
 Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
@@ -66,6 +68,8 @@ long counttime = 0;
 
 // #include <Q2HX711.h>
 
+volatile int wateruse = 0;       //สำหรับบอกว่าใช้น้ำไปเท่าไหรแล้ว
+volatile int idlewaterlimit = 0; //บอกว่าไม่มีการใช้น้ำ
 KDS ds(D3);
 Ktimer kt;
 SSD1306Wire display(0x3c, D2, D1);
@@ -192,6 +196,12 @@ struct
 
     int havewater = 0;
     int checkintime = 0;
+    int havewaterlimit = 0;          //สำหรับ limit
+    int waterlimitvalue = 0;         //สำหรับบอกยอดจำนวนเต็ม
+    int waterlimittime = 300;        //5 นาทีสำหรับหยุดแบบชุดเล็ก
+    int wateridletime = 60;          //เวลาที่ไม่มีการใช้น้ำจะ หยุดนับจำนวนน้ำ
+    int wateroverlimit = 3;          //ถ้าตัดเกินตามที่กำหนดให้ตัดยาวเลย
+    int wateroverlimitvalue = 28800; // ตัดยาวเลย
 } configdata;
 
 struct
@@ -226,6 +236,13 @@ void loadconfigtoram()
     configdata.checkintime = cfg.getIntConfig("checkintime", 600);
     if (configdata.checkintime <= 0)
         configdata.checkintime = 600;
+
+    configdata.havewaterlimit = cfg.getIntConfig("havewaterlimit", 0);
+    configdata.waterlimitvalue = cfg.getIntConfig("waterlimitvalue", 100000); //ช่วงเวลาที่ไม่เกินกำหนดสำหรับการใช้น้ำ
+    configdata.wateridletime = cfg.getIntConfig("wateridletime", 60);         //เวลาที่ปั็มไม่ทำงานแล้วระบบจะถือว่าปิดการทำงานแล้ว
+    configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        //เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
+    wateruse = 0;                                                             //reset use water
+
     portconfig.D5value = cfg.getIntConfig("D5mode");
     portconfig.D5initvalue = cfg.getIntConfig("D5initvalue");
     portconfig.D6value = cfg.getIntConfig("D6mode");
@@ -235,6 +252,11 @@ void loadconfigtoram()
     portconfig.D8value = cfg.getIntConfig("D8mode");
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
 }
+
+//water  limit
+int waterlimitime = 0;         //เป็นเวลาที่หยุดใช้น้ำ
+int waterlimitport = D7;       //สำหรับตัดอ่าน ตัววัดน้ำไหลผ่าน
+int currentwateroverlimit = 0; //เป็นตัวนับว่าใช้น้ำเกินกี่รอบแล้ว
 Dhtbuffer dhtbuffer;
 long otatime = 0;
 int readdhtstate = 0;
@@ -301,6 +323,7 @@ float rawvalue = 0;
 volatile int flow_frequency;
 volatile int fordisplay = 0;
 //----------------------------
+
 int readshtcount = 0;
 #define DHT
 
@@ -353,6 +376,12 @@ void dd()
 
         display.display();
     }
+}
+ICACHE_RAM_ATTR void waterlimitinterrup()
+{
+
+    wateruse++;         //นับจำนวนน้ำที่ไหลผ่าน Sensor
+    idlewaterlimit = 0; //บอกว่ามีการใช้อยู่
 }
 //สำหรับนับจำนวนน้ำที่ไหลผ่าน
 
@@ -704,6 +733,7 @@ void makeStatus()
     doc["config.wifitimeout"] = configdata.wifitimeout;
     doc["config.checkintime"] = configdata.checkintime;
     doc["fordisplay"] = fordisplay;
+    doc["wateruse"] = wateruse;
     if (configdata.havesonic)
         doc["distance"] = distance;
     else
@@ -1278,6 +1308,15 @@ void inden()
         ledstatus = !digitalRead(b_led);
         digitalWrite(b_led, ledstatus);
     }
+    //ถ้ามีการหยุดปั๊มให้
+    if (waterlimitime >= 0)
+        waterlimitime--;
+    // else
+    // {
+    //     //สำหรับปิด 
+    //     digitalWrite(REALYPORT,0);//ปิดระบบ ตัดน้ำ
+    // }
+
     kt.run();
 }
 
@@ -1732,6 +1771,7 @@ void initConfig()
     cfg.addConfig("havesht", 0);
     cfg.addConfig("havesonic", 0);
     cfg.addConfig("haveoled", 0);
+    cfg.addConfig("havewaterlimit", 0);
 }
 void setup()
 {
@@ -2075,9 +2115,43 @@ void oledtask()
         dd();
     }
 }
+//สำหรับตรวจสอบว่ามีการใช้น้ำเกินกำหนดเปล่า
+void waterlimittask()
+{
+    if (configdata.havewaterlimit)
+    {
+        if (wateruse >= configdata.waterlimitvalue)
+        {
+            waterlimitime = configdata.waterlimittime; //ให้ทำการตัดปั๊มออกจากระบบ
+            wateruse = 0;                              //หยุดรอไม่ใช้งานละ
+            currentwateroverlimit++;                   //เพิ่มจำนวนการใช้น้ำเกินเข้าระบบ
+        }
+
+        if (waterlimitime >= 0)
+        {
+            digitalWrite(waterlimitport, 1); //เปิดระบบตัดน้ำแล้วระบบจะทำการลดค่า limit ไปเรื่อยๆ
+        }
+        else
+        {
+            digitalWrite(waterlimitport, 0); //ปิดถ้าค่า หยุดรอหมด
+        }
+
+        //ถ้ามีการใช้น้ำเกินกำหนดหรือว่าท่อแตกหรืออะไรซํกอย่างระบบจะตัดหรือยก relay
+        if(currentwateroverlimit>=configdata.wateroverlimitvalue)
+        {
+            waterlimitime = configdata.waterlimittime;
+            digitalWrite(REALYPORT,1); //สั่งระบบยก relay
+        }
+        if (idlewaterlimit >= configdata.wateridletime && waterlimitime <= 0)
+        {
+            wateruse = 0;              // ไม่มีการใช้น้ำแล้ว
+            currentwateroverlimit = 0; //ถ้ามีการหยุดใช้น้ำแล้วก็ยกเลิกการน้ำใช้น้ำเกิน
+        }
+    }
+}
 void loop()
 {
-    long s = millis();
+    // long s = millis();
     server.handleClient();
     checkintask();
     displaytmptask();
@@ -2101,6 +2175,7 @@ void loop()
     oledtask();
 
     watertask();
+    waterlimittask();
 }
 
 boolean checkconnect()

@@ -1,0 +1,6 @@
+เปลียน HTML เป็น String ใน ภาษา C
+http://davidjwatts.com/youtube/esp8266/esp-convertHTM.html#
+
+
+Remove line break and return สำหรับเวลาเราแก้ String html
+https://www.textfixer.com/tools/remove-line-breaks.php
