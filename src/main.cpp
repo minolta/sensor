@@ -4,7 +4,8 @@
 #include <DHT.h>
 #include <DHT_U.h>
 #include <OneWire.h>
-#include "./DNSServer.h"
+// #include "./DNSServer.h"
+#include "Apmode.h"
 #include <SPI.h>
 #include <ESP8266HTTPClient.h>
 // #include <ESP8266WebServer.h>
@@ -62,7 +63,7 @@ Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "125";
+const String version = "126";
 RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -1518,75 +1519,13 @@ void setHttp()
         displayslot.description = "Http started";
     }
 }
-const char getpassword_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    html {
-     font-family: Arial;
-     display: inline-block;
-     margin: 0px auto;
-     text-align: center;
-    }
-    h2 { font-size: 3.0rem; }
-    p { font-size: 3.0rem; }
-    .units { font-size: 1.2rem; }
-    .dht-labels{
-      font-size: 1.5rem;
-      vertical-align:middle;
-      padding-bottom: 15px;
-    }
-  </style>
-</head>
-<body>
-  <h2>Config file wifi</h2>
-  <form action="/setpassword" method="POST" enctype="application/x-www-form-urlencoded">
-  <input type="text" name="ssid" >
-  <input type="password" name="password">
-   <input type="submit" value="Send">
-</form>
-</body>
-</html>)rawliteral";
-DNSServer dns;
+
 void Apmoderun()
 {
 
-    WiFi.mode(WIFI_AP);
-    IPAddress ip(10, 10, 10, 1);
-    Serial.println("Go to AP mode");
-    AsyncWebServer serverap(80);
-    const char *ssid1 = "ESP-Sensor";
-    const char *password1 = "123456789";
-    WiFi.softAPConfig(ip, ip, IPAddress(255, 255, 255, 0));
-    dns.start(53, "*", ip);
-    WiFi.softAP("ESP-Sensor");
-
-    IPAddress IP = WiFi.softAPIP();
-    Serial.print("AP IP address: ");
-    Serial.println(IP);
-    serverap.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-                { request->send(200, "text/html", getpassword_html); });
-
-    serverap.on("/setpassword", HTTP_POST, [](AsyncWebServerRequest *request)
-                {
-              String password = request->arg("password");
-              String ssid = request->arg("ssid");
-              cfg.addConfig("ssid",ssid);
-              cfg.addConfig("password",password);
-              request->send(200, "text/html", "Ok SSID " + ssid + " Password " + password); });
-
-    serverap.on("/reset", HTTP_POST, [](AsyncWebServerRequest *request)
-                {
-              request->send(200, "text/html", "Re start");
-               ESP.restart(); });
-    serverap.onNotFound([](AsyncWebServerRequest *request)
-                        { request->send(200, "text/html", getpassword_html); });
-    serverap.begin();
-    while (true)
-    {
-        dns.processNextRequest();
-    }
+   ApMode ap("cfg.cfg");
+   ap.setApname("ESP Sensor AP Mode");
+   ap.run();
 }
 void connect()
 {
@@ -2156,10 +2095,7 @@ void waterlimittask()
 void loop()
 {
 
-    if (apmode)
-    {
-        dns.processNextRequest();
-    }
+   
     // long s = millis();
     // server.handleClient();
     checkintask();
