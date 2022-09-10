@@ -1084,6 +1084,10 @@ void checkin()
         Serial.println(payload); // Print request response payload
         deserializeJson(ddd, payload);
         JsonObject obj = dy.as<JsonObject>();
+        Serial.print("---------------------------------------------------------------");
+        Serial.println(obj);
+        Serial.print("---------------------------------------------------------------");
+
         name = obj["pidevice"]["name"].as<String>();
         if (oledok)
         {
@@ -1091,9 +1095,9 @@ void checkin()
             dd();
         }
     }
-    Serial.print(" Play load:");
-    Serial.println(payload); // Print request response payload
-    http.end();              // Close connection
+    // Serial.print(" Play load:");
+    // Serial.println(payload); // Print request response payload
+    http.end(); // Close connection
 }
 
 void writeResponse(WiFiClient &client, JsonObject &json)
@@ -1523,9 +1527,9 @@ void setHttp()
 void Apmoderun()
 {
 
-   ApMode ap("cfg.cfg");
-   ap.setApname("ESP Sensor AP Mode");
-   ap.run();
+    ApMode ap("cfg.cfg");
+    ap.setApname("ESP Sensor AP Mode");
+    ap.run();
 }
 void connect()
 {
@@ -1854,27 +1858,48 @@ void checkconnectiontask()
             WiFi.mode(WIFI_STA);
             WiFi.disconnect();
             delay(100);
-            WiFi.reconnect();
-            int trytoconnect = 0;
-            while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+            if (WiFi.reconnect())
             {
-
-                delay(500);
-                Serial.print(trytoconnect);
+                Serial.println("Re connect is ok");
                 if (oledok)
                 {
-                    displayslot.description = "reconnect";
-                    displayslot.description1 = String(trytoconnect);
+                    displayslot.description = "Reconnect is ok";
                     dd();
                 }
-                trytoconnect++;
-                //ต้องมี have run เพราะจะทำให้งานที่ยังทำอยู่เสร็จก่อน
-                if (trytoconnect > 50 && !haveportrun())
-                    ESP.restart();
-
-                if (trytoconnect > 50)
-                    break;
             }
+            else
+            {
+                if (!haveportrun())
+                {
+                    if (oledok)
+                    {
+                        displayslot.description = "Can not connect to wifi restart device ";
+                        dd();
+                    }
+                    ESP.restart();
+                }
+            }
+
+            // int trytoconnect = 0;
+            // while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+            // {
+
+            //     delay(500);
+            //     Serial.print(trytoconnect);
+            //     if (oledok)
+            //     {
+            //         displayslot.description = "reconnect";
+            //         displayslot.description1 = String(trytoconnect);
+            //         dd();
+            //     }
+            //     trytoconnect++;
+            //     //ต้องมี have run เพราะจะทำให้งานที่ยังทำอยู่เสร็จก่อน
+            //     if (trytoconnect > 50 && !haveportrun())
+            //         ESP.restart();
+
+            //     if (trytoconnect > 50)
+            //         break;
+            // }
         }
     }
 }
@@ -2095,7 +2120,6 @@ void waterlimittask()
 void loop()
 {
 
-   
     // long s = millis();
     // server.handleClient();
     checkintask();
