@@ -217,6 +217,7 @@ struct
     int otatime = 60;
     int checkconnectiontime = 600;
     int maxconnecttimeout = 10;
+    int jsonbuffer = 1500;
 } configdata;
 
 struct
@@ -245,7 +246,7 @@ void loadconfigtoram()
     configdata.readdstime = cfg.getIntConfig("readdstime", 60);
     configdata.va0 = cfg.getConfig("va0").toFloat();
     configdata.sensorvalue = cfg.getConfig("senservalue").toDouble();
-
+    configdata.jsonbuffer = cfg.getIntConfig("jsonbuffer",1024);
     configdata.havedht = cfg.getIntConfig("havedht", 0);
     configdata.havewater = cfg.getIntConfig("havewater", 0);
     configdata.havea0 = cfg.getIntConfig("havea0", 0);
@@ -796,7 +797,6 @@ void readDHT()
         Serial.println(" *C");
         pfTemp = event.temperature;
         dhtbuffer.t = pfTemp;
-
         dhtbuffer.count = 120; // update buffer life time
     }
     // Get humidity event and print its value.
@@ -820,6 +820,7 @@ void readDHT()
 }
 String makeStatus()
 {
+    cfg.setbuffer(configdata.jsonbuffer);
     DynamicJsonDocument doc(jsonbuffersize);
     doc["heap"] = system_get_free_heap_size();
     doc["version"] = version;
@@ -1749,7 +1750,7 @@ void setup()
                             // pinMode(D1, OUTPUT);
                             //   pinMode(D3, OUTPUT);
                             //  digitalWrite(D3,0);
-    cfg.setbuffer(1024);
+    cfg.setbuffer(configdata.jsonbuffer);
     if (!cfg.openFile())
     {
         Serial.println("Init file");
@@ -1793,7 +1794,6 @@ void setup()
 
     settime();
     ota();
-    // checkin();
 }
 
 void displaySht()
@@ -1879,27 +1879,6 @@ void checkconnectiontask()
                     ESP.restart();
                 }
             }
-
-            // int trytoconnect = 0;
-            // while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
-            // {
-
-            //     delay(500);
-            //     Serial.print(trytoconnect);
-            //     if (oledok)
-            //     {
-            //         displayslot.description = "reconnect";
-            //         displayslot.description1 = String(trytoconnect);
-            //         dd();
-            //     }
-            //     trytoconnect++;
-            //     //ต้องมี have run เพราะจะทำให้งานที่ยังทำอยู่เสร็จก่อน
-            //     if (trytoconnect > 50 && !haveportrun())
-            //         ESP.restart();
-
-            //     if (trytoconnect > 50)
-            //         break;
-            // }
         }
     }
 }
