@@ -4,9 +4,11 @@
 #include <DHT.h>
 #include <DHT_U.h>
 #include <OneWire.h>
+// #include "./DNSServer.h"
+#include "Apmode.h"
 #include <SPI.h>
 #include <ESP8266HTTPClient.h>
-#include <ESP8266WebServer.h>
+// #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
 #include <ESP8266httpUpdate.h>
@@ -28,6 +30,8 @@
 #include "Adafruit_AM2320.h"
 #include "Configfile.h"
 #include <TM1637Display.h>
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -39,7 +43,7 @@
 
 char jsonChar[jsonbuffersize];
 long distance = 0;
-//ntp
+// ntp
 
 //สำหรับนับ จำนวนน้ำที่ผ่าน
 #define Warterinterruppin D5
@@ -54,13 +58,13 @@ int displaytmp = 0;
 int oledok = 0;
 int displayshtcount = 0;
 int displaycounter = 0;
-
+int checkconnectiontime = 0;
 Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "119";
-RtcDS3231<TwoWire> rtcObject(Wire); //Uncomment for version 2.0.0 of the rtc library
+const String version = "126";
+RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
 //สำหรับบอกว่ามีการ run port io
 long counttime = 0;
 // #include "Timer.h"
@@ -73,13 +77,14 @@ volatile int idlewaterlimit = 0; //บอกว่าไม่มีการใ
 KDS ds(D3);
 Ktimer kt;
 SSD1306Wire display(0x3c, D2, D1);
+AsyncWebServer server(80);
 #define ADDR 100
 #define someofio 5
 int canuseled = 1;
 long uptime = 0;
 long checkintime = 0;
 long readdhttime = 0;
-//run port ได้
+// run port ได้
 long porttrick = 0;
 long readdstime = 0;
 long apmodetime = 0;
@@ -100,11 +105,11 @@ int ledstatus = 0;
 SHTSensor sht;
 int readdistance = 0;
 // int a0readcount = 0;
-StaticJsonDocument<jsonbuffersize> doc;
+// StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
 int makestatuscount = 0;
 boolean checkconnect();
-
+void readSht();
 class Wifidata
 {
 public:
@@ -188,20 +193,31 @@ struct
     float psi = (volts - 0.50) * 42.5; //172/psi
     */
     // float psi = (volts - 0.433) * 3.75; // 15 psi
-    //float psi = (volts - 0.48) * 37.5; // 15 psi
+    // float psi = (volts - 0.48) * 37.5; // 15 psi
 
     //  float volts = analog.readVolts();
     // 42.5 = 172 psi  37.5 = 150 psi 3.75 = 15psi
     // float psi = analog.readPsi(0.42, 3.75);
 
     int havewater = 0;
-    int checkintime = 0;
+    int checkintime = 60;
     int havewaterlimit = 0;          //สำหรับ limit
     int waterlimitvalue = 0;         //สำหรับบอกยอดจำนวนเต็ม
-    int waterlimittime = 300;        //5 นาทีสำหรับหยุดแบบชุดเล็ก
+    int waterlimittime = 300;        // 5 นาทีสำหรับหยุดแบบชุดเล็ก
     int wateridletime = 60;          //เวลาที่ไม่มีการใช้น้ำจะ หยุดนับจำนวนน้ำ
     int wateroverlimit = 3;          //ถ้าตัดเกินตามที่กำหนดให้ตัดยาวเลย
     int wateroverlimitvalue = 28800; // ตัดยาวเลย
+    int readdhttime = 5;
+    int readdstime = 10;
+    int readshttime = 5;
+    int ntpupdatetime = 600;
+    int rtctimeupdate = 600;
+    int readdistancetime = 60;
+    int reada0time = 60;
+    int otatime = 60;
+    int checkconnectiontime = 600;
+    int maxconnecttimeout = 10;
+    int jsonbuffer = 1500;
 } configdata;
 
 struct
@@ -211,15 +227,26 @@ struct
     unsigned int pm10 = 0;
 } pmdata;
 /**
- * Load config data to ram 
- * 
+ * Load config data to ram
+ *
  * */
 
 void loadconfigtoram()
 {
+    Serial.println("Load config to ram");
+    configdata.maxconnecttimeout = cfg.getIntConfig("maxconnecttimeout", 60); // 1 for test ap mode
+    configdata.checkconnectiontime = cfg.getIntConfig("checkconnectiontime", 600);
+    configdata.otatime = cfg.getIntConfig("otatime", 60);
+    configdata.reada0time = cfg.getIntConfig("reada0time", 60);
+    configdata.readdistancetime = cfg.getIntConfig("readdistancetime", 60);
+    configdata.rtctimeupdate = cfg.getIntConfig("rtctimeupdate", 600);
+    configdata.ntpupdatetime = cfg.getIntConfig("ntpupdatetime", 600);
+    configdata.readshttime = cfg.getIntConfig("readshttime", 60);
+    configdata.readdhttime = cfg.getIntConfig("readdhttime", 600);
+    configdata.readdstime = cfg.getIntConfig("readdstime", 60);
     configdata.va0 = cfg.getConfig("va0").toFloat();
     configdata.sensorvalue = cfg.getConfig("senservalue").toDouble();
-
+    configdata.jsonbuffer = cfg.getIntConfig("jsonbuffer",1024);
     configdata.havedht = cfg.getIntConfig("havedht", 0);
     configdata.havewater = cfg.getIntConfig("havewater", 0);
     configdata.havea0 = cfg.getIntConfig("havea0", 0);
@@ -241,7 +268,7 @@ void loadconfigtoram()
     configdata.waterlimitvalue = cfg.getIntConfig("waterlimitvalue", 100000); //ช่วงเวลาที่ไม่เกินกำหนดสำหรับการใช้น้ำ
     configdata.wateridletime = cfg.getIntConfig("wateridletime", 60);         //เวลาที่ปั็มไม่ทำงานแล้วระบบจะถือว่าปิดการทำงานแล้ว
     configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        //เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
-    wateruse = 0;                                                             //reset use water
+    wateruse = 0;                                                             // reset use water
 
     portconfig.D5value = cfg.getIntConfig("D5mode");
     portconfig.D5initvalue = cfg.getIntConfig("D5initvalue");
@@ -253,7 +280,7 @@ void loadconfigtoram()
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
 }
 
-//water  limit
+// water  limit
 int waterlimitime = 0;         //เป็นเวลาที่หยุดใช้น้ำ
 int waterlimitport = D7;       //สำหรับตัดอ่าน ตัววัดน้ำไหลผ่าน
 int currentwateroverlimit = 0; //เป็นตัวนับว่าใช้น้ำเกินกี่รอบแล้ว
@@ -277,6 +304,144 @@ const char index_html[] PROGMEM = R"rawliteral(
     <input type="submit" value="Submit">
   </form><br> contract ky@pixka.me 
 </body></html>)rawliteral";
+const char configfile_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html><head>
+  <title>Config</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    h2 {font-size: 3.0rem;}
+    p {font-size: 3.0rem;}
+    body {max-width: 600px; margin:0px auto; padding-bottom: 25px;}
+    .switch {position: relative; display: inline-block; width: 120px; height: 68px} 
+    .switch input {display: none}
+    .slider {position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 6px}
+    .slider:before {position: absolute; content: ""; height: 52px; width: 52px; left: 8px; bottom: 8px; background-color: #fff; -webkit-transition: .4s; transition: .4s; border-radius: 3px}
+    input:checked+.slider {background-color: #b30000}
+    input:checked+.slider:before {-webkit-transform: translateX(52px); -ms-transform: translateX(52px); transform: translateX(52px)}
+
+#customers {
+    /* font-family: 'Karla', Tahoma, Varela, Arial, Helvetica, sans-serif; */
+    border-collapse: collapse;
+    width: 100%%;
+    /* font-size: 12px; */
+}
+#btn {
+  border: 1px solid #777;
+  background: #6e9e2d;
+  color: #fff;
+  font: bold 11px 'Trebuchet MS';
+  padding: 4px;
+  cursor: pointer;
+  -moz-border-radius: 4px;
+  -webkit-border-radius: 4px;
+}
+.button {
+  background-color: #4CAF50; /* Green */
+  border: none;
+  color: white;
+  padding: 15px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+}
+#customers td,
+#customers th {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+
+/* #customers tr:nth-child(even){background-color: #f2f2f2;} */
+
+#customers tr:hover {
+    background-color: #ddd;
+}
+
+#customers th {
+    padding-top: 12px;
+    padding-bottom: 12px;
+    text-align: left;
+    background-color: #4CAF50;
+    color: white;
+}
+</style>
+
+<script>
+function deleteallconfig()
+{
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/resetconfig", true); 
+    xhr.send();
+}
+function remove(config)
+{
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/removeconfig?configname="+config, true); 
+
+     xhr.addEventListener("readystatechange", () => {
+     console.log(xhr.readystate);
+    if (xhr.readyState === 4 && xhr.status === 200) {
+     console.log(xhr.responseText);
+     location.reload();
+     }
+ });
+    xhr.send();
+}
+function add()
+{
+  var xhr = new XMLHttpRequest();
+  var input = document.getElementById('newconfigname');
+  var value = document.getElementById('newvalue');
+  xhr.open("GET", "/setconfig?configname="+input.value+"&value="+value.value, true); 
+  xhr.addEventListener("readystatechange", () => {
+     console.log(xhr.readystate);
+    if (xhr.readyState === 4 && xhr.status === 200) {
+     console.log(xhr.responseText);
+     var o =  JSON.parse(xhr.responseText);
+     var t = document.getElementById('customers');
+     var row = t.insertRow();
+     row.innerHTML = "<td>"+o.setconfig+"</td><td>"+o.value+"</td><td><input value="+o.value+"></td>";
+     }
+ });
+  xhr.send();
+}
+function setvalue(element,configname,value) {
+  console.log("Call",element);
+  var xhr = new XMLHttpRequest();
+  var input = document.getElementById(configname);
+
+  xhr.open("GET", "/setconfig?configname="+configname+"&value="+input.value, true); 
+  xhr.addEventListener("readystatechange", () => {
+     console.log(xhr.readystate);
+    if (xhr.readyState === 4 && xhr.status === 200) {
+     console.log(xhr.responseText);
+    var o =  JSON.parse(xhr.responseText);
+  var showvalue = document.getElementById(configname+'value');  
+  console.log('Showvalue',showvalue);
+  console.log('O',o);
+  showvalue.innerHTML = o.value
+    } else if (xhr.readyState === 4) {
+     console.log("could not fetch the data");
+     }
+        });
+  xhr.send();
+}
+</script>
+  </head><body>
+ <table id="customers">
+  <tr>
+  <td>Config</td><td>value</td><td>Set</td><td>#</td><td>x</td>
+  </tr>
+  %CONFIG%
+ </table>
+<hr>
+New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick="add()">add </button>
+<hr>
+<button id=btn onClick="deleteallconfig()">Reset Config</button>
+
+</body></html>)rawliteral";
 
 int watchdog = 0;
 // Portio ports[someofio];
@@ -286,10 +451,10 @@ char *checkinhost = "http://fw1.pixka.me:2222/checkin";
 // char *otahost = "fw1.pixka.me";
 const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
-//WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
-ESP8266WebServer server(80);
+// WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
+//  ESP8266WebServer server(80);
 //#define ONE_WIRE_BUS D4
-// OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
+//  OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
 
 #define DHTPIN D3 // Pin which is connected to the DHT sensor.
 boolean haveportrun();
@@ -357,7 +522,7 @@ void dd()
     if (oledok)
     {
         display.clear();
-        //print head
+        // print head
         display.setTextAlignment(TEXT_ALIGN_CENTER);
         display.setFont(ArialMT_Plain_16);
         display.drawString(xs + 22, ys, displayslot.head);
@@ -409,19 +574,19 @@ void displayTOTM(float d)
 //สำหรับจำนวนลิตรเข้ามาเพื่อเติมน้ำ
 void openwater()
 {
-    if (server.hasArg("w"))
-    {
-        int watertorefill = server.arg("w").toInt();
-        fordisplay = watertorefill / 0.0022; //จะแสดงว่าระบบจะต้องเติมน้ำเข้าไปเท่าไหร่
-        //เปิดน้ำเปิด Sonenoi
-        digitalWrite(D1, 1);
-        Serial.printf("Open water %d", fordisplay);
+    // if (server.hasArg("w"))
+    // {
+    //     int watertorefill = server.arg("w").toInt();
+    //     fordisplay = watertorefill / 0.0022; //จะแสดงว่าระบบจะต้องเติมน้ำเข้าไปเท่าไหร่
+    //     //เปิดน้ำเปิด Sonenoi
+    //     digitalWrite(D1, 1);
+    //     Serial.printf("Open water %d", fordisplay);
 
-        displayTOTM((fordisplay * 0.0022) + 1);
-        char buf[255];
-        sprintf(buf, "{\"open\": %d}", fordisplay);
-        server.send(200, "application/json", buf);
-    }
+    //     displayTOTM((fordisplay * 0.0022) + 1);
+    //     char buf[255];
+    //     sprintf(buf, "{\"open\": %d}", fordisplay);
+    //     server.send(200, "application/json", buf);
+    // }
 }
 void updateNTP()
 {
@@ -480,7 +645,7 @@ void readA0()
     float psi = (volts - 0.50) * 42.5; //172/psi
     */
     // float psi = (volts - 0.433) * 3.75; // 15 psi
-    //float psi = (volts - 0.48) * 37.5; // 15 psi
+    // float psi = (volts - 0.48) * 37.5; // 15 psi
 
     //  float volts = analog.readVolts();
     // 42.5 = 172 psi  37.5 = 150 psi 3.75 = 15psi
@@ -496,40 +661,10 @@ void readA0()
     a0value = psi;
     // rawvalue = sensorValue;
 }
-/**
- * Set wifi
- * */
-void get()
-{
-    String ssd = server.arg("ssid");
-    String password = server.arg("password");
-
-    Serial.print("SSD ");
-    Serial.println(ssd);
-    Serial.print("password ");
-    Serial.println(password);
-
-    if (ssd != NULL)
-    {
-        ssd.toCharArray(wifidata.ssid, 50);
-        cfg.addConfig("ssid", ssd);
-    }
-
-    if (password != NULL)
-    {
-        cfg.addConfig("password", password);
-        password.toCharArray(wifidata.password, 50);
-    }
-    Serial.println("Set ok");
-
-    // saveEEPROM();
-    String re = "<html> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><h3>set WIFI TO " + ssd + " <h3><hr><a href='/setconfig'>back</a></html>";
-    server.send(200, "text/html", re);
-}
 
 void setwifi()
 {
-    server.send(200, "text/html", index_html);
+    // server.send(200, "text/html", index_html);
 }
 String intToPinmode(int i)
 {
@@ -612,23 +747,10 @@ void readPm()
     }
 }
 
-void setconfig()
-{
-    String html = " <!DOCTYPE html> <style> table { font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif; border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 8px; } tr:nth-child(even) { background-color: #f2f2f2; } tr:hover { background-color: #ddd; } th { padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #4CAF50; color: white; } button { /* width: 100%; */ background-color: #4CAF50; color: white; padding: 10px 15px; /* margin: 8px 0; */ border: none; border-radius: 4px; cursor: pointer; } .button3 { background-color: #f44336; } </style> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta charset=\"UTF-8\"> </head> Config in " + String(name) + " version:" + String(version) + " SSID:" + WiFi.SSID() + " Signel: " + String(WiFi.RSSI()) + " type: " + String(type) + " <table id=\"customres\"> <tr> <td>Parameter</td> <td>value</td> <td>Option</td> </tr> <tr> <td>DHT</td> <td>" + intToEnable(cfg.getIntConfig("havedht")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\" value=\"1\">Disable</button> </form> </td> </tr> <tr> <td>SHT</td> <td>" + intToEnable(cfg.getIntConfig("havesht")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>DS</td> <td>" + intToEnable(cfg.getIntConfig("haveds")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Sonic</td> <td>" + intToEnable(cfg.getIntConfig("havesonic")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have A0</td> <td>" + intToEnable(cfg.getIntConfig("havea0")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to RTC</td> <td>" + intToEnable(cfg.getIntConfig("havertc")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to restart</td> <td>" + intToEnable(cfg.getIntConfig("havetorestart")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have PM Sensor</td> <td>" + intToEnable(cfg.getIntConfig("havepmsensor")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have OLED</td> <td>" + intToEnable(cfg.getIntConfig("haveoled")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have Water</td> <td>" + intToEnable(cfg.getIntConfig("havewater")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havewater\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havewater\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>D5</td> <td>" + intToPinmode(cfg.getIntConfig("D5mode")) + " /init " + intToLogic(cfg.getIntConfig("D5initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D6</td> <td>" + intToPinmode(cfg.getIntConfig("D6mode")) + " /init " + intToLogic(cfg.getIntConfig("D6initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D7</td> <td>" + intToPinmode(cfg.getIntConfig("D7mode")) + " /init " + intToLogic(cfg.getIntConfig("D7initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D8</td> <td>" + intToPinmode(cfg.getIntConfig("D8mode")) + " /init " + intToLogic(cfg.getIntConfig("D8initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>Sensor value </td> <td>" + cfg.getConfig("sensorvalue") + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> <tr> <td>สำหรับปรับค่าแรงดัน VA0</td> <td>" + cfg.getConfig("va0") + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\"> <input type=\"number\" name=\"value\" step='0.01' value=\"" + cfg.getConfig("va0") + "\"> <button type=\"submit\">Save</button> </form> </td> </tr> <tr> <td>Auto restart value </td> <td>" + cfg.getConfig("wifitimeout") + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"wifitimeout\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr>  <tr> <td>Checkin time </td> <td>" + cfg.getConfig("checkintime") + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"checkintime\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> </table> <hr> <form action=\"/get\"> <table> <tr> <td colspan=\"3\">WIFI information</td> </tr> <tr> <td>SSID</td> <td>" + cfg.getConfig("ssid") + "</td> <td><input type=\"text\" name=\"ssid\"></td> </tr> <tr> <td>PASSWORD</td> <td>********</td> <td><input type=\"password\" name=\"password\"></td> </tr> <tr> <td colspan=\"3\" align=\"right\"><button type=\"submit\">Set wifi</button></td> </tr> </table> </form> <form action=\"/restart\"> <button type=\"submit\" class=\"button3\" value=\"Restart\">Restart</button> </form> ky@pixka.me 2020 </html>"; // ;    String html = " <!DOCTYPE html> <style> table { font-family: \"Trebuchet MS\", Arial, Helvetica, sans-serif; border-collapse: collapse; width: 100%; } td, th { border: 1px solid #ddd; padding: 8px; } tr:nth-child(even) { background-color: #f2f2f2; } tr:hover { background-color: #ddd; } th { padding-top: 12px; padding-bottom: 12px; text-align: left; background-color: #4CAF50; color: white; } button { /* width: 100%; */ background-color: #4CAF50; color: white; padding: 10px 15px; /* margin: 8px 0; */ border: none; border-radius: 4px; cursor: pointer; } .button3 { background-color: #f44336; } </style> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <meta charset=\"UTF-8\"> </head> Config in " + String(name) + " version:" + String(version) + " SSID:" + WiFi.SSID() + " Signel: " + String(WiFi.RSSI()) + " type: " + String(type) + " <table id=\"customres\"> <tr> <td>Parameter</td> <td>value</td> <td>Option</td> </tr> <tr> <td>DHT</td> <td>" + intToEnable(cfg.getIntConfig("havedht")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havedht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\" value=\"1\">Disable</button> </form> </td> </tr> <tr> <td>SHT</td> <td>" + intToEnable(cfg.getIntConfig("havesht")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesht\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>DS</td> <td>" + intToEnable(cfg.getIntConfig("haveds")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveds\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Sonic</td> <td>" + intToEnable(cfg.getIntConfig("havesonic")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havesonic\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have A0</td> <td>" + intToEnable(cfg.getIntConfig("havea0")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havea0\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to RTC</td> <td>" + intToEnable(cfg.getIntConfig("havertc")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havertc\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have to restart</td> <td>" + intToEnable(cfg.getIntConfig("havetorestart")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havetorestart\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have PM Sensor</td> <td>" + intToEnable(cfg.getIntConfig("havepmsensor")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"havepmsensor\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have OLED</td> <td>" + intToEnable(cfg.getIntConfig("haveoled")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>Have Water</td> <td>" + intToEnable(cfg.getIntConfig("havewater")) + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"1\"> <button type=\"submit\" value=\"1\">Enable</button> </form> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"haveoled\"> <input type=\"hidden\" name=\"value\" value=\"0\"> <button type=\"submit\" class=\"button3\">Disable</button> </form> </td> </tr> <tr> <td>D5</td> <td>" + intToPinmode(cfg.getIntConfig("D5mode")) + " /init " + intToLogic(cfg.getIntConfig("D5initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D5\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D6</td> <td>" + intToPinmode(cfg.getIntConfig("D6mode")) + " /init " + intToLogic(cfg.getIntConfig("D6initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D6\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D7</td> <td>" + intToPinmode(cfg.getIntConfig("D7mode")) + " /init " + intToLogic(cfg.getIntConfig("D7initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D7\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>D8</td> <td>" + intToPinmode(cfg.getIntConfig("D8mode")) + " /init " + intToLogic(cfg.getIntConfig("D8initvalue")) + "</td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"D8\"> <td> <select name=\"value\"> <option value=\"1\">OUTPUT</option> <option value=\"0\">INPUT</option> </select> <select name=\"value2\"> <option value=\"1\">High</option> <option value=\"0\">Low</option>s </select> <button type=\"submit\">Save</button> </td> </td> </form> </tr> <tr> <td>Sensor value </td> <td>" + cfg.getConfig("sensorvalue") + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"sensorvalue\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> <tr> <td>สำหรับปรับค่าแรงดัน VA0</td> <td>" + cfg.getConfig("va0") + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"va0\"> <input type=\"number\" name=\"value\" step='0.01' value=\"" + cfg.getConfig( "va0") + "\"> <button type=\"submit\">Save</button> </form> </td> </tr> <tr> <td>Auto restart value </td> <td>" + cfg.getConfig("wifitimeout") + "</td> <td> <form action=\"/setp\"> <input type=\"hidden\" name=\"p\" value=\"wifitimeout\"> <input type=\"number\" name=\"value\" value=\"0\"> <button type=\"submit\" value=\"1\">Save</button> </form> </td> </tr> </table> <hr> <form action=\"/get\"> <table> <tr> <td colspan=\"3\">WIFI information</td> </tr> <tr> <td>SSID</td> <td>" + cfg.getConfig("ssid") + "</td> <td><input type=\"text\" name=\"ssid\"></td> </tr> <tr> <td>PASSWORD</td> <td>********</td> <td><input type=\"password\" name=\"password\"></td> </tr> <tr> <td colspan=\"3\" align=\"right\"><button type=\"submit\">Set wifi</button></td> </tr> </table> </form> <form action=\"/restart\"> <button type=\"submit\" class=\"button3\" value=\"Restart\">Restart</button> </form> ky@pixka.me 2020 </html>"; // ;
-    server.send(200, "text/html", html);
-}
-void allinfile()
-{
-    DynamicJsonDocument re = cfg.getAll();
-    char buf[2048];
-    serializeJsonPretty(re, buf, 2048);
-    server.send(200, "application/json", buf);
-}
-
 void setport()
 {
 
-    pinMode(D1, OUTPUT);
+    pinMode(D1, OUTPUT); //เป็น output
     pinMode(D2, OUTPUT);
     pinMode(D5, portconfig.D5value);
     digitalWrite(D5, portconfig.D5initvalue);
@@ -651,6 +773,7 @@ void setport()
     ports[4].name = "D2";
     ports[5].port = D8;
     ports[5].name = "D8";
+    pinMode(D4, OUTPUT);
 }
 void readDHT()
 {
@@ -674,8 +797,7 @@ void readDHT()
         Serial.println(" *C");
         pfTemp = event.temperature;
         dhtbuffer.t = pfTemp;
-
-        dhtbuffer.count = 120; //update buffer life time
+        dhtbuffer.count = 120; // update buffer life time
     }
     // Get humidity event and print its value.
     dht.humidity().getEvent(&event);
@@ -690,15 +812,16 @@ void readDHT()
         Serial.println("%");
         pfHum = event.relative_humidity;
         dhtbuffer.h = pfHum;
-        dhtbuffer.count = 120; //update buffer life time
+        dhtbuffer.count = 120; // update buffer life time
         message = "Read DHT T:" + String(pfTemp) + " H: " + String(pfHum);
     }
 
     readdhtstate = 0;
 }
-void makeStatus()
+String makeStatus()
 {
-    doc.clear();
+    cfg.setbuffer(configdata.jsonbuffer);
+    DynamicJsonDocument doc(jsonbuffersize);
     doc["heap"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
@@ -716,6 +839,9 @@ void makeStatus()
     doc["volts"] = analog.getReadVolts();
     doc["a0"] = a0value;
     doc["va0"] = configdata.va0;
+
+    if (configdata.havesht)
+        readSht();
     doc["h"] = pfHum;
     doc["t"] = pfTemp;
     doc["uptime"] = uptime;
@@ -768,19 +894,19 @@ void makeStatus()
     }
     if (cfg.getIntConfig("havertc"))
     {
-        RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
+        RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
 
         if (currentTime.Year() != 2000)
         {
-            char str[20]; //declare a string as an array of chars
+            char str[20]; // declare a string as an array of chars
 
             sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-                    currentTime.Year(),       //get year method
-                    currentTime.Month(),      //get month method
-                    currentTime.Day(),        //get day method
-                    currentTime.Hour(),       //get hour method
-                    currentTime.Minute(),     //get minute method
-                    currentTime.Second()      //get second method
+                    currentTime.Year(),       // get year method
+                    currentTime.Month(),      // get month method
+                    currentTime.Day(),        // get day method
+                    currentTime.Hour(),       // get hour method
+                    currentTime.Minute(),     // get minute method
+                    currentTime.Second()      // get second method
             );
             doc["rtctime"] = str;
         }
@@ -791,16 +917,11 @@ void makeStatus()
     doc["load"] = load;
     doc["loadav"] = loadav;
     doc["timer.message"] = kt.getMessage();
+    char buf[jsonbuffersize];
+    serializeJsonPretty(doc, buf, jsonbuffersize);
+    return String(buf);
+}
 
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-}
-void status()
-{
-    server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    server.sendHeader("Access-Control-Allow-Headers", "application/json");
-    server.send(200, "application/json", jsonChar);
-}
 boolean addTorun(int port, int delay, int value, int wait)
 {
 
@@ -812,7 +933,8 @@ boolean addTorun(int port, int delay, int value, int wait)
         {
 
             ports[i].value = value;
-            ports[i].delay = delay;
+            if (ports[i].delay < delay)
+                ports[i].delay = delay;
             ports[i].waittime = wait;
             ports[i].run = 1;
             digitalWrite(ports[i].port, value);
@@ -852,81 +974,6 @@ int getPort(String p)
 
     return -1;
 }
-
-void run()
-{
-    Serial.println("Run");
-    String p = server.arg("port");
-    String v = server.arg("value");
-    String d = server.arg("delay");
-    String w = server.arg("wait");
-    Serial.println("Port: " + p + " value : " + v + " delay: " + d);
-
-    if (p.equals("test"))
-    {
-        message = "test port ";
-        canuseled = 0;
-        // makeStatus();
-        doc["status"] = "ok";
-        doc["port"] = p;
-        doc["mac"] = WiFi.macAddress();
-        doc["ip"] = WiFi.localIP().toString();
-        // char jsonChar[jsonbuffersize];
-        serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-        server.send(200, "application/json", jsonChar);
-        for (int i = 0; i < 40; i++)
-        {
-            digitalWrite(2, !digitalRead(2));
-            delay(200);
-        }
-        canuseled = 1;
-
-        return;
-    }
-
-    int port = getPort(p);
-    if (!addTorun(port, d.toInt(), v.toInt(), w.toInt()))
-    {
-        message = "Run Port ERROR";
-        doc["port"] = p;
-        doc["value"] = v;
-        doc["delay"] = d;
-        doc["status"] = "error";
-        serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-        server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-        server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-        server.sendHeader("Access-Control-Allow-Headers", "application/json");
-        server.send(500, "application/json", jsonChar);
-    }
-    else
-    {
-        message = "Run port ok Port:" + String(p) + " Value:" + String(v) + " Delay:" + String(d);
-        doc["port"] = p;
-        doc["value"] = v;
-        doc["delay"] = d;
-        doc["status"] = "ok";
-        serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-        server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-        server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-        server.sendHeader("Access-Control-Allow-Headers", "application/json");
-        server.send(200, "application/json", jsonChar);
-    }
-}
-void updateCheckin()
-{
-    String s = server.arg("newurl");
-    s.toCharArray(checkinhost, s.length());
-}
-
-void readDS()
-{
-    doc.clear();
-    doc["c"] = ds.readDs();
-    doc["f"] = ds.readDs();
-    doc["t"] = ds.readDs();
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-}
 long microsecondsToCentimeters(long microseconds)
 {
     // The speed of sound is 340 m/s or 29 microseconds per centimeter.
@@ -958,33 +1005,13 @@ long ma()
 }
 void stopfill()
 {
-    doc["fillwater"] = fordisplay;
-    fordisplay = 0;
-    doc["stopfill"] = "ok";
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
+    // doc["fillwater"] = fordisplay;
+    // fordisplay = 0;
+    // doc["stopfill"] = "ok";
+    // serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    // server.send(200, "application/json", jsonChar);
 }
-void reset()
-{
-    doc.clear();
-    doc["name"] = name;
-    doc["ip"] = WiFi.localIP().toString();
-    doc["mac"] = WiFi.macAddress();
-    doc["ssid"] = WiFi.SSID();
-    doc["version"] = version;
-    doc["h"] = pfHum;
-    doc["t"] = pfTemp;
-    doc["uptime"] = uptime;
-    doc["type"] = type;
-    doc["reset"] = "OK";
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.sendHeader("Access-Control-Allow-Methods", "POST,GET,OPTIONS");
-    server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
-    server.sendHeader("Access-Control-Allow-Headers", "application/json");
-    server.send(200, "application/json", jsonChar);
-    delay(5000);
-    ESP.restart();
-}
+
 void ota()
 {
     if (oledok)
@@ -995,7 +1022,7 @@ void ota()
     WiFiClient client;
     Serial.println("OTA");
     Serial.println(urlupdate);
-    t_httpUpdate_return ret = ESPhttpUpdate.update(client,otahost, 8080, urlupdate);
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client, otahost, 8080, urlupdate);
     Serial.println("return " + ret);
     switch (ret)
     {
@@ -1025,39 +1052,43 @@ void ota()
 
 void checkin()
 {
+    Serial.println(" +++++++++++++++++++++ Check in now ++++++++++++++++++++++++++++++++++++");
+    DynamicJsonDocument dy(jsonbuffersize);
     if (oledok)
     {
         displayslot.description = "checkin";
         dd();
     }
-    doc["freemem"] = system_get_free_heap_size();
-    doc["version"] = version;
-    doc["name"] = name;
-    doc["ip"] = WiFi.localIP().toString();
-    doc["mac"] = WiFi.macAddress();
-    doc["ssid"] = WiFi.SSID();
-    doc["password"] = "";
-
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    dy["freemem"] = system_get_free_heap_size();
+    dy["version"] = version;
+    dy["name"] = name;
+    dy["ip"] = WiFi.localIP().toString();
+    dy["mac"] = WiFi.macAddress();
+    dy["ssid"] = WiFi.SSID();
+    dy["password"] = "";
+    char buf[jsonbuffersize];
+    serializeJsonPretty(dy, buf, jsonbuffersize);
     WiFiClient client;
     // put your main code here, to run repeatedly:
-    HTTPClient http; //Declare object of class HTTPClient
-
-    http.begin(client,checkinhost); //Specify request destination
+    HTTPClient http;                 // Declare object of class HTTPClient
+    http.begin(client, checkinhost); // Specify request destination
     Serial.println(checkinhost);
-    http.addHeader("Content-Type", "application/json"); //Specify content-type header
-    // http.addHeader("Authorization", "Basic VVNFUl9DTElFTlRfQVBQOnBhc3N3b3Jk");
-
-    int httpCode = http.POST(jsonChar); //Send the request
-    String payload = http.getString();  //Get the response payload
+    http.addHeader("Content-Type", "application/json"); // Specify content-type header
+    int httpCode = http.POST(buf);                      // Send the request
+    String payload = http.getString();                  // Get the response payload
     Serial.print(" Http Code:");
-    Serial.println(httpCode); //Print HTTP return code
+    Serial.println(httpCode); // Print HTTP return code
     if (httpCode == 200)
     {
+        DynamicJsonDocument ddd(2048);
         Serial.print(" Play load:");
-        Serial.println(payload); //Print request response payload
-        deserializeJson(doc, payload);
-        JsonObject obj = doc.as<JsonObject>();
+        Serial.println(payload); // Print request response payload
+        deserializeJson(ddd, payload);
+        JsonObject obj = dy.as<JsonObject>();
+        Serial.print("---------------------------------------------------------------");
+        Serial.println(obj);
+        Serial.print("---------------------------------------------------------------");
+
         name = obj["pidevice"]["name"].as<String>();
         if (oledok)
         {
@@ -1065,11 +1096,9 @@ void checkin()
             dd();
         }
     }
-
-    Serial.print(" Play load:");
-    Serial.println(payload); //Print request response payload
-
-    http.end(); //Close connection
+    // Serial.print(" Play load:");
+    // Serial.println(payload); // Print request response payload
+    http.end(); // Close connection
 }
 
 void writeResponse(WiFiClient &client, JsonObject &json)
@@ -1106,24 +1135,6 @@ bool readRequest(WiFiClient &client)
     return false;
 }
 
-void runCommand()
-{
-    String s = server.arg("port");
-    String d = server.arg("delay");
-    int p = getPort(s);
-    String set = server.arg("set");
-    digitalWrite(p, set.toInt());
-    addTorun(p, d.toInt(), set.toInt(), 0);
-    doc.clear();
-    doc["add"] = "ok";
-    doc["port"] = s;
-    doc["set"] = set;
-    char jsonChar[jsonbuffersize];
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-    Serial.println("Set port " + s + " to " + set);
-}
-
 void reada0()
 {
 
@@ -1136,111 +1147,46 @@ void reada0()
         Serial.println(a0value);
     }
 }
-void a0()
-{
-    doc["a0"] = a0value;
-    JsonObject device = doc.createNestedObject("device");
-    device["mac"] = WiFi.macAddress();
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-}
-void runtimer()
-{
-    String time = server.arg("time"); //เวลาที่ทำงานงาน
-    String message = server.arg("closetime");
-    String l = server.arg("l");
-    if (oledok)
-    {
-        displayslot.head = "Running";
-        displayslot.description = "start timer";
-        displayslot.description1 = time;
-        dd();
-    }
-    if (l != NULL)
-        kt.setLogic(l.toInt());
-    kt.setSec(time.toInt());
-    kt.setMessage(message);
-    kt.start();
-    doc["runtimer"] = time;
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-}
 
-void DHTtoJSON()
-{
-    doc["t"] = pfTemp;
-    doc["h"] = pfHum;
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-}
-void PressuretoJSON()
-{
-    digitalWrite(LED_BUILTIN, LOW);
-    readA0();
-    digitalWrite(LED_BUILTIN, HIGH);
-    doc["rawvalue"] = analog.getRawvalue();
-    doc["pressurevalue"] = a0value;
-    doc["psi"] = a0value;
-    doc["bar"] = a0value / 14.504;
-    doc["volts"] = analog.getReadVolts();
-    JsonObject device = doc.createNestedObject("device");
-    device["mac"] = WiFi.macAddress();
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-}
 void readTmp()
 {
     tmpvalue = ds.readDs();
 }
 void KtypetoJSON()
 {
-    doc["t"] = tmpvalue;
+    // doc["t"] = tmpvalue;
 
-    JsonObject pidevice = doc.createNestedObject("pidevice");
-    pidevice["mac"] = WiFi.macAddress();
+    // JsonObject pidevice = doc.createNestedObject("pidevice");
+    // pidevice["mac"] = WiFi.macAddress();
 
-    JsonObject ds18sensor = doc.createNestedObject("ds18sensor");
-    ds18sensor["name"] = WiFi.macAddress();
-    ds18sensor["callname "] = WiFi.macAddress();
+    // JsonObject ds18sensor = doc.createNestedObject("ds18sensor");
+    // ds18sensor["name"] = WiFi.macAddress();
+    // ds18sensor["callname "] = WiFi.macAddress();
 
-    JsonObject device = doc.createNestedObject("device");
-    device["mac"] = WiFi.macAddress();
+    // JsonObject device = doc.createNestedObject("device");
+    // device["mac"] = WiFi.macAddress();
 
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
+    // serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+    // server.send(200, "application/json", jsonChar);
 }
-void info()
-{
-    Serial.print("Mac:");
-    Serial.println(WiFi.macAddress());
-    Serial.print("IP:");
-    Serial.println(WiFi.localIP());
-    Serial.print("Version:");
-    Serial.println(version);
-    doc["mac"] = WiFi.macAddress();
-    doc["IP"] = WiFi.localIP().toString();
-    doc["version"] = version;
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-}
+
 void readAm2320()
 {
     pfTemp = am2320.readTemperature();
     pfHum = am2320.readHumidity();
     dhtbuffer.t = pfTemp;
     dhtbuffer.h = pfHum;
-    dhtbuffer.count = 120; //update buffer life time
+    dhtbuffer.count = 120; // update buffer life time
 }
 void readam()
 {
     readAm2320();
-    status();
 }
 void senddata()
 {
 
     if (WiFi.status() == WL_CONNECTED)
-    { //Check WiFi connection status
+    { // Check WiFi connection status
 
         digitalWrite(b_led, 1);
         checkin();
@@ -1259,19 +1205,19 @@ void readRTC()
 {
     if (cfg.getIntConfig("havertc"))
     {
-        RtcDateTime currentTime = rtcObject.GetDateTime(); //get the time from the RTC
+        RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
 
-        char str[20]; //declare a string as an array of chars
+        char str[20]; // declare a string as an array of chars
 
         sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-                currentTime.Year(),       //get year method
-                currentTime.Month(),      //get month method
-                currentTime.Day(),        //get day method
-                currentTime.Hour(),       //get hour method
-                currentTime.Minute(),     //get minute method
-                currentTime.Second()      //get second method
+                currentTime.Year(),       // get year method
+                currentTime.Month(),      // get month method
+                currentTime.Day(),        // get day method
+                currentTime.Hour(),       // get hour method
+                currentTime.Minute(),     // get minute method
+                currentTime.Second()      // get second method
         );
-        Serial.println(str); //print the string to the serial port
+        Serial.println(str); // print the string to the serial port
 
         m = currentTime.Minute();
         h = currentTime.Hour();
@@ -1300,6 +1246,7 @@ void inden()
     ntptime++;
     rtctime++;
     readdistance++;
+    checkconnectiontime++;
     if (apmode)
     {
         apmodetime++;
@@ -1317,7 +1264,7 @@ void inden()
         waterlimitime--;
     // else
     // {
-    //     //สำหรับปิด 
+    //     //สำหรับปิด
     //     digitalWrite(REALYPORT,0);//ปิดระบบ ตัดน้ำ
     // }
 
@@ -1338,158 +1285,6 @@ void setAPMode()
     {
     }
 }
-void setValue2()
-{
-    if (server.hasArg("p"))
-    {
-
-        String p = server.arg("p");
-        String value = server.arg("value");
-        String value2 = server.arg("value2");
-        if (p.equals("va0"))
-        {
-            cfg.addConfig("va0", server.arg("value"));
-        }
-        else if (p.equals("havewater"))
-        {
-            cfg.addConfig("havewater", server.arg("value"));
-        }
-        else if (p.equals("wifitimeout"))
-        {
-            cfg.addConfig("wifitimeout", server.arg("value"));
-            configdata.wifitimeout = server.arg("value").toInt();
-        }
-        else if (p.equals("checkintime"))
-        {
-            cfg.addConfig("checkintime", server.arg("value"));
-            configdata.checkintime = server.arg("value").toInt();
-        }
-        else if (p.equals("D5"))
-        {
-
-            portconfig.D5value = value.toInt(); // mode of port
-            pinMode(D5, portconfig.D5value);
-            cfg.addConfig("D5mode", value.toInt());
-            if (value2 != NULL)
-            {
-                portconfig.D5initvalue = value2.toInt(); //init port
-                digitalWrite(D5, portconfig.D5initvalue);
-                cfg.addConfig("D5initvalue", portconfig.D5initvalue);
-            }
-        }
-        else if (p.equals("D6"))
-        {
-
-            portconfig.D6value = value.toInt(); // mode of port
-            pinMode(D6, portconfig.D6value);
-            cfg.addConfig("D6mode", value.toInt());
-            if (value2 != NULL)
-            {
-                portconfig.D6initvalue = value2.toInt(); //init port
-                digitalWrite(D6, portconfig.D6initvalue);
-                cfg.addConfig("D6initvalue", portconfig.D6initvalue);
-            }
-        }
-        else if (p.equals("D7"))
-        {
-
-            portconfig.D7value = value.toInt(); // mode of port
-            pinMode(D7, portconfig.D7value);
-            cfg.addConfig("D7mode", value.toInt());
-            if (value2 != NULL)
-            {
-                portconfig.D7initvalue = value2.toInt(); //init port
-                digitalWrite(D7, portconfig.D7initvalue);
-                cfg.addConfig("D7initvalue", portconfig.D7initvalue);
-            }
-        }
-        else if (p.equals("D8"))
-        {
-
-            portconfig.D8value = value.toInt(); // mode of port
-            pinMode(D8, portconfig.D8value);
-            cfg.addConfig("D8mode", value.toInt());
-            if (value2 != NULL)
-            {
-                portconfig.D8initvalue = value2.toInt(); //init port
-                digitalWrite(D8, portconfig.D8initvalue);
-                cfg.addConfig("D8initvalue", portconfig.D8initvalue);
-            }
-        }
-        else if (p.equals("sensorvalue"))
-        {
-            cfg.addConfig("sensorvalue", value.toFloat());
-        }
-        else if (p.equals("havedht"))
-        {
-            cfg.addConfig("havedht", value.toInt());
-        }
-        else if (p.equals("havesonic"))
-        {
-            cfg.addConfig("havesonic", value.toInt());
-        }
-        else if (p.equals("haveoled"))
-        {
-            cfg.addConfig("haveoled", value.toInt());
-            if (value.toInt())
-            {
-                if (display.init())
-                {
-                    Serial.println("Display ok");
-                }
-            }
-        }
-        else if (p.equals("havepmsensor"))
-        {
-
-            cfg.addConfig("havepmsensor", value.toInt());
-            if (value.toInt())
-                mySerial.begin(9600);
-            else
-            {
-                mySerial.end();
-            }
-        }
-        else if (p.equals("haveds"))
-        {
-            cfg.addConfig("haveds", value.toInt());
-        }
-        else if (p.equals("havertc"))
-        {
-            cfg.addConfig("havertc", value.toInt());
-        }
-        else if (p.equals("havea0"))
-        {
-            cfg.addConfig("havea0", value.toInt());
-        }
-        else if (p.equals("havetorestart"))
-        {
-            cfg.addConfig("havetorestart", value.toInt());
-        }
-        else if (p.equals("havesht"))
-        {
-            if (value.toInt())
-            {
-
-                if (sht.init()) //ถ้า init sht ได้ ค่อย Save จะทำให้ระบบทำงานได้
-                {
-                    cfg.addConfig("havesht", value.toInt());
-                }
-                else
-                    cfg.addConfig("havesht", 0);
-            }
-            else
-            {
-                cfg.addConfig("havesht", 0);
-            }
-        }
-
-        String re = "<html> <head> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"></head><h3>set <b>" + p + "</b> TO " + value + " <h3><hr><a href='/setconfig'>back</a> <script type=\"text/JavaScript\"> redirectTime = \"1500\"; redirectURL = \"/setconfig\"; function timedRedirect() { setTimeout(\"location.href = redirectURL;\",redirectTime); } </script></html>";
-        server.send(200, "text/html", re);
-        loadconfigtoram();
-        return;
-    }
-}
 
 void printIPAddressOfHost(const char *host)
 {
@@ -1506,52 +1301,222 @@ void printIPAddressOfHost(const char *host)
     Serial.print(" IP: ");
     Serial.println(resolvedIP);
 }
-void scanwifi()
+
+String fillconfig(const String &var)
 {
+    // Serial.println(var);
+    if (var == "CONFIG")
+    {
+        DynamicJsonDocument dy = cfg.getAll();
+        JsonObject documentRoot = dy.as<JsonObject>();
+        String tr = "";
+        for (JsonPair keyValue : documentRoot)
+        {
+            String v = dy[keyValue.key()];
+            String k = keyValue.key().c_str();
+            tr += "<tr><td>" + k + "</td><td> <label id=" + k + "value>" + v + "</label> </td> <td> <input id = " + k + " value =\"" + v + "\"></td><td><button id=btn onClick=\"setvalue(this,'" + k + "','" + v + "')\">Set</button></td><td><button id=btn onClick=\"remove('" + k + "')\">Remove</button></td></tr>";
+        }
+        tr += "<tr><td>heap</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
+
+        return tr;
+    }
+    return String();
+}
+void setHttp()
+{
+
+    if (WiFiMulti.run() != WL_CONNECTED)
+        return; //ออกเลยถ้าไม่ต่อ wifi
+    // server.on("/dht", DHTtoJSON);
+    // server.on("/pressure", PressuretoJSON);
+    // server.on("/ktype", KtypetoJSON);
+    // server.on("/info", info);
+    // server.on("/ds18b20", readDS);
+    // server.on("/run", run);
+    // server.on("/a0", a0);
+    // server.on("/setwifi", setwifi);
+    // server.on("/scanwifi", scanwifi);
+
+    server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send_P(200, "text/html", configfile_html, fillconfig); });
+    //-------------------------------------------------------------------------------------------------------------------------
+    server.on("/resetconfig", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+        cfg.resettodefault();
+        loadconfigtoram();
+  request->send(200, "application/json", "{\"setconfig\":\"ok\",\"value\":\"ok\"}");
+  ESP.restart(); });
+    server.on("/setconfig", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+        String v = request->arg("configname");
+        String value = request->arg("value");
+        cfg.addConfig(v, value);
+        loadconfigtoram();
+  request->send(200, "application/json", "{\"setconfig\":\"" + v + "\",\"value\":\"" + value + "\"}"); });
+
+    server.on("/removeconfig", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+        String v = request->arg("configname");
+        cfg.remove(v);
+        loadconfigtoram();
+  request->send(200, "application/json", "{\"remove\":\"" + v + "\"}"); });
+    //-------------------------------------------------------------------------------------------------------------------------
+    server.on("/config", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+                DynamicJsonDocument dd  = cfg.getAll();
+                char buf[jsonbuffersize];
+                serializeJsonPretty(dd,buf,jsonbuffersize);
+                request->send(200, "application/json", buf); });
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+                String status = makeStatus();
+                request->send(200, "application/json", status); });
+    //------------------------------------------------------------------------------------------------------------------------
+
+    server.on("/scanwifi", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+                 DynamicJsonDocument dy(jsonbuffersize);
+                 char buf[jsonbuffersize];
     int n = WiFi.scanNetworks();
     for (int i = 0; i < n; i++)
     {
         String s = "wifi:" + String(i);
         String ss = "wifisignel:" + String(i);
-        doc[s] = WiFi.SSID(i);
-        doc[ss] = WiFi.RSSI(i);
+        dy[s] = WiFi.SSID(i);
+        dy[ss] = WiFi.RSSI(i);
     }
-    serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    server.send(200, "application/json", jsonChar);
-}
-void setHttp()
-{
-    server.on("/dht", DHTtoJSON);
-    server.on("/pressure", PressuretoJSON);
-    server.on("/ktype", KtypetoJSON);
-    server.on("/info", info);
-    server.on("/ds18b20", readDS);
-    server.on("/run", run);
-    server.on("/a0", a0);
-    server.on("/setwifi", setwifi);
-    server.on("/scanwifi", scanwifi);
-    server.on("/setconfig", setconfig);
-    server.on("/inconfigfile", allinfile);
-    server.on("/get", get);
-    server.on("/updatecheckin", updateCheckin);
-    server.on("/readam", readam);
-    server.on("/status", status);
-    server.on("/reset", reset);
-    server.on("/restart", reset);
-    server.on("/setp", setValue2);
-    server.on("/update", ota);
-    server.on("/timer", runtimer);
+    serializeJsonPretty(dy, buf, jsonbuffersize);
+                request->send(200, "application/json", buf); });
+    //------------------------------------------------------------------------------------------------------------------------
+    server.on("/run", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+                Serial.println("Run");
+  String p = request->arg("port");
+  char b[jsonbuffersize];
+  DynamicJsonDocument dy(jsonbuffersize);
+  if (p.equals("test"))
+  {
+    message = "test port ";
+    canuseled = 0;
+    // doc.clear();
+    dy["status"] = "ok";
+    dy["port"] = p;
+    dy["mac"] = WiFi.macAddress();
+    dy["ip"] = WiFi.localIP().toString();
+    dy["name"] = name;
+    dy["uptime"] = uptime;
+    dy["ntptime"] = timeClient.getFormattedTime();
+    dy["ntptimelong"] = timeClient.getEpochTime();
+
+    serializeJson(dy, b, jsonbuffersize);
+    request->send(200, "application/json", b);
+    for (int i = 0; i < 40; i++)
+    {
+      digitalWrite(2, !digitalRead(2));
+      delay(200);
+    }
+    canuseled = 1;
+    return;
+  }
+  String v =  request->arg("value");
+  String d =  request->arg("delay");
+  String w =  request->arg("wait");
+  Serial.println("Port: " + p + " value : " + v + " delay: " + d);
+  message = String("run port ") + String(p) + String(" value") + String(" delay ") + String(d) + " " + timeClient.getFormattedDate();
+  int value = v.toInt();
+  int port = getPort(p);
+  if (p == NULL)
+  {
+    port = D5;
+    v = "1";
+  }
+  addTorun(port, d.toInt(), v.toInt(), w.toInt());
+  dy["status"] = "ok";
+  dy["port"] = p;
+  dy["runtime"] = d;
+  dy["value"] = value;
+  dy["mac"] = WiFi.macAddress();
+  dy["ip"] = WiFi.localIP().toString();
+  dy["uptime"] = uptime;
+  serializeJson(dy, b, jsonbuffersize);
+   request->send(200, "application/json", b); });
+    //------------------------------------------------------------------------------------------------------------------------
+
+    // server.on("/setconfig", setconfig);
+    // server.on("/inconfigfile", allinfile);
+    // server.on("/get", get);
+    // server.on("/updatecheckin", updateCheckin);
+    // server.on("/readam", readam);
+    // server.on("/status", status);
+    // server.on("/reset", reset);
+    server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        request->send(200, "application/json", "{\"reset\":\"ok\"}");
+        ESP.restart(); });
+    server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        request->send(200, "application/json", "{\"reset\":\"ok\"}");
+        ESP.restart(); });
+    //-------------------------------------------------------------------------------------------------------------------------
+    // server.on("/restart", reset);
+    // server.on("/setp", setValue2);
+    // server.on("/update", ota);
+    // server.on("/timer", runtimer);
+    server.on("/timer", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+                DynamicJsonDocument doc(jsonbuffersize);
+                String time = request->arg("time"); //เวลาที่ทำงานงาน
+                String message = request->arg("closetime");
+                String l = request->arg("l");
+             if (oledok)
+                {
+                displayslot.head = "Running";
+                displayslot.description = "start timer";
+                displayslot.description1 = time;
+                dd();
+                }
+    if (l != NULL)
+        kt.setLogic(l.toInt());
+        kt.setSec(time.toInt());
+        kt.setMessage(message);
+        kt.start();
+        doc["runtimer"] = time;
+        char buf[jsonbuffersize];
+        serializeJsonPretty(doc, buf, jsonbuffersize);
+                request->send(200, "application/json", buf); });
 
     if (configdata.havewater)
     {
         Serial.println("Set http for function /openwater");
-        server.on("/openwater", openwater);
-        server.on("/stopfill", stopfill);
-    }
-    //closetime parameter have to show on oled
-    server.on("/setclosetime", runtimer); //time parameter to count
+        server.on("/openwater", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { 
+    if (request->hasArg("w"))
+    {
+        int watertorefill = request->arg("w").toInt();
+        fordisplay = watertorefill / 0.0022; //จะแสดงว่าระบบจะต้องเติมน้ำเข้าไปเท่าไหร่
+        //เปิดน้ำเปิด Sonenoi
+        digitalWrite(D1, 1);
+        Serial.printf("Open water %d", fordisplay);
+        displayTOTM((fordisplay * 0.0022) + 1);
+        char buf[255];
+        sprintf(buf, "{\"open\": %d}", fordisplay);
+        request->send(200, "application/json", buf);
+    } });
+        //------------------------------------------------------------------------------------------------------------------------
 
-    server.on("/", status);
+        server.on("/stopfill", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { 
+                    DynamicJsonDocument doc(jsonbuffersize);                
+                    doc["fillwater"] = fordisplay;
+                    fordisplay = 0;
+                    doc["stopfill"] = "ok";
+                    char buf[jsonbuffersize];
+                    serializeJsonPretty(doc, buf, jsonbuffersize);
+                    request->send(200, "application/json", buf); });
+    }
+    // // closetime parameter have to show on oled
+    // server.on("/setclosetime", runtimer); // time parameter to count
+
     server.begin(); //เปิด TCP Server
     Serial.println("Server started");
     if (oledok)
@@ -1559,8 +1524,17 @@ void setHttp()
         displayslot.description = "Http started";
     }
 }
+
+void Apmoderun()
+{
+
+    ApMode ap("cfg.cfg");
+    ap.setApname("ESP Sensor AP Mode");
+    ap.run();
+}
 void connect()
 {
+
     WiFi.mode(WIFI_STA);
     Serial.println();
     Serial.println("-----------------------------------------------");
@@ -1573,13 +1547,13 @@ void connect()
         displayslot.description1 = cfg.getConfig("ssid");
         dd();
     }
-    WiFiMulti.addAP(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
-
+    WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
+    // WiFiMulti.addAP(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
+    Serial.print("connect.");
     int ft = 0;
     // display.clear();
-    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+    while (WiFi.status() != WL_CONNECTED) //รอการเชื่อมต่อ
     {
-
         delay(250);
         if (oledok)
         {
@@ -1596,54 +1570,20 @@ void connect()
         }
 
         ft++;
-        if (ft > 10)
+        if (ft > configdata.maxconnecttimeout)
         {
             Serial.println("Connect main wifi timeout");
             apmode = 1;
             break;
         }
-    }
-    WiFiMulti.addAP("forpi", "04qwerty");
-    WiFiMulti.addAP("forpi2", "04qwerty");
-    WiFiMulti.addAP("forpi4", "04qwerty");
-    WiFiMulti.addAP("forpi5", "04qwerty");
-    WiFiMulti.addAP("forpi6", "04qwerty");
-    WiFiMulti.addAP("forpi7", "04qwerty");
-    WiFiMulti.addAP("Sirifarm", "0932154741");
-    WiFiMulti.addAP("test", "12345678");
-
-    WiFiMulti.addAP("pksy", "04qwerty");
-    WiFiMulti.addAP("test", "12345678");
-
-    int co = 0;
-    while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
-    {
-
         Serial.print(".");
-        delay(250);
-        if (oledok)
-        {
-            displayslot.foot = "next ssid";
-            displayslot.foot2 = "+";
-            dd();
-        }
-        delay(250);
-        if (oledok)
-        {
-            displayslot.foot = "connect";
-            displayslot.foot2 = "-";
-            dd();
-        }
-        co++;
-        if (co > 200)
-        {
-            setAPMode();
-            break;
-        }
     }
-    if (WiFiMulti.run() == WL_CONNECTED)
-        apmode = 0;
-    if (!apmode)
+
+    if (apmode)
+    {
+        Apmoderun();
+    }
+    else
     {
 
         Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
@@ -1657,6 +1597,8 @@ void connect()
             dd();
             delay(1000);
         }
+
+        printIPAddressOfHost("fw1.pixka.me");
     }
 }
 
@@ -1670,14 +1612,14 @@ void readSht()
     }
     else
     {
-        pfTemp = pfHum = 0;
+        // pfTemp = pfHum = 0;
         Serial.println("SHT ERROR");
         message = "Sht Error";
     }
 }
 void setSht()
 {
-    //D1,D2
+    // D1,D2
     Wire.begin();
     if (sht.init())
     {
@@ -1706,8 +1648,8 @@ void settime()
         Serial.println(t);
         if (cfg.getIntConfig("havertc"))
         {
-            RtcDateTime currentTime = RtcDateTime(t - 946684800); //define date and time object
-            rtcObject.SetDateTime(currentTime);                   //configure the RTC with object
+            RtcDateTime currentTime = RtcDateTime(t - 946684800); // define date and time object
+            rtcObject.SetDateTime(currentTime);                   // configure the RTC with object
         }
     }
 }
@@ -1715,7 +1657,7 @@ void settime()
 void setRTC()
 {
     if (cfg.getIntConfig("havertc"))
-        rtcObject.Begin(); //Starts I2C
+        rtcObject.Begin(); // Starts I2C
 }
 
 void setupoled()
@@ -1777,6 +1719,21 @@ void initConfig()
     cfg.addConfig("haveoled", 0);
     cfg.addConfig("havewaterlimit", 0);
 }
+void setupwater()
+{
+    tm1.setBrightness(0x0f);
+    tm1.showNumberDec(0000);
+    pinMode(Warterinterruppin, INPUT);
+    pinMode(D1, OUTPUT);
+    digitalWrite(D1, 0);
+    attachInterrupt(Warterinterruppin, flow, RISING); // Setup Interrupt
+    Serial.println("Setup Interrup  for water ...");
+}
+void setupntp()
+{
+    timeClient.begin();
+    timeClient.setTimeOffset(25200); // Thailand +7 = 25200
+}
 void setup()
 {
 
@@ -1785,18 +1742,18 @@ void setup()
     Serial.println();
     Serial.println();
     kt.run();
-
-    pinMode(b_led, OUTPUT); //On Board LED
-                            //  pinMode(D4, OUTPUT);
-                            // pinMode(LED_BUILTIN, OUTPUT);
-                            //pinMode(D6, OUTPUT);
-                            //pinMode(D5, OUTPUT);
-                            //pinMode(D1, OUTPUT);
-                            //  pinMode(D3, OUTPUT);
-                            // digitalWrite(D3,0);
-
+    pinMode(b_led, OUTPUT); // On Board LED
+                            //   pinMode(D4, OUTPUT);
+                            //  pinMode(LED_BUILTIN, OUTPUT);
+                            // pinMode(D6, OUTPUT);
+                            // pinMode(D5, OUTPUT);
+                            // pinMode(D1, OUTPUT);
+                            //   pinMode(D3, OUTPUT);
+                            //  digitalWrite(D3,0);
+    cfg.setbuffer(configdata.jsonbuffer);
     if (!cfg.openFile())
     {
+        Serial.println("Init file");
         initConfig();
     }
     loadconfigtoram();
@@ -1806,30 +1763,15 @@ void setup()
         setupoled();
     }
     connect();
-    timeClient.begin();
-    timeClient.setTimeOffset(25200); //Thailand +7 = 25200
-    checkconnect();
+    setupntp();
+    // checkconnect();
     setHttp();
 
-    Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
-    String mac = WiFi.macAddress();
-    Serial.println(mac); // แสดงหมายเลข IP ของ Server
-    // Initialize device.
-    Serial.print("DNS");
-    Serial.println(WiFi.dnsIP().toString());
-    printIPAddressOfHost("fw1.pixka.me");
-    pinMode(D4, OUTPUT);
     flipper.attach(1, inden);
 
     if (configdata.havewater)
     {
-        tm1.setBrightness(0x0f);
-        tm1.showNumberDec(0000);
-        pinMode(Warterinterruppin, INPUT);
-        pinMode(D1, OUTPUT);
-        digitalWrite(D1, 0);
-        attachInterrupt(Warterinterruppin, flow, RISING); // Setup Interrupt
-        Serial.println("Setup Interrup  for water ...");
+        setupwater();
     }
     if (configdata.havedht)
     {
@@ -1852,8 +1794,6 @@ void setup()
 
     settime();
     ota();
-    // ota();
-    checkin();
 }
 
 void displaySht()
@@ -1866,8 +1806,10 @@ void displaySht()
 }
 void checkintask()
 {
-    if (checkintime > 60 && fordisplay <= 0)
+
+    if (checkintime > configdata.checkintime && fordisplay <= 0)
     {
+        Serial.println(" +++++++++++++++++++++ Check in now ++++++++++++++++++++++++++++++++++++");
         checkintime = 0;
         checkin();
     }
@@ -1904,7 +1846,7 @@ void apmodetask()
 }
 void checkconnectiontask()
 {
-    if (otatime % 30 == 0 && fordisplay <= 0)
+    if (otatime > configdata.checkconnectiontime && fordisplay <= 0)
     {
         if (!checkconnect())
         {
@@ -1916,33 +1858,33 @@ void checkconnectiontask()
             WiFi.mode(WIFI_STA);
             WiFi.disconnect();
             delay(100);
-            WiFi.reconnect();
-            int trytoconnect = 0;
-            while (WiFiMulti.run() != WL_CONNECTED) //รอการเชื่อมต่อ
+            if (WiFi.reconnect())
             {
-
-                delay(500);
-                Serial.print(trytoconnect);
+                Serial.println("Re connect is ok");
                 if (oledok)
                 {
-                    displayslot.description = "reconnect";
-                    displayslot.description1 = String(trytoconnect);
+                    displayslot.description = "Reconnect is ok";
                     dd();
                 }
-                trytoconnect++;
-                //ต้องมี have run เพราะจะทำให้งานที่ยังทำอยู่เสร็จก่อน
-                if (trytoconnect > 50 && !haveportrun())
+            }
+            else
+            {
+                if (!haveportrun())
+                {
+                    if (oledok)
+                    {
+                        displayslot.description = "Can not connect to wifi restart device ";
+                        dd();
+                    }
                     ESP.restart();
-
-                if (trytoconnect > 50)
-                    break;
+                }
             }
         }
     }
 }
 void otatask()
 {
-    if (otatime > 60 && fordisplay <= 0)
+    if (otatime > configdata.otatime && fordisplay <= 0)
     {
         wifitimeout = 0;
         otatime = 0;
@@ -1952,7 +1894,7 @@ void otatask()
 }
 void dhttask()
 {
-    if (readdhttime > 5 && configdata.havedht && fordisplay <= 0)
+    if (readdhttime > configdata.readdhttime && configdata.havedht && fordisplay <= 0)
     {
         readdhttime = 0;
         message = "Read DHT";
@@ -1961,7 +1903,7 @@ void dhttask()
 }
 void dsreadtask()
 {
-    if (readdstime > 1 && configdata.haveds && fordisplay <= 0)
+    if (readdstime > configdata.readdstime && configdata.haveds && fordisplay <= 0)
     {
         readdstime = 0;
         readTmp();
@@ -1969,8 +1911,9 @@ void dsreadtask()
 }
 void shtreadtask()
 {
-    if (configdata.havesht && readshtcount > 2 && fordisplay <= 0)
+    if (configdata.havesht && readshtcount > configdata.readshttime && fordisplay <= 0)
     {
+        Serial.println("Read sht");
         readshtcount = 0;
         readSht();
 
@@ -1991,7 +1934,7 @@ void porttask()
 }
 void ntptask()
 {
-    if (ntptime > 600 && fordisplay <= 0)
+    if (ntptime > configdata.ntpupdatetime && fordisplay <= 0)
     {
 
         updateNTP();
@@ -2008,7 +1951,7 @@ void ntptask()
 }
 void rtctask()
 {
-    if (configdata.havertc && rtctime > 600 && fordisplay <= 0)
+    if (configdata.havertc && rtctime > configdata.rtctimeupdate && fordisplay <= 0)
     {
         readRTC();
         rtctime = 0;
@@ -2023,7 +1966,7 @@ void pmtask()
 }
 void distancetask()
 {
-    if (configdata.havesonic && readdistance > 2 && fordisplay <= 0)
+    if (configdata.havesonic && readdistance > configdata.readdistancetime && fordisplay <= 0)
     {
         readdistance = 0;
         distance = ma();
@@ -2068,7 +2011,7 @@ void makestatustask()
 }
 void a0task()
 {
-    if (configdata.havea0 && reada0time > 1 && fordisplay <= 0)
+    if (configdata.havea0 && reada0time > configdata.reada0time && fordisplay <= 0)
     {
         reada0time = 0;
         reada0();
@@ -2141,10 +2084,10 @@ void waterlimittask()
         }
 
         //ถ้ามีการใช้น้ำเกินกำหนดหรือว่าท่อแตกหรืออะไรซํกอย่างระบบจะตัดหรือยก relay
-        if(currentwateroverlimit>=configdata.wateroverlimitvalue)
+        if (currentwateroverlimit >= configdata.wateroverlimitvalue)
         {
             waterlimitime = configdata.waterlimittime;
-            digitalWrite(REALYPORT,1); //สั่งระบบยก relay
+            digitalWrite(REALYPORT, 1); //สั่งระบบยก relay
         }
         if (idlewaterlimit >= configdata.wateridletime && waterlimitime <= 0)
         {
@@ -2155,11 +2098,12 @@ void waterlimittask()
 }
 void loop()
 {
+
     // long s = millis();
-    server.handleClient();
+    // server.handleClient();
     checkintask();
     displaytmptask();
-    apmodetask();
+    // apmodetask();
     checkconnectiontask();
     otatask();
     dhttask();
@@ -2168,12 +2112,11 @@ void loop()
     porttask();
     ntptask();
     rtctask();
-
     pmtask();
     distancetask();
     countertask();
-    makestatustask();
-    loadtask();
+    // makestatustask();
+    // loadtask();
 
     a0task();
     oledtask();
