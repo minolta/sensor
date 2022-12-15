@@ -27,6 +27,7 @@
 #include "Configfile.h"
 #include <TM1637Display.h>
 #include <SPI.h>
+#include <ESP8266HTTPClient.h>
 // #include <ESP8266WebServer.h>
 Configfile test("/testconfig.cfg");
 String responseHTML = "<!DOCTYPE html>"
@@ -74,9 +75,9 @@ const char getpassword_html[] PROGMEM = R"rawliteral(
 void testSetConfig(void)
 {
 
-    test.addConfig("a", "x");
-    String a = test.getConfig("a", "y");
-    TEST_ASSERT_EQUAL_STRING("x", a.c_str());
+  test.addConfig("a", "x");
+  String a = test.getConfig("a", "y");
+  TEST_ASSERT_EQUAL_STRING("x", a.c_str());
 }
 // DNSServer dns;
 // void Apmoderun()
@@ -116,53 +117,104 @@ void testSetConfig(void)
 // }
 void testRead(void)
 {
-    String a = test.getConfig("a", "y");
-    TEST_ASSERT_EQUAL_STRING("x", a.c_str());
+  String a = test.getConfig("a", "y");
+  TEST_ASSERT_EQUAL_STRING("x", a.c_str());
 }
 const byte DNS_PORT = 53;      // Capture DNS requests on port 53
 IPAddress apIP(10, 10, 10, 1); // Private network for server
 DNSServer dnsServer;           // Create the DNS object
                                // ESP8266WebServer webServer(80); // HTTP server
 AsyncWebServer webServer(80);
+void testDns()
+{
+  WiFi.mode(WIFI_AP);
+  WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+  WiFi.softAP("IoT --- Free WiFi"); // WiFi name
+
+  // if DNSServer is started with "*" for domain name, it will reply with
+  // provided IP to all DNS request
+  dnsServer.start(DNS_PORT, "*", apIP);
+
+  // replay to all requests with same HTML
+  // webServer.onNotFound([]()
+  //                      { webServer.send(200, "text/html", responseHTML); });
+
+  webServer.onNotFound([](AsyncWebServerRequest *request)
+                       { request->send(200, "text/html", getpassword_html); });
+  webServer.begin();
+
+  test.openFile();
+  Serial.begin(9600);
+  pinMode(2, OUTPUT);
+  // NOTE!!! Wait for >2 secs
+  // if board doesn't support software reset via Serial.DTR/RTS
+  while (true)
+  {
+    dnsServer.processNextRequest();
+  }
+  delay(2000);
+}
+void testCheckin()
+{
+  WiFi.begin("forpi", "04qwerty");
+  while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
+  {
+    Serial.print(".");
+    delay(1000);
+  }
+  Serial.println(" +++++++++++++++++++++ Check in now ++++++++++++++++++++++++++++++++++++");
+  DynamicJsonDocument dy(1024);
+
+  dy["freemem"] = system_get_free_heap_size();
+  dy["version"] = 1;
+  dy["name"] = "for test";
+  dy["ip"] = "10.10.10.1";
+  dy["mac"] = "ff:ff:ff:ff:ff";
+  dy["ssid"] = WiFi.SSID();
+  dy["password"] = "";
+  char buf[1024];
+  serializeJsonPretty(dy, buf, 1024);
+  WiFiClient client;
+  Serial.println(buf);
+  // put your main code here, to run repeatedly:
+  HTTPClient http;  
+  String url = "http://fw1.pixka.me:3333/checkin";                         // Declare object of class HTTPClient
+  http.begin(client,url); // Specify request destination
+  Serial.println(url);
+  http.addHeader("Content-Type", "application/json"); // Specify content-type header
+  int httpCode = http.POST(buf);                      // Send the request
+  String payload = http.getString();                  // Get the response payload
+  Serial.print(" Http Code:");
+  Serial.println(httpCode); // Print HTTP return code
+  if (httpCode == 200)
+  {
+    DynamicJsonDocument ddd(2048);
+    Serial.print(" Play load:");
+    Serial.println(payload); // Print request response payload
+    deserializeJson(ddd, payload);
+    JsonObject obj = dy.as<JsonObject>();
+    Serial.print("---------------------------------------------------------------");
+    Serial.println(obj);
+    Serial.print("---------------------------------------------------------------");
+    String name = obj["pidevice"]["name"].as<String>();
+  }
+  // Serial.print(" Play load:");
+  // Serial.println(payload); // Print request response payload
+  http.end(); // Close connection
+}
 void setup()
 {
 
-    WiFi.mode(WIFI_AP);
-    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-    WiFi.softAP("IoT --- Free WiFi"); // WiFi name
-
-    // if DNSServer is started with "*" for domain name, it will reply with
-    // provided IP to all DNS request
-    dnsServer.start(DNS_PORT, "*", apIP);
-
-    // replay to all requests with same HTML
-    // webServer.onNotFound([]()
-    //                      { webServer.send(200, "text/html", responseHTML); });
-
-    webServer.onNotFound([](AsyncWebServerRequest *request)
-                      { request->send(200, "text/html", getpassword_html); });
-    webServer.begin();
-
-    test.openFile();
-    Serial.begin(9600);
-    pinMode(2, OUTPUT);
-    // NOTE!!! Wait for >2 secs
-    // if board doesn't support software reset via Serial.DTR/RTS
-   while(true)
-   {
-     dnsServer.processNextRequest();
-   }
-    delay(2000);
-
-    UNITY_BEGIN();
-    // RUN_TEST(testSetConfig);
-    // RUN_TEST(testRead);
-    // RUN_TEST(Apmoderun);
-    UNITY_END();
+  UNITY_BEGIN();
+  RUN_TEST(testCheckin);
+  // RUN_TEST(testSetConfig);
+  // RUN_TEST(testRead);
+  // RUN_TEST(Apmoderun);
+  UNITY_END();
 }
 
 void loop()
 {
-   
-    // webServer.handleClient();
+
+  // webServer.handleClient();
 }

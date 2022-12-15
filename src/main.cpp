@@ -39,13 +39,13 @@
 #define jsonbuffersize 1500
 #define TMCLK D7
 #define TMDIO D6
-#define REALYPORT D7 //สำหรับยกน้ำออก
+#define REALYPORT D7 // สำหรับยกน้ำออก
 
 char jsonChar[jsonbuffersize];
 long distance = 0;
 // ntp
 
-//สำหรับนับ จำนวนน้ำที่ผ่าน
+// สำหรับนับ จำนวนน้ำที่ผ่าน
 #define Warterinterruppin D5
 TM1637Display tm1(TMCLK, TMDIO);
 SoftwareSerial mySerial(D6, D5); // RX, TX
@@ -65,15 +65,15 @@ Configfile cfg("/config.cfg");
 
 const String version = "126";
 RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
-//สำหรับบอกว่ามีการ run port io
+// สำหรับบอกว่ามีการ run port io
 long counttime = 0;
 // #include "Timer.h"
 // #include <max6675.h>
 
 // #include <Q2HX711.h>
 
-volatile int wateruse = 0;       //สำหรับบอกว่าใช้น้ำไปเท่าไหรแล้ว
-volatile int idlewaterlimit = 0; //บอกว่าไม่มีการใช้น้ำ
+volatile int wateruse = 0;       // สำหรับบอกว่าใช้น้ำไปเท่าไหรแล้ว
+volatile int idlewaterlimit = 0; // บอกว่าไม่มีการใช้น้ำ
 KDS ds(D3);
 Ktimer kt;
 SSD1306Wire display(0x3c, D2, D1);
@@ -178,7 +178,7 @@ struct
     boolean havedht = false;
     boolean haveds = false;
     boolean havea0 = false;
-    boolean havetorestart = false; //สำหรับบอกว่าถ้าติดต่อ wifi ไม่ได้ให้ restart
+    boolean havetorestart = false; // สำหรับบอกว่าถ้าติดต่อ wifi ไม่ได้ให้ restart
     boolean havesht = false;
     boolean havertc = false;
     boolean havepmsensor = 0;
@@ -201,11 +201,11 @@ struct
 
     int havewater = 0;
     int checkintime = 60;
-    int havewaterlimit = 0;          //สำหรับ limit
-    int waterlimitvalue = 0;         //สำหรับบอกยอดจำนวนเต็ม
+    int havewaterlimit = 0;          // สำหรับ limit
+    int waterlimitvalue = 0;         // สำหรับบอกยอดจำนวนเต็ม
     int waterlimittime = 300;        // 5 นาทีสำหรับหยุดแบบชุดเล็ก
-    int wateridletime = 60;          //เวลาที่ไม่มีการใช้น้ำจะ หยุดนับจำนวนน้ำ
-    int wateroverlimit = 3;          //ถ้าตัดเกินตามที่กำหนดให้ตัดยาวเลย
+    int wateridletime = 60;          // เวลาที่ไม่มีการใช้น้ำจะ หยุดนับจำนวนน้ำ
+    int wateroverlimit = 3;          // ถ้าตัดเกินตามที่กำหนดให้ตัดยาวเลย
     int wateroverlimitvalue = 28800; // ตัดยาวเลย
     int readdhttime = 5;
     int readdstime = 10;
@@ -218,6 +218,7 @@ struct
     int checkconnectiontime = 600;
     int maxconnecttimeout = 10;
     int jsonbuffer = 1500;
+    String checkinurl;
 } configdata;
 
 struct
@@ -246,7 +247,7 @@ void loadconfigtoram()
     configdata.readdstime = cfg.getIntConfig("readdstime", 60);
     configdata.va0 = cfg.getConfig("va0").toFloat();
     configdata.sensorvalue = cfg.getConfig("senservalue").toDouble();
-    configdata.jsonbuffer = cfg.getIntConfig("jsonbuffer",1024);
+    configdata.jsonbuffer = cfg.getIntConfig("jsonbuffer", 1024);
     configdata.havedht = cfg.getIntConfig("havedht", 0);
     configdata.havewater = cfg.getIntConfig("havewater", 0);
     configdata.havea0 = cfg.getIntConfig("havea0", 0);
@@ -265,9 +266,9 @@ void loadconfigtoram()
         configdata.checkintime = 600;
 
     configdata.havewaterlimit = cfg.getIntConfig("havewaterlimit", 0);
-    configdata.waterlimitvalue = cfg.getIntConfig("waterlimitvalue", 100000); //ช่วงเวลาที่ไม่เกินกำหนดสำหรับการใช้น้ำ
-    configdata.wateridletime = cfg.getIntConfig("wateridletime", 60);         //เวลาที่ปั็มไม่ทำงานแล้วระบบจะถือว่าปิดการทำงานแล้ว
-    configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        //เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
+    configdata.waterlimitvalue = cfg.getIntConfig("waterlimitvalue", 100000); // ช่วงเวลาที่ไม่เกินกำหนดสำหรับการใช้น้ำ
+    configdata.wateridletime = cfg.getIntConfig("wateridletime", 60);         // เวลาที่ปั็มไม่ทำงานแล้วระบบจะถือว่าปิดการทำงานแล้ว
+    configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        // เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
     wateruse = 0;                                                             // reset use water
 
     portconfig.D5value = cfg.getIntConfig("D5mode");
@@ -278,12 +279,13 @@ void loadconfigtoram()
     portconfig.D7initvalue = cfg.getIntConfig("D7initvalue");
     portconfig.D8value = cfg.getIntConfig("D8mode");
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
+    configdata.checkinurl = cfg.getConfig("checkinurl","http://pi.pixka.me:3336");
 }
 
 // water  limit
-int waterlimitime = 0;         //เป็นเวลาที่หยุดใช้น้ำ
-int waterlimitport = D7;       //สำหรับตัดอ่าน ตัววัดน้ำไหลผ่าน
-int currentwateroverlimit = 0; //เป็นตัวนับว่าใช้น้ำเกินกี่รอบแล้ว
+int waterlimitime = 0;         // เป็นเวลาที่หยุดใช้น้ำ
+int waterlimitport = D7;       // สำหรับตัดอ่าน ตัววัดน้ำไหลผ่าน
+int currentwateroverlimit = 0; // เป็นตัวนับว่าใช้น้ำเกินกี่รอบแล้ว
 Dhtbuffer dhtbuffer;
 long otatime = 0;
 int readdhtstate = 0;
@@ -453,7 +455,7 @@ const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 // WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 //  ESP8266WebServer server(80);
-//#define ONE_WIRE_BUS D4
+// #define ONE_WIRE_BUS D4
 //  OneWire ds(D3); // on pin D4 (a 4.7K resistor is necessary)
 
 #define DHTPIN D3 // Pin which is connected to the DHT sensor.
@@ -469,9 +471,9 @@ const byte hx711_data_pin = D1;
 const byte hx711_clock_pin = D2;
 // Q2HX711 hx711(hx711_data_pin, hx711_clock_pin);
 // Uncomment the type of sensor in use:
-//#define DHTTYPE           DHT11     // DHT 11
+// #define DHTTYPE           DHT11     // DHT 11
 #define DHTTYPE DHT22 // DHT 22 (AM2302)
-//#define DHTTYPE           DHT21     // DHT 21 (AM2301)
+// #define DHTTYPE           DHT21     // DHT 21 (AM2301)
 
 // See guide for details on sensor wiring and usage:
 //   https://learn.adafruit.com/dht/overview
@@ -484,7 +486,7 @@ float pfDew, pfHum, pfTemp, pfVcc;
 float a0value;
 float rawvalue = 0;
 
-//สำหรับอ่านค่าน้ำ --------------
+// สำหรับอ่านค่าน้ำ --------------
 volatile int flow_frequency;
 volatile int fordisplay = 0;
 //----------------------------
@@ -545,10 +547,10 @@ void dd()
 ICACHE_RAM_ATTR void waterlimitinterrup()
 {
 
-    wateruse++;         //นับจำนวนน้ำที่ไหลผ่าน Sensor
-    idlewaterlimit = 0; //บอกว่ามีการใช้อยู่
+    wateruse++;         // นับจำนวนน้ำที่ไหลผ่าน Sensor
+    idlewaterlimit = 0; // บอกว่ามีการใช้อยู่
 }
-//สำหรับนับจำนวนน้ำที่ไหลผ่าน
+// สำหรับนับจำนวนน้ำที่ไหลผ่าน
 
 ICACHE_RAM_ATTR void flow() // Interrupt function
 {
@@ -560,7 +562,7 @@ ICACHE_RAM_ATTR void flow() // Interrupt function
     }
     else
     {
-        digitalWrite(D1, 0); //ปิดน้ำไม่มีการจ่ายน้ำอีกแล้ว
+        digitalWrite(D1, 0); // ปิดน้ำไม่มีการจ่ายน้ำอีกแล้ว
     }
 
     Serial.println(flow_frequency);
@@ -571,7 +573,7 @@ void displayTOTM(float d)
     tm1.showNumberDec(d);
 }
 
-//สำหรับจำนวนลิตรเข้ามาเพื่อเติมน้ำ
+// สำหรับจำนวนลิตรเข้ามาเพื่อเติมน้ำ
 void openwater()
 {
     // if (server.hasArg("w"))
@@ -743,14 +745,14 @@ void readPm()
     {
         while (mySerial.available())
             mySerial.read();
-        delay(1000); //ถ้ามีการอ่านให้
+        delay(1000); // ถ้ามีการอ่านให้
     }
 }
 
 void setport()
 {
 
-    pinMode(D1, OUTPUT); //เป็น output
+    pinMode(D1, OUTPUT); // เป็น output
     pinMode(D2, OUTPUT);
     pinMode(D5, portconfig.D5value);
     digitalWrite(D5, portconfig.D5initvalue);
@@ -911,7 +913,6 @@ String makeStatus()
             doc["rtctime"] = str;
         }
     }
-
     doc["ntptime"] = timeClient.getFormattedTime();
     doc["ntptimelong"] = timeClient.getEpochTime();
     doc["load"] = load;
@@ -924,7 +925,6 @@ String makeStatus()
 
 boolean addTorun(int port, int delay, int value, int wait)
 {
-
     if (delay > counttime)
         counttime = delay;
     for (int i = 0; i < ioport; i++)
@@ -1053,7 +1053,7 @@ void ota()
 void checkin()
 {
     Serial.println(" +++++++++++++++++++++ Check in now ++++++++++++++++++++++++++++++++++++");
-    DynamicJsonDocument dy(jsonbuffersize);
+    DynamicJsonDocument dy(1024);
     if (oledok)
     {
         displayslot.description = "checkin";
@@ -1066,13 +1066,15 @@ void checkin()
     dy["mac"] = WiFi.macAddress();
     dy["ssid"] = WiFi.SSID();
     dy["password"] = "";
-    char buf[jsonbuffersize];
-    serializeJsonPretty(dy, buf, jsonbuffersize);
+    char buf[1024];
+    serializeJsonPretty(dy, buf, 1024);
+    Serial.println(buf);
     WiFiClient client;
     // put your main code here, to run repeatedly:
     HTTPClient http;                 // Declare object of class HTTPClient
-    http.begin(client, checkinhost); // Specify request destination
-    Serial.println(checkinhost);
+    // http.begin(client, configdata.checkinurl); // Specify request destination
+    http.begin(client, configdata.checkinurl); // Specify request destination
+    Serial.println(configdata.checkinurl);
     http.addHeader("Content-Type", "application/json"); // Specify content-type header
     int httpCode = http.POST(buf);                      // Send the request
     String payload = http.getString();                  // Get the response payload
@@ -1084,12 +1086,12 @@ void checkin()
         Serial.print(" Play load:");
         Serial.println(payload); // Print request response payload
         deserializeJson(ddd, payload);
-        JsonObject obj = dy.as<JsonObject>();
+        JsonObject obj = ddd.as<JsonObject>();
         Serial.print("---------------------------------------------------------------");
         Serial.println(obj);
         Serial.print("---------------------------------------------------------------");
 
-        name = obj["pidevice"]["name"].as<String>();
+        name = obj["name"].as<String>();
         if (oledok)
         {
             displayslot.foot2 = "checkin ok";
@@ -1237,12 +1239,12 @@ void inden()
     wifitimeout++;
     checkintime++;
     otatime++;
-    readdhttime++; //บอกเวลา สำหรับอ่าน DHT
+    readdhttime++; // บอกเวลา สำหรับอ่าน DHT
     readdstime++;
     dhtbuffer.count--;
     reada0time++;
     readshtcount++;
-    porttrick++; //บอกว่า 1 วิละ
+    porttrick++; // บอกว่า 1 วิละ
     ntptime++;
     rtctime++;
     readdistance++;
@@ -1259,7 +1261,7 @@ void inden()
         ledstatus = !digitalRead(b_led);
         digitalWrite(b_led, ledstatus);
     }
-    //ถ้ามีการหยุดปั๊มให้
+    // ถ้ามีการหยุดปั๊มให้
     if (waterlimitime >= 0)
         waterlimitime--;
     // else
@@ -1325,8 +1327,8 @@ String fillconfig(const String &var)
 void setHttp()
 {
 
-    if (WiFiMulti.run() != WL_CONNECTED)
-        return; //ออกเลยถ้าไม่ต่อ wifi
+    if (WiFi.status() != WL_CONNECTED)
+        return; // ออกเลยถ้าไม่ต่อ wifi
     // server.on("/dht", DHTtoJSON);
     // server.on("/pressure", PressuretoJSON);
     // server.on("/ktype", KtypetoJSON);
@@ -1449,6 +1451,10 @@ void setHttp()
     // server.on("/readam", readam);
     // server.on("/status", status);
     // server.on("/reset", reset);
+    server.on("/checkin", HTTP_GET, [](AsyncWebServerRequest *request)
+              { checkin();
+                request->send(200, "application/json", "{\"Check in\":\"ok\"}"); });
+
     server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request)
               {
         request->send(200, "application/json", "{\"reset\":\"ok\"}");
@@ -1517,7 +1523,7 @@ void setHttp()
     // // closetime parameter have to show on oled
     // server.on("/setclosetime", runtimer); // time parameter to count
 
-    server.begin(); //เปิด TCP Server
+    server.begin(); // เปิด TCP Server
     Serial.println("Server started");
     if (oledok)
     {
@@ -1552,7 +1558,7 @@ void connect()
     Serial.print("connect.");
     int ft = 0;
     // display.clear();
-    while (WiFi.status() != WL_CONNECTED) //รอการเชื่อมต่อ
+    while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
     {
         delay(250);
         if (oledok)
@@ -1784,7 +1790,7 @@ void setup()
         setSht();
     }
 
-    //ถ้ามีการต่อ Pm Sensor
+    // ถ้ามีการต่อ Pm Sensor
     if (configdata.havepmsensor)
     {
         while (!Serial)
@@ -1794,6 +1800,7 @@ void setup()
 
     settime();
     ota();
+    checkin();
 }
 
 void displaySht()
@@ -2062,37 +2069,37 @@ void oledtask()
         dd();
     }
 }
-//สำหรับตรวจสอบว่ามีการใช้น้ำเกินกำหนดเปล่า
+// สำหรับตรวจสอบว่ามีการใช้น้ำเกินกำหนดเปล่า
 void waterlimittask()
 {
     if (configdata.havewaterlimit)
     {
         if (wateruse >= configdata.waterlimitvalue)
         {
-            waterlimitime = configdata.waterlimittime; //ให้ทำการตัดปั๊มออกจากระบบ
-            wateruse = 0;                              //หยุดรอไม่ใช้งานละ
-            currentwateroverlimit++;                   //เพิ่มจำนวนการใช้น้ำเกินเข้าระบบ
+            waterlimitime = configdata.waterlimittime; // ให้ทำการตัดปั๊มออกจากระบบ
+            wateruse = 0;                              // หยุดรอไม่ใช้งานละ
+            currentwateroverlimit++;                   // เพิ่มจำนวนการใช้น้ำเกินเข้าระบบ
         }
 
         if (waterlimitime >= 0)
         {
-            digitalWrite(waterlimitport, 1); //เปิดระบบตัดน้ำแล้วระบบจะทำการลดค่า limit ไปเรื่อยๆ
+            digitalWrite(waterlimitport, 1); // เปิดระบบตัดน้ำแล้วระบบจะทำการลดค่า limit ไปเรื่อยๆ
         }
         else
         {
-            digitalWrite(waterlimitport, 0); //ปิดถ้าค่า หยุดรอหมด
+            digitalWrite(waterlimitport, 0); // ปิดถ้าค่า หยุดรอหมด
         }
 
-        //ถ้ามีการใช้น้ำเกินกำหนดหรือว่าท่อแตกหรืออะไรซํกอย่างระบบจะตัดหรือยก relay
+        // ถ้ามีการใช้น้ำเกินกำหนดหรือว่าท่อแตกหรืออะไรซํกอย่างระบบจะตัดหรือยก relay
         if (currentwateroverlimit >= configdata.wateroverlimitvalue)
         {
             waterlimitime = configdata.waterlimittime;
-            digitalWrite(REALYPORT, 1); //สั่งระบบยก relay
+            digitalWrite(REALYPORT, 1); // สั่งระบบยก relay
         }
         if (idlewaterlimit >= configdata.wateridletime && waterlimitime <= 0)
         {
             wateruse = 0;              // ไม่มีการใช้น้ำแล้ว
-            currentwateroverlimit = 0; //ถ้ามีการหยุดใช้น้ำแล้วก็ยกเลิกการน้ำใช้น้ำเกิน
+            currentwateroverlimit = 0; // ถ้ามีการหยุดใช้น้ำแล้วก็ยกเลิกการน้ำใช้น้ำเกิน
         }
     }
 }
