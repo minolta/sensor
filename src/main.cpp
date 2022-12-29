@@ -127,6 +127,8 @@ public:
 };
 struct
 {
+    int D3value = OUTPUT;
+    int D3initvalue = 0;
     int D5value = OUTPUT;
     int D5initvalue = 0;
     int D6value = OUTPUT;
@@ -271,6 +273,8 @@ void loadconfigtoram()
     configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        // เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
     wateruse = 0;                                                             // reset use water
 
+    portconfig.D3value = cfg.getIntConfig("D3mode", 1);
+    portconfig.D3initvalue = cfg.getIntConfig("D3initvalue", 0);
     portconfig.D5value = cfg.getIntConfig("D5mode");
     portconfig.D5initvalue = cfg.getIntConfig("D5initvalue");
     portconfig.D6value = cfg.getIntConfig("D6mode");
@@ -279,7 +283,7 @@ void loadconfigtoram()
     portconfig.D7initvalue = cfg.getIntConfig("D7initvalue");
     portconfig.D8value = cfg.getIntConfig("D8mode");
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
-    configdata.checkinurl = cfg.getConfig("checkinurl","http://pi.pixka.me:3336");
+    configdata.checkinurl = cfg.getConfig("checkinurl", "http://pi.pixka.me:3336");
 }
 
 // water  limit
@@ -754,6 +758,9 @@ void setport()
 
     pinMode(D1, OUTPUT); // เป็น output
     pinMode(D2, OUTPUT);
+
+    pinMode(D3, portconfig.D3value);
+    digitalWrite(D3, portconfig.D3initvalue);
     pinMode(D5, portconfig.D5value);
     digitalWrite(D5, portconfig.D5initvalue);
     pinMode(D6, portconfig.D6value);
@@ -775,6 +782,8 @@ void setport()
     ports[4].name = "D2";
     ports[5].port = D8;
     ports[5].name = "D8";
+    ports[6].port = D3;
+    ports[6].name = "D3";
     pinMode(D4, OUTPUT);
 }
 void readDHT()
@@ -869,7 +878,9 @@ String makeStatus()
         doc["distance"] = "-1";
     }
     doc["tmp"] = tmpvalue;
-    doc["D5config"] = portconfig.D5value;
+    doc["D5config"] = portconfig.D3value;
+    doc["D3init"] = portconfig.D3initvalue;
+    doc["D3config"] = portconfig.D5value;
     doc["D5init"] = portconfig.D5initvalue;
     doc["D6config"] = portconfig.D6value;
     doc["D6init"] = portconfig.D6initvalue;
@@ -1071,7 +1082,7 @@ void checkin()
     Serial.println(buf);
     WiFiClient client;
     // put your main code here, to run repeatedly:
-    HTTPClient http;                 // Declare object of class HTTPClient
+    HTTPClient http; // Declare object of class HTTPClient
     // http.begin(client, configdata.checkinurl); // Specify request destination
     http.begin(client, configdata.checkinurl); // Specify request destination
     Serial.println(configdata.checkinurl);
