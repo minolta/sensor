@@ -39,7 +39,9 @@
         "algorithm": "cpp",
         "atomic": "cpp",
         "bitset": "cpp",
-        "regex": "cpp"
+        "regex": "cpp",
+        "string_view": "cpp",
+        "ranges": "cpp"
     },
     "C_Cpp.intelliSenseEngineFallback": "Enabled"
 }

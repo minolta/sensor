@@ -28,6 +28,8 @@
 #include <TM1637Display.h>
 #include <SPI.h>
 #include <ESP8266HTTPClient.h>
+#include "checkconnection.h"
+
 // #include <ESP8266WebServer.h>
 Configfile test("/testconfig.cfg");
 String responseHTML = "<!DOCTYPE html>"
@@ -177,9 +179,9 @@ void testCheckin()
   WiFiClient client;
   Serial.println(buf);
   // put your main code here, to run repeatedly:
-  HTTPClient http;  
-  String url = "http://fw1.pixka.me:3333/checkin";                         // Declare object of class HTTPClient
-  http.begin(client,url); // Specify request destination
+  HTTPClient http;
+  String url = "http://fw1.pixka.me:3333/checkin"; // Declare object of class HTTPClient
+  http.begin(client, url);                         // Specify request destination
   Serial.println(url);
   http.addHeader("Content-Type", "application/json"); // Specify content-type header
   int httpCode = http.POST(buf);                      // Send the request
@@ -202,11 +204,28 @@ void testCheckin()
   // Serial.println(payload); // Print request response payload
   http.end(); // Close connection
 }
+void checkconn()
+{
+  WiFi.begin("forpi", "04qwerty");
+  while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
+  {
+    Serial.print(".");
+    delay(200);
+  }
+  Configfile cfg("/config1.cfg");
+  cfg.openFile();
+  cfg.addConfig("talkurl", "http://192.168.88.2");
+
+  int re = talktoServer("192.168.88.99", "ky", 20000, &cfg);
+  Serial.print("Result:");
+  Serial.print(re);
+}
 void setup()
 {
 
   UNITY_BEGIN();
-  RUN_TEST(testCheckin);
+  RUN_TEST(checkconn);
+  // RUN_TEST(testCheckin);
   // RUN_TEST(testSetConfig);
   // RUN_TEST(testRead);
   // RUN_TEST(Apmoderun);

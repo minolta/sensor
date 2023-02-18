@@ -4,13 +4,11 @@
 #include <DHT.h>
 #include <DHT_U.h>
 #include <OneWire.h>
-// #include "./DNSServer.h"
 #include "Apmode.h"
 #include <SPI.h>
 #include <ESP8266HTTPClient.h>
-// #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
+#include "checkconnection.h"
 #include <ESP8266httpUpdate.h>
 #include <Wire.h>
 #include "SHTSensor.h"
@@ -40,7 +38,7 @@
 #define TMCLK D7
 #define TMDIO D6
 #define REALYPORT D7 // สำหรับยกน้ำออก
-
+WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
 char jsonChar[jsonbuffersize];
 long distance = 0;
 // ntp
@@ -67,10 +65,6 @@ const String version = "126";
 RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
 // สำหรับบอกว่ามีการ run port io
 long counttime = 0;
-// #include "Timer.h"
-// #include <max6675.h>
-
-// #include <Q2HX711.h>
 
 volatile int wateruse = 0;       // สำหรับบอกว่าใช้น้ำไปเท่าไหรแล้ว
 volatile int idlewaterlimit = 0; // บอกว่าไม่มีการใช้น้ำ
@@ -93,7 +87,6 @@ long reada0time = 0;
 float tmpvalue = 0;
 long rtctime = 0;
 int ntptime = 0;
-static char buf[100] = {'\0'};
 long h, m, s, Y, M, d;
 #define ioport 7
 long load = 0;
@@ -108,7 +101,7 @@ int readdistance = 0;
 // StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
 int makestatuscount = 0;
-boolean checkconnect();
+// boolean checkconnect();
 void readSht();
 class Wifidata
 {
@@ -127,6 +120,8 @@ public:
 };
 struct
 {
+    int D3value = OUTPUT;
+    int D3initvalue = 0;
     int D5value = OUTPUT;
     int D5initvalue = 0;
     int D6value = OUTPUT;
@@ -218,7 +213,9 @@ struct
     int checkconnectiontime = 600;
     int maxconnecttimeout = 10;
     int jsonbuffer = 1500;
+    int checkactivetimeout = 0;
     String checkinurl;
+
 } configdata;
 
 struct
@@ -271,6 +268,8 @@ void loadconfigtoram()
     configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        // เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
     wateruse = 0;                                                             // reset use water
 
+    portconfig.D3value = cfg.getIntConfig("D3mode", 1);
+    portconfig.D3initvalue = cfg.getIntConfig("D3initvalue", 0);
     portconfig.D5value = cfg.getIntConfig("D5mode");
     portconfig.D5initvalue = cfg.getIntConfig("D5initvalue");
     portconfig.D6value = cfg.getIntConfig("D6mode");
@@ -279,7 +278,8 @@ void loadconfigtoram()
     portconfig.D7initvalue = cfg.getIntConfig("D7initvalue");
     portconfig.D8value = cfg.getIntConfig("D8mode");
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
-    configdata.checkinurl = cfg.getConfig("checkinurl","http://pi.pixka.me:3336");
+    configdata.checkinurl = cfg.getConfig("checkinurl", "http://pi.pixka.me:3336");
+    configdata.checkactivetimeout = cfg.getIntConfig("checkactivetimeout", 600);
 }
 
 // water  limit
@@ -502,7 +502,7 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 // int ktcCLK = D5;
 
 // MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
-ESP8266WiFiMulti WiFiMulti;
+// ESP8266WiFiMulti WiFiMulti;
 float ktypevalue = 0;
 Ticker flipper;
 
@@ -754,6 +754,9 @@ void setport()
 
     pinMode(D1, OUTPUT); // เป็น output
     pinMode(D2, OUTPUT);
+
+    pinMode(D3, portconfig.D3value);
+    digitalWrite(D3, portconfig.D3initvalue);
     pinMode(D5, portconfig.D5value);
     digitalWrite(D5, portconfig.D5initvalue);
     pinMode(D6, portconfig.D6value);
@@ -775,6 +778,8 @@ void setport()
     ports[4].name = "D2";
     ports[5].port = D8;
     ports[5].name = "D8";
+    ports[6].port = D3;
+    ports[6].name = "D3";
     pinMode(D4, OUTPUT);
 }
 void readDHT()
@@ -869,7 +874,9 @@ String makeStatus()
         doc["distance"] = "-1";
     }
     doc["tmp"] = tmpvalue;
-    doc["D5config"] = portconfig.D5value;
+    doc["D5config"] = portconfig.D3value;
+    doc["D3init"] = portconfig.D3initvalue;
+    doc["D3config"] = portconfig.D5value;
     doc["D5init"] = portconfig.D5initvalue;
     doc["D6config"] = portconfig.D6value;
     doc["D6init"] = portconfig.D6initvalue;
@@ -918,6 +925,12 @@ String makeStatus()
     doc["load"] = load;
     doc["loadav"] = loadav;
     doc["timer.message"] = kt.getMessage();
+    doc["checkinconnectime"] = checkconnectiontime;
+    doc["otatime"] = otatime;
+    doc["ntpupdatetime"] = ntp;
+    doc["readshtcount"] = readshtcount;
+    doc["rtctime"] = rtctime;
+    doc["readdhttime"] = readdhttime;
     char buf[jsonbuffersize];
     serializeJsonPretty(doc, buf, jsonbuffersize);
     return String(buf);
@@ -1022,7 +1035,10 @@ void ota()
     WiFiClient client;
     Serial.println("OTA");
     Serial.println(urlupdate);
-    t_httpUpdate_return ret = ESPhttpUpdate.update(client, otahost, 8080, urlupdate);
+    String u = cfg.getConfig("otaurl", "http://192.168.88.21:2000/rest/fw/update/sersor/");
+    String url = u + version;
+
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
     Serial.println("return " + ret);
     switch (ret)
     {
@@ -1071,7 +1087,7 @@ void checkin()
     Serial.println(buf);
     WiFiClient client;
     // put your main code here, to run repeatedly:
-    HTTPClient http;                 // Declare object of class HTTPClient
+    HTTPClient http; // Declare object of class HTTPClient
     // http.begin(client, configdata.checkinurl); // Specify request destination
     http.begin(client, configdata.checkinurl); // Specify request destination
     Serial.println(configdata.checkinurl);
@@ -1154,23 +1170,23 @@ void readTmp()
 {
     tmpvalue = ds.readDs();
 }
-void KtypetoJSON()
-{
-    // doc["t"] = tmpvalue;
+// void KtypetoJSON()
+// {
+//     // doc["t"] = tmpvalue;
 
-    // JsonObject pidevice = doc.createNestedObject("pidevice");
-    // pidevice["mac"] = WiFi.macAddress();
+//     // JsonObject pidevice = doc.createNestedObject("pidevice");
+//     // pidevice["mac"] = WiFi.macAddress();
 
-    // JsonObject ds18sensor = doc.createNestedObject("ds18sensor");
-    // ds18sensor["name"] = WiFi.macAddress();
-    // ds18sensor["callname "] = WiFi.macAddress();
+//     // JsonObject ds18sensor = doc.createNestedObject("ds18sensor");
+//     // ds18sensor["name"] = WiFi.macAddress();
+//     // ds18sensor["callname "] = WiFi.macAddress();
 
-    // JsonObject device = doc.createNestedObject("device");
-    // device["mac"] = WiFi.macAddress();
+//     // JsonObject device = doc.createNestedObject("device");
+//     // device["mac"] = WiFi.macAddress();
 
-    // serializeJsonPretty(doc, jsonChar, jsonbuffersize);
-    // server.send(200, "application/json", jsonChar);
-}
+//     // serializeJsonPretty(doc, jsonChar, jsonbuffersize);
+//     // server.send(200, "application/json", jsonChar);
+// }
 
 void readAm2320()
 {
@@ -1275,7 +1291,7 @@ void inden()
 
 void setAPMode()
 {
-    if (WiFiMulti.run() != WL_CONNECTED)
+    if (WiFi.status() != WL_CONNECTED)
     {
         String mac = WiFi.macAddress();
         WiFi.softAP("ESP-Sensor" + mac, "12345678");
@@ -1538,10 +1554,12 @@ void Apmoderun()
     ap.setApname("ESP Sensor AP Mode");
     ap.run();
 }
+int disconnecttimeout = 0;
 void connect()
+
 {
 
-    WiFi.mode(WIFI_STA);
+    // WiFi.mode(WIFI_STA);
     Serial.println();
     Serial.println("-----------------------------------------------");
     Serial.println(cfg.getConfig("ssid", "forpi"));
@@ -1553,6 +1571,18 @@ void connect()
         displayslot.description1 = cfg.getConfig("ssid");
         dd();
     }
+    gotIpEventHandler = WiFi.onStationModeGotIP([](const WiFiEventStationModeGotIP &event)
+                                                {
+    Serial.print("Station connected, IP: ");
+    Serial.println(WiFi.localIP()); });
+
+    disconnectedEventHandler = WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected &event)
+                                                              { Serial.println("Station disconnected");
+                                                                disconnecttimeout++;
+                                                                if(disconnecttimeout > cfg.getIntConfig("disconnectiontimeout",600))
+                                                                {
+                                                                    ESP.restart();
+                                                                } });
     WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
     // WiFiMulti.addAP(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
     Serial.print("connect.");
@@ -1853,40 +1883,16 @@ void apmodetask()
 }
 void checkconnectiontask()
 {
-    if (otatime > configdata.checkconnectiontime && fordisplay <= 0)
+    if (checkconnectiontime > configdata.checkconnectiontime && fordisplay <= 0)
     {
-        if (!checkconnect())
+        int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
+
+        if (re != 200 && configdata.havetorestart)
         {
-            if (oledok)
-            {
-                displayslot.description = "Reconnect";
-                dd();
-            }
-            WiFi.mode(WIFI_STA);
-            WiFi.disconnect();
-            delay(100);
-            if (WiFi.reconnect())
-            {
-                Serial.println("Re connect is ok");
-                if (oledok)
-                {
-                    displayslot.description = "Reconnect is ok";
-                    dd();
-                }
-            }
-            else
-            {
-                if (!haveportrun())
-                {
-                    if (oledok)
-                    {
-                        displayslot.description = "Can not connect to wifi restart device ";
-                        dd();
-                    }
-                    ESP.restart();
-                }
-            }
+            ESP.restart();
         }
+
+        checkconnectiontime = 0;
     }
 }
 void otatask()
@@ -2010,7 +2016,7 @@ void countertask()
 }
 void makestatustask()
 {
-    if (makestatuscount > 15 && fordisplay <= 0)
+    if (makestatuscount > 15000 && fordisplay <= 0)
     {
         makeStatus();
         makestatuscount = 0;
@@ -2130,32 +2136,6 @@ void loop()
 
     watertask();
     waterlimittask();
-}
-
-boolean checkconnect()
-{
-    // IPAddress ip(192, 168, 88, 1); // The remote ip to ping
-    bool ret = Ping.ping(WiFi.gatewayIP());
-    if (ret)
-    {
-        Serial.println("Success!!");
-        message = "Connect is ok";
-        if (oledok)
-        {
-            displayslot.description = "Connect ok";
-        }
-        return true;
-    }
-    else
-    {
-        Serial.println("Error :(");
-        message = "Connect have problem";
-        if (oledok)
-        {
-            displayslot.description = "connection error";
-        }
-    }
-    return false;
 }
 
 boolean haveportrun()
