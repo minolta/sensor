@@ -29,6 +29,7 @@
 #include "Configfile.h"
 #include <TM1637Display.h>
 #include <ESPAsyncTCP.h>
+#include "scanwifi.h"
 #include <ESPAsyncWebServer.h>
 #define xs 40
 #define ys 15
@@ -39,6 +40,7 @@
 #define TMDIO D6
 #define REALYPORT D7 // สำหรับยกน้ำออก
 WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
+int isDisconnect = false; // สำหรับบอกสถานะว่า wifi หลุด
 char jsonChar[jsonbuffersize];
 long distance = 0;
 // ntp
@@ -214,6 +216,7 @@ struct
     int maxconnecttimeout = 10;
     int jsonbuffer = 1500;
     int checkactivetimeout = 0;
+    int apmodetimeout = 600;
     String checkinurl;
 
 } configdata;
@@ -874,10 +877,10 @@ String makeStatus()
         doc["distance"] = "-1";
     }
     doc["tmp"] = tmpvalue;
-    doc["D5config"] = portconfig.D3value;
+    doc["D5config"] = portconfig.D5value;
+    doc["D5init"] = portconfig.D5initvalue;
     doc["D3init"] = portconfig.D3initvalue;
     doc["D3config"] = portconfig.D5value;
-    doc["D5init"] = portconfig.D5initvalue;
     doc["D6config"] = portconfig.D6value;
     doc["D6init"] = portconfig.D6initvalue;
     doc["D7config"] = portconfig.D7value;
@@ -927,7 +930,7 @@ String makeStatus()
     doc["timer.message"] = kt.getMessage();
     doc["checkinconnectime"] = checkconnectiontime;
     doc["otatime"] = otatime;
-    doc["ntpupdatetime"] = ntp;
+    // doc["ntpupdatetime"] = ntp;
     doc["readshtcount"] = readshtcount;
     doc["rtctime"] = rtctime;
     doc["readdhttime"] = readdhttime;
@@ -1252,7 +1255,8 @@ void inden()
     displaytmp++;
     makestatuscount++;
     uptime++;
-    wifitimeout++;
+    if (isDisconnect)
+        wifitimeout++;
     checkintime++;
     otatime++;
     readdhttime++; // บอกเวลา สำหรับอ่าน DHT
@@ -1550,7 +1554,7 @@ void setHttp()
 void Apmoderun()
 {
 
-    ApMode ap("cfg.cfg");
+    ApMode ap("config.cfg");
     ap.setApname("ESP Sensor AP Mode");
     ap.run();
 }
@@ -1770,6 +1774,20 @@ void setupntp()
     timeClient.begin();
     timeClient.setTimeOffset(25200); // Thailand +7 = 25200
 }
+void setWiFiEvent()
+{
+    gotIpEventHandler = WiFi.onStationModeGotIP([](const WiFiEventStationModeGotIP &event)
+                                                {
+    Serial.print("Station connected, IP: ");
+    Serial.println(WiFi.localIP()); 
+    isDisconnect=false; 
+    wifitimeout = 0; });
+
+    disconnectedEventHandler = WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected &event)
+                                                              { 
+                                                                Serial.println("Station disconnected");
+                                                               isDisconnect = true; });
+}
 void setup()
 {
 
@@ -1831,6 +1849,7 @@ void setup()
     settime();
     ota();
     checkin();
+    setWiFiEvent();
 }
 
 void displaySht()
@@ -1869,7 +1888,7 @@ void displaytmptask()
 }
 void apmodetask()
 {
-    if (apmodetime > 120 && fordisplay <= 0)
+    if (apmodetime > configdata.apmodetimeout && fordisplay <= 0)
     {
         if (oledok)
         {
@@ -1883,6 +1902,11 @@ void apmodetask()
 }
 void checkconnectiontask()
 {
+
+    if (wifitimeout > configdata.wifitimeout && configdata.havetorestart)
+    {
+        ESP.restart();
+    }
     if (checkconnectiontime > configdata.checkconnectiontime && fordisplay <= 0)
     {
         int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
@@ -1891,7 +1915,6 @@ void checkconnectiontask()
         {
             ESP.restart();
         }
-
         checkconnectiontime = 0;
     }
 }
@@ -2112,11 +2135,26 @@ void waterlimittask()
 void loop()
 {
 
+    if(Serial.available())
+    {
+        char k = Serial.read();
+        if(k == 'w')
+        {
+            scanwifi();
+        }
+        else if(k=='h')
+        {
+             int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
+
+            Serial.printf("Result hello to %s  = %d ",cfg.getConfig("talkurl").c_str(),re);
+        }
+    }
+
     // long s = millis();
     // server.handleClient();
     checkintask();
     displaytmptask();
-    // apmodetask();
+    apmodetask();
     checkconnectiontask();
     otatask();
     dhttask();

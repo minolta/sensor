@@ -1,10 +1,10 @@
 #include "checkconnection.h"
 
-int talktoServer(String ip, String name, long uptime,Configfile *p)
+int talktoServer(String ip, String name, long uptime, Configfile *p)
 {
-    String pt =  p->getConfig("talkurl", "http://192.168.88.21:3334/hello");
+  String pt = p->getConfig("talkurl", "http://192.168.88.21:3334/hello");
 
-  String talkurl = pt+"/"+WiFi.localIP().toString()+"/"+uptime+"/"+name;
+  String talkurl = pt + "/" + WiFi.localIP().toString() + "/" + uptime + "/" + name;
   WiFiClient client;
   HTTPClient http;
 
@@ -13,7 +13,7 @@ int talktoServer(String ip, String name, long uptime,Configfile *p)
   // int httpCode = http.GET(h);        // Send the request
   // String payload = http.getString(); // Get the response payload
   Serial.print(" Http Code:");
-  http.begin(client, talkurl );
+  http.begin(client, talkurl);
   int httpResponseCode = http.GET();
   Serial.println(httpResponseCode);
   Serial.println(http.getString());
