@@ -1849,7 +1849,7 @@ void setup()
     settime();
     ota();
     checkin();
-    setWiFiEvent();
+    // setWiFiEvent();
 }
 
 void displaySht()
@@ -1903,14 +1903,14 @@ void apmodetask()
 void checkconnectiontask()
 {
 
-    if (wifitimeout > configdata.wifitimeout && configdata.havetorestart)
-    {
-        ESP.restart();
-    }
+    // if (wifitimeout > configdata.wifitimeout && configdata.havetorestart)
+    // {
+    //     ESP.restart();
+    // }
     if (checkconnectiontime > configdata.checkconnectiontime && fordisplay <= 0)
     {
         int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
-
+            
         if (re != 200 && configdata.havetorestart)
         {
             ESP.restart();
