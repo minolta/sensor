@@ -283,6 +283,7 @@ void loadconfigtoram()
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
     configdata.checkinurl = cfg.getConfig("checkinurl", "http://pi.pixka.me:3336");
     configdata.checkactivetimeout = cfg.getIntConfig("checkactivetimeout", 600);
+    configdata.apmodetimeout = cfg.getIntConfig("apmodetimeout", 60);
 }
 
 // water  limit
@@ -934,6 +935,8 @@ String makeStatus()
     doc["readshtcount"] = readshtcount;
     doc["rtctime"] = rtctime;
     doc["readdhttime"] = readdhttime;
+    doc["configdata.checkconnectiontime"] = configdata.checkconnectiontime;
+    doc["configdata.checkinurl"] = configdata.checkinurl;
     char buf[jsonbuffersize];
     serializeJsonPretty(doc, buf, jsonbuffersize);
     return String(buf);
@@ -951,7 +954,7 @@ boolean addTorun(int port, int delay, int value, int wait)
             ports[i].value = value;
             if (ports[i].delay < delay)
                 ports[i].delay = delay;
-            ports[i].waittime = wait;
+            ports[i].waittime = wait; 
             ports[i].run = 1;
             digitalWrite(ports[i].port, value);
             Serial.println("Set port");
@@ -1216,10 +1219,10 @@ void senddata()
     }
     else
     {
-        if (!WiFi.reconnect())
-        {
-            ESP.restart();
-        }
+        // if (!WiFi.reconnect())
+        // {
+        //     ESP.restart();
+        // }
     }
 }
 void readRTC()
@@ -1554,7 +1557,7 @@ void setHttp()
 void Apmoderun()
 {
 
-    ApMode ap("config.cfg");
+    ApMode ap("/config.cfg");
     ap.setApname("ESP Sensor AP Mode");
     ap.run();
 }
@@ -1575,18 +1578,18 @@ void connect()
         displayslot.description1 = cfg.getConfig("ssid");
         dd();
     }
-    gotIpEventHandler = WiFi.onStationModeGotIP([](const WiFiEventStationModeGotIP &event)
-                                                {
-    Serial.print("Station connected, IP: ");
-    Serial.println(WiFi.localIP()); });
+    // gotIpEventHandler = WiFi.onStationModeGotIP([](const WiFiEventStationModeGotIP &event)
+    //                                             {
+    // Serial.print("Station connected, IP: ");
+    // Serial.println(WiFi.localIP()); });
 
-    disconnectedEventHandler = WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected &event)
-                                                              { Serial.println("Station disconnected");
-                                                                disconnecttimeout++;
-                                                                if(disconnecttimeout > cfg.getIntConfig("disconnectiontimeout",600))
-                                                                {
-                                                                    ESP.restart();
-                                                                } });
+    // disconnectedEventHandler = WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected &event)
+    //                                                           { Serial.println("Station disconnected");
+    //                                                             disconnecttimeout++;
+    //                                                             if(disconnecttimeout > cfg.getIntConfig("disconnectiontimeout",600))
+    //                                                             {
+    //                                                                 ESP.restart();
+    //                                                             } });
     WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
     // WiFiMulti.addAP(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
     Serial.print("connect.");
@@ -1907,20 +1910,24 @@ void checkconnectiontask()
     // {
     //     ESP.restart();
     // }
-    if (checkconnectiontime > configdata.checkconnectiontime && fordisplay <= 0)
+    if (checkconnectiontime > configdata.checkconnectiontime)
     {
         int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
-            
+
         if (re != 200 && configdata.havetorestart)
         {
             ESP.restart();
+        }
+        else
+        {
+            WiFi.reconnect();
         }
         checkconnectiontime = 0;
     }
 }
 void otatask()
 {
-    if (otatime > configdata.otatime && fordisplay <= 0)
+    if (otatime > configdata.otatime)
     {
         wifitimeout = 0;
         otatime = 0;
@@ -1930,7 +1937,7 @@ void otatask()
 }
 void dhttask()
 {
-    if (readdhttime > configdata.readdhttime && configdata.havedht && fordisplay <= 0)
+    if (readdhttime > configdata.readdhttime && configdata.havedht)
     {
         readdhttime = 0;
         message = "Read DHT";
@@ -1939,7 +1946,7 @@ void dhttask()
 }
 void dsreadtask()
 {
-    if (readdstime > configdata.readdstime && configdata.haveds && fordisplay <= 0)
+    if (readdstime > configdata.readdstime && configdata.haveds)
     {
         readdstime = 0;
         readTmp();
@@ -1947,7 +1954,7 @@ void dsreadtask()
 }
 void shtreadtask()
 {
-    if (configdata.havesht && readshtcount > configdata.readshttime && fordisplay <= 0)
+    if (configdata.havesht && readshtcount > configdata.readshttime)
     {
         Serial.println("Read sht");
         readshtcount = 0;
@@ -1970,7 +1977,7 @@ void porttask()
 }
 void ntptask()
 {
-    if (ntptime > configdata.ntpupdatetime && fordisplay <= 0)
+    if (ntptime > configdata.ntpupdatetime)
     {
 
         updateNTP();
@@ -2135,18 +2142,23 @@ void waterlimittask()
 void loop()
 {
 
-    if(Serial.available())
+    if (Serial.available())
     {
         char k = Serial.read();
-        if(k == 'w')
+        if (k == 'w')
         {
             scanwifi();
         }
-        else if(k=='h')
+        else if (k == 'h')
         {
-             int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
+            int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
 
-            Serial.printf("Result hello to %s  = %d ",cfg.getConfig("talkurl").c_str(),re);
+            Serial.printf("Result hello to %s  = %d \n", cfg.getConfig("talkurl").c_str(), re);
+        }
+        else if (k == 'f')
+        {
+            int r = WiFi.reconnect();
+            Serial.printf("REconnect %s  = %d \n", cfg.getConfig("talkurl").c_str(), r);
         }
     }
 
