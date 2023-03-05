@@ -281,7 +281,7 @@ void loadconfigtoram()
     portconfig.D7initvalue = cfg.getIntConfig("D7initvalue");
     portconfig.D8value = cfg.getIntConfig("D8mode");
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
-    configdata.checkinurl = cfg.getConfig("checkinurl", "http://pi.pixka.me:3336");
+    configdata.checkinurl = cfg.getConfig("checkinurl", "http://192.168.88.21:3333/rest/piserver/checkin");
     configdata.checkactivetimeout = cfg.getIntConfig("checkactivetimeout", 600);
     configdata.apmodetimeout = cfg.getIntConfig("apmodetimeout", 60);
 }
@@ -851,8 +851,8 @@ String makeStatus()
     doc["a0"] = a0value;
     doc["va0"] = configdata.va0;
 
-    if (configdata.havesht)
-        readSht();
+    // if (configdata.havesht)
+    //     readSht();
     doc["h"] = pfHum;
     doc["t"] = pfTemp;
     doc["uptime"] = uptime;
@@ -954,7 +954,7 @@ boolean addTorun(int port, int delay, int value, int wait)
             ports[i].value = value;
             if (ports[i].delay < delay)
                 ports[i].delay = delay;
-            ports[i].waittime = wait; 
+            ports[i].waittime = wait;
             ports[i].run = 1;
             digitalWrite(ports[i].port, value);
             Serial.println("Set port");
@@ -1891,7 +1891,7 @@ void displaytmptask()
 }
 void apmodetask()
 {
-    if (apmodetime > configdata.apmodetimeout && fordisplay <= 0)
+    if (configdata.havetorestart && apmodetime > configdata.apmodetimeout && fordisplay <= 0)
     {
         if (oledok)
         {
@@ -1900,20 +1900,18 @@ void apmodetask()
             display.drawLogBuffer(0, 0);
             display.display();
         }
+
         ESP.restart();
     }
+    apmodetime = 0;
 }
 void checkconnectiontask()
 {
 
-    // if (wifitimeout > configdata.wifitimeout && configdata.havetorestart)
-    // {
-    //     ESP.restart();
-    // }
     if (checkconnectiontime > configdata.checkconnectiontime)
     {
+        checkconnectiontime = 0;
         int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
-
         if (re != 200 && configdata.havetorestart)
         {
             ESP.restart();
@@ -1922,14 +1920,12 @@ void checkconnectiontask()
         {
             WiFi.reconnect();
         }
-        checkconnectiontime = 0;
     }
 }
 void otatask()
 {
     if (otatime > configdata.otatime)
     {
-        wifitimeout = 0;
         otatime = 0;
         ota();
         settime();
@@ -1956,8 +1952,9 @@ void shtreadtask()
 {
     if (configdata.havesht && readshtcount > configdata.readshttime)
     {
-        Serial.println("Read sht");
         readshtcount = 0;
+        Serial.println("Read sht");
+
         readSht();
 
         if (displayshtcount > 20)
