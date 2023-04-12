@@ -29,6 +29,7 @@
 #include <SPI.h>
 #include <ESP8266HTTPClient.h>
 #include "checkconnection.h"
+#include <ESP8266httpUpdate.h>
 
 // #include <ESP8266WebServer.h>
 Configfile test("/testconfig.cfg");
@@ -156,6 +157,34 @@ void testDns()
   }
   delay(2000);
 }
+void ota()
+{
+  WiFi.begin("forpi", "04qwerty");
+  while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
+  {
+    Serial.print(".");
+    delay(1000);
+  }
+  WiFiClient client;
+  String url = "http://192.168.88.5:2005/rest/fw/update/sensor/1";
+  Serial.println(url);
+
+  t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
+  Serial.println("return " + ret);
+  switch (ret)
+  {
+  case HTTP_UPDATE_FAILED:
+    Serial.println("[update] Update failed.");
+    break;
+  case HTTP_UPDATE_NO_UPDATES:
+
+    Serial.println("[update] Update no Update.");
+    break;
+  case HTTP_UPDATE_OK:
+    Serial.println("[update] Update ok."); // may not called we reboot the ESP
+    break;
+  }
+}
 void testCheckin()
 {
   WiFi.begin("forpi", "04qwerty");
@@ -223,17 +252,24 @@ void checkconn()
 void setup()
 {
 
+  Serial.begin(9600);
+  pinMode(2,OUTPUT);
+  delay(2000);
   UNITY_BEGIN();
-  RUN_TEST(checkconn);
+  // RUN_TEST(checkconn);
   // RUN_TEST(testCheckin);
   // RUN_TEST(testSetConfig);
   // RUN_TEST(testRead);
   // RUN_TEST(Apmoderun);
+  RUN_TEST(ota);
   UNITY_END();
 }
 
 void loop()
 {
+
+  digitalWrite(2,!digitalRead(2));
+  delay(200);
 
   // webServer.handleClient();
 }

@@ -31,6 +31,7 @@
 #include <ESPAsyncTCP.h>
 #include "scanwifi.h"
 #include <ESPAsyncWebServer.h>
+const String version = "126";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -63,7 +64,7 @@ Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
 
-const String version = "126";
+
 RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
 // สำหรับบอกว่ามีการ run port io
 long counttime = 0;
@@ -1041,7 +1042,7 @@ void ota()
     WiFiClient client;
     Serial.println("OTA");
     Serial.println(urlupdate);
-    String u = cfg.getConfig("otaurl", "http://192.168.88.21:2000/rest/fw/update/sersor/");
+    String u = cfg.getConfig("otaurl", "http://192.168.88.21:2005/rest/fw/update/sensor/");
     String url = u + version;
 
     t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
@@ -1563,7 +1564,6 @@ void Apmoderun()
 }
 int disconnecttimeout = 0;
 void connect()
-
 {
 
     // WiFi.mode(WIFI_STA);
@@ -1578,18 +1578,6 @@ void connect()
         displayslot.description1 = cfg.getConfig("ssid");
         dd();
     }
-    // gotIpEventHandler = WiFi.onStationModeGotIP([](const WiFiEventStationModeGotIP &event)
-    //                                             {
-    // Serial.print("Station connected, IP: ");
-    // Serial.println(WiFi.localIP()); });
-
-    // disconnectedEventHandler = WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected &event)
-    //                                                           { Serial.println("Station disconnected");
-    //                                                             disconnecttimeout++;
-    //                                                             if(disconnecttimeout > cfg.getIntConfig("disconnectiontimeout",600))
-    //                                                             {
-    //                                                                 ESP.restart();
-    //                                                             } });
     WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
     // WiFiMulti.addAP(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
     Serial.print("connect.");
@@ -1795,10 +1783,9 @@ void setup()
 {
 
     Serial.begin(9600);
-
     Serial.println();
     Serial.println();
-    kt.run();
+    // kt.run();
     pinMode(b_led, OUTPUT); // On Board LED
                             //   pinMode(D4, OUTPUT);
                             //  pinMode(LED_BUILTIN, OUTPUT);
@@ -2090,7 +2077,6 @@ void oledtask()
 {
     if (oledok)
     {
-
         if (!ledstatus)
         {
             displayslot.foot = ".";
@@ -2136,9 +2122,8 @@ void waterlimittask()
         }
     }
 }
-void loop()
+void havekey()
 {
-
     if (Serial.available())
     {
         char k = Serial.read();
@@ -2158,9 +2143,11 @@ void loop()
             Serial.printf("REconnect %s  = %d \n", cfg.getConfig("talkurl").c_str(), r);
         }
     }
+}
+void loop()
+{
 
-    // long s = millis();
-    // server.handleClient();
+    havekey();
     checkintask();
     displaytmptask();
     apmodetask();
@@ -2175,12 +2162,8 @@ void loop()
     pmtask();
     distancetask();
     countertask();
-    // makestatustask();
-    // loadtask();
-
     a0task();
     oledtask();
-
     watertask();
     waterlimittask();
 }
