@@ -31,7 +31,7 @@
 #include <ESPAsyncTCP.h>
 #include "scanwifi.h"
 #include <ESPAsyncWebServer.h>
-const String version = "126";
+const String version = "127";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -63,7 +63,6 @@ int checkconnectiontime = 0;
 Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
-
 
 RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
 // สำหรับบอกว่ามีการ run port io
@@ -1643,7 +1642,6 @@ void readSht()
     }
     else
     {
-        // pfTemp = pfHum = 0;
         Serial.println("SHT ERROR");
         message = "Sht Error";
     }
@@ -1655,12 +1653,12 @@ void setSht()
     if (sht.init())
     {
         Serial.print("SHT init(): success\n");
+        sht.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
     }
     else
     {
         Serial.print("SHT init(): failed\n");
     }
-    sht.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
 }
 void settime()
 {
