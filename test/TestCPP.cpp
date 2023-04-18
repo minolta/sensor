@@ -249,11 +249,36 @@ void checkconn()
   Serial.print("Result:");
   Serial.print(re);
 }
+void testSht()
+{
+  SHTSensor sht;
+  Wire.begin();
+  if (sht.init())
+  {
+    Serial.print("SHT init(): success\n");
+    sht.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
+  }
+  else
+  {
+    Serial.print("SHT init(): failed\n");
+  }
+
+  if (sht.readSample())
+  {
+    float pfHum = sht.getHumidity();
+    float pfTemp = sht.getTemperature();
+    Serial.println("Read SHT H:" + String(pfHum) + " T:" + String(pfTemp));
+  }
+  else
+  {
+    Serial.println("SHT ERROR");
+  }
+}
 void setup()
 {
 
   Serial.begin(9600);
-  pinMode(2,OUTPUT);
+  pinMode(2, OUTPUT);
   delay(2000);
   UNITY_BEGIN();
   // RUN_TEST(checkconn);
@@ -261,14 +286,15 @@ void setup()
   // RUN_TEST(testSetConfig);
   // RUN_TEST(testRead);
   // RUN_TEST(Apmoderun);
-  RUN_TEST(ota);
+  // RUN_TEST(ota);
+  RUN_TEST(testSht);
   UNITY_END();
 }
 
 void loop()
 {
 
-  digitalWrite(2,!digitalRead(2));
+  digitalWrite(2, !digitalRead(2));
   delay(200);
 
   // webServer.handleClient();

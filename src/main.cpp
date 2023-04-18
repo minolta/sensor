@@ -613,10 +613,12 @@ void updateNTP()
 
 void portcheck()
 {
+
     for (int i = 0; i < ioport; i++)
     {
         if (ports[i].delay > 0)
         {
+            Serial.println("Check port");
             ports[i].delay--;
             Serial.print("Port  ");
             Serial.println(ports[i].port);
@@ -707,6 +709,7 @@ String intToEnable(int i)
 }
 void readPm()
 {
+    Serial.println("Update PM");
     int index = 0;
     char value;
     char previousValue;
@@ -1033,6 +1036,7 @@ void stopfill()
 
 void ota()
 {
+    Serial.println("OTA NOW");
     if (oledok)
     {
         displayslot.description = "OTA";
@@ -1174,6 +1178,7 @@ void reada0()
 
 void readTmp()
 {
+    Serial.println("READ DS");
     tmpvalue = ds.readDs();
 }
 // void KtypetoJSON()
@@ -1229,6 +1234,7 @@ void readRTC()
 {
     if (cfg.getIntConfig("havertc"))
     {
+        Serial.println("Update RTC");
         RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
 
         char str[20]; // declare a string as an array of chars
@@ -1634,11 +1640,13 @@ void connect()
 
 void readSht()
 {
+    Serial.println("Read sht");
     if (sht.readSample())
     {
         pfHum = sht.getHumidity();
         pfTemp = sht.getTemperature();
         message = "Read SHT H:" + String(pfHum) + " T:" + String(pfTemp);
+        Serial.println("Read SHT H:" + String(pfHum) + " T:" + String(pfTemp));
     }
     else
     {
@@ -1653,7 +1661,7 @@ void setSht()
     if (sht.init())
     {
         Serial.print("SHT init(): success\n");
-        sht.setAccuracy(SHTSensor::SHT_ACCURACY_HIGH); // only supported by SHT3x
+        sht.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
     }
     else
     {
@@ -1895,6 +1903,7 @@ void checkconnectiontask()
 
     if (checkconnectiontime > configdata.checkconnectiontime)
     {
+        Serial.println("Check connection");
         checkconnectiontime = 0;
         int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
         if (re != 200 && configdata.havetorestart)
@@ -1920,6 +1929,7 @@ void dhttask()
 {
     if (readdhttime > configdata.readdhttime && configdata.havedht)
     {
+        Serial.println("Read DHT");
         readdhttime = 0;
         message = "Read DHT";
         readDHT();
@@ -1938,7 +1948,6 @@ void shtreadtask()
     if (configdata.havesht && readshtcount > configdata.readshttime)
     {
         readshtcount = 0;
-        Serial.println("Read sht");
 
         readSht();
 
@@ -1978,6 +1987,7 @@ void rtctask()
 {
     if (configdata.havertc && rtctime > configdata.rtctimeupdate && fordisplay <= 0)
     {
+
         readRTC();
         rtctime = 0;
     }
@@ -1994,6 +2004,7 @@ void distancetask()
     if (configdata.havesonic && readdistance > configdata.readdistancetime && fordisplay <= 0)
     {
         readdistance = 0;
+        Serial.println("Update Distance");
         distance = ma();
         if (oledok)
         {
@@ -2039,6 +2050,7 @@ void a0task()
     if (configdata.havea0 && reada0time > configdata.reada0time && fordisplay <= 0)
     {
         reada0time = 0;
+        Serial.println("Update A0");
         reada0();
     }
     if (configdata.havea0 && checkintime % 30 == 0)
