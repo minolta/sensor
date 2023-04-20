@@ -31,7 +31,7 @@
 #include <ESPAsyncTCP.h>
 #include "scanwifi.h"
 #include <ESPAsyncWebServer.h>
-const String version = "127";
+const String version = "129";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -1564,6 +1564,7 @@ void Apmoderun()
 {
 
     ApMode ap("/config.cfg");
+    ap.setapmodetime(cfg.getIntConfig("apmodetimeout",3));
     ap.setApname("ESP Sensor AP Mode");
     ap.run();
 }
@@ -1771,26 +1772,14 @@ void setupntp()
     timeClient.begin();
     timeClient.setTimeOffset(25200); // Thailand +7 = 25200
 }
-void setWiFiEvent()
-{
-    gotIpEventHandler = WiFi.onStationModeGotIP([](const WiFiEventStationModeGotIP &event)
-                                                {
-    Serial.print("Station connected, IP: ");
-    Serial.println(WiFi.localIP()); 
-    isDisconnect=false; 
-    wifitimeout = 0; });
 
-    disconnectedEventHandler = WiFi.onStationModeDisconnected([](const WiFiEventStationModeDisconnected &event)
-                                                              { 
-                                                                Serial.println("Station disconnected");
-                                                               isDisconnect = true; });
-}
 void setup()
 {
 
     Serial.begin(9600);
     Serial.println();
     Serial.println();
+    flipper.attach(1, inden);
     // kt.run();
     pinMode(b_led, OUTPUT); // On Board LED
                             //   pinMode(D4, OUTPUT);
@@ -1814,10 +1803,7 @@ void setup()
     }
     connect();
     setupntp();
-    // checkconnect();
     setHttp();
-
-    flipper.attach(1, inden);
 
     if (configdata.havewater)
     {
