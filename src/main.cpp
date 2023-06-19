@@ -31,7 +31,10 @@
 #include <ESPAsyncTCP.h>
 #include "scanwifi.h"
 #include <ESPAsyncWebServer.h>
-const String version = "129";
+#include <PZEM004Tv30.h>
+
+PZEM004Tv30 pzem(&Serial);
+const String version = "130";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -60,6 +63,7 @@ int oledok = 0;
 int displayshtcount = 0;
 int displaycounter = 0;
 int checkconnectiontime = 0;
+int readpzemtime = 0;
 Configfile cfg("/config.cfg");
 
 // #include <WiFiUdp.h>
@@ -103,6 +107,15 @@ int readdistance = 0;
 // StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
 int makestatuscount = 0;
+float v;
+float i;
+float p;
+float e;
+float f;
+float pf;
+// float s;
+float q;
+
 // boolean checkconnect();
 void readSht();
 class Wifidata
@@ -218,7 +231,8 @@ struct
     int checkactivetimeout = 0;
     int apmodetimeout = 600;
     String checkinurl;
-
+    int havepzem = 0;
+    int readpzemtime = 1;
 } configdata;
 
 struct
@@ -284,6 +298,8 @@ void loadconfigtoram()
     configdata.checkinurl = cfg.getConfig("checkinurl", "http://192.168.88.21:3333/rest/piserver/checkin");
     configdata.checkactivetimeout = cfg.getIntConfig("checkactivetimeout", 600);
     configdata.apmodetimeout = cfg.getIntConfig("apmodetimeout", 60);
+    configdata.havepzem = cfg.getIntConfig("havepzem", 0);
+    configdata.readpzemtime = cfg.getIntConfig("readpzemtime", 1);
 }
 
 // water  limit
@@ -940,6 +956,10 @@ String makeStatus()
     doc["readdhttime"] = readdhttime;
     doc["configdata.checkconnectiontime"] = configdata.checkconnectiontime;
     doc["configdata.checkinurl"] = configdata.checkinurl;
+    doc["v"] = v;
+    doc["i"] = i;
+    doc["e"] = e;
+    doc["p"] = p;
     char buf[jsonbuffersize];
     serializeJsonPretty(doc, buf, jsonbuffersize);
     return String(buf);
@@ -1277,6 +1297,7 @@ void inden()
     ntptime++;
     rtctime++;
     readdistance++;
+    readpzemtime++;
     checkconnectiontime++;
     if (apmode)
     {
@@ -1564,7 +1585,7 @@ void Apmoderun()
 {
 
     ApMode ap("/config.cfg");
-    ap.setapmodetime(cfg.getIntConfig("apmodetimeout",3));
+    ap.setapmodetime(cfg.getIntConfig("apmodetimeout", 3));
     ap.setApname("ESP Sensor AP Mode");
     ap.run();
 }
@@ -1776,9 +1797,6 @@ void setupntp()
 void setup()
 {
 
-    Serial.begin(9600);
-    Serial.println();
-    Serial.println();
     flipper.attach(1, inden);
     // kt.run();
     pinMode(b_led, OUTPUT); // On Board LED
@@ -1801,9 +1819,6 @@ void setup()
     {
         setupoled();
     }
-    connect();
-    setupntp();
-    setHttp();
 
     if (configdata.havewater)
     {
@@ -1827,7 +1842,18 @@ void setup()
             ;
         mySerial.begin(9600);
     }
+    if (configdata.havepzem)
+    {
+        Serial.println("Setup Pzem");
+    }
+    else
+    {
+        Serial.begin(9600);
+    }
 
+    connect();
+    setupntp();
+    setHttp();
     settime();
     ota();
     checkin();
@@ -2140,6 +2166,21 @@ void havekey()
         }
     }
 }
+void readpzem()
+{
+    if (configdata.havepzem && readpzemtime >= configdata.readpzemtime)
+    {
+        v = pzem.voltage();
+        i = pzem.current();
+        p = pzem.power();
+        e = pzem.energy();
+        f = pzem.frequency();
+        pf = pzem.pf();
+        float s = v * i;
+        q = sqrt(pow(s, 2) - pow(p, 2));
+        readpzemtime = 0;
+    }
+}
 void loop()
 {
 
@@ -2162,6 +2203,7 @@ void loop()
     oledtask();
     watertask();
     waterlimittask();
+    readpzem();
 }
 
 boolean haveportrun()
