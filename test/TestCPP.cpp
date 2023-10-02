@@ -249,6 +249,15 @@ void checkconn()
   Serial.print("Result:");
   Serial.print(re);
 }
+void testPointer()
+{
+   long long hex = 0x1a1b2a2b3a3b4a4bULL;
+    char *ptr = (char*)&hex;
+    int i; int j;
+    for (i = 1, j = 0; i < 8, j < 7; i += 2, j += 2) {
+        printf("0x%hx%hx at address %p \n", ptr[i], ptr[j], (void *) ptr+i);
+    }
+}
 void testSht()
 {
   SHTSensor sht;
@@ -287,7 +296,8 @@ void setup()
   // RUN_TEST(testRead);
   // RUN_TEST(Apmoderun);
   // RUN_TEST(ota);
-  RUN_TEST(testSht);
+  // RUN_TEST(testSht);
+  RUN_TEST(testPointer);
   UNITY_END();
 }
 

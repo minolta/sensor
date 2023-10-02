@@ -34,7 +34,7 @@
 #include <PZEM004Tv30.h>
 
 PZEM004Tv30 pzem(&Serial);
-const String version = "130";
+const String version = "131";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -74,7 +74,7 @@ long counttime = 0;
 
 volatile int wateruse = 0;       // สำหรับบอกว่าใช้น้ำไปเท่าไหรแล้ว
 volatile int idlewaterlimit = 0; // บอกว่าไม่มีการใช้น้ำ
-KDS ds(D3);
+// KDS ds(D3);
 Ktimer kt;
 SSD1306Wire display(0x3c, D2, D1);
 AsyncWebServer server(80);
@@ -285,7 +285,7 @@ void loadconfigtoram()
     configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        // เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
     wateruse = 0;                                                             // reset use water
 
-    portconfig.D3value = cfg.getIntConfig("D3mode", 1);
+    portconfig.D3value = cfg.getIntConfig("D3mode", 0);
     portconfig.D3initvalue = cfg.getIntConfig("D3initvalue", 0);
     portconfig.D5value = cfg.getIntConfig("D5mode");
     portconfig.D5initvalue = cfg.getIntConfig("D5initvalue");
@@ -450,6 +450,56 @@ function setvalue(element,configname,value) {
         });
   xhr.send();
 }
+
+setInterval(()=>{
+  
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "/", true); 
+  xhr.addEventListener("readystatechange", () => {
+    if (xhr.readyState === 4 && xhr.status === 200) {
+    console.log(xhr.responseText);
+    var o =  JSON.parse(xhr.responseText);
+    console.log('O',o);
+    
+    var uptime = document.getElementById("uptime"); 
+    uptime.innerHTML = o.uptime 
+
+    var d1 = document.getElementById("d1"); 
+    d1.innerHTML = o.d1 
+
+var d2 = document.getElementById("d2"); 
+    d2.innerHTML = o.d2 
+
+var d3 = document.getElementById("d3"); 
+    d3.innerHTML = o.d3
+var d4 = document.getElementById("d4"); 
+    d4.innerHTML = o.d4
+var d5 = document.getElementById("d5"); 
+    d5.innerHTML = o.d5 
+
+var d6 = document.getElementById("d6"); 
+    d6.innerHTML = o.d6
+var d7 = document.getElementById("d7"); 
+    d7.innerHTML = o.d7
+var d8 = document.getElementById("d8"); 
+    d8.innerHTML = o.d8
+var t = document.getElementById("t"); 
+    t.innerHTML = o.t
+    var h = document.getElementById("h"); 
+    h.innerHTML = o.h
+    var version = document.getElementById("version"); 
+    version.innerHTML = o.version
+    var heap = document.getElementById("heap"); 
+    heap.innerHTML = o.heap
+
+    } else if (xhr.readyState === 4) {
+     console.log("could not fetch the data");
+     }
+    });
+  xhr.send();
+  console.log('Call refresh');
+}
+, 500); // 3000 milliseconds = 3 seconds
 </script>
   </head><body>
  <table id="customers">
@@ -462,7 +512,43 @@ function setvalue(element,configname,value) {
 New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick="add()">add </button>
 <hr>
 <button id=btn onClick="deleteallconfig()">Reset Config</button>
+<table id="customers">
+<tr>
+  <td>version</td><td><label id="version">0</label></td>
+    </tr><tr> 
+    <tr>
+  <td>heap</td><td><label id="heap">0</label></td>
+    </tr><tr> 
+ <tr>
+  <td>uptime</td><td><label id="uptime">0</label></td>
+    </tr><tr> 
+  <td>D1</td><td><label id="d1">0</label></td>
+    </tr><tr> 
+  <td>D2</td><td><label id="d2">0</label></td>
+    </tr><tr> 
+  <td>D3</td><td><label id="d3">0</label></td>
+    </tr><tr> 
+  <td>D4</td><td><label id="d4">0</label></td>
+   </tr><tr> 
+  <td>D5</td><td><label id="d5">0</label></td>
+    </tr><tr> 
+  <td>D6</td><td><label id="d6">0</label></td>
+    </tr><tr> 
+  <td>D7</td><td><label id="d7">0</label></td>
+   </tr><tr> 
+  <td>D8</td><td><label id="d8">0</label></td>
+    </tr>
+    <tr>
+  <td>a0</td><td><label id="a0">0</label></td>
+     </tr><tr>  
+  <td>t</td><td><label id="t">0</label></td>
+  </tr>
+       <tr>
+  <td>h</td><td><label id="h">0</label></td>
+  </tr>
 
+  </tr>
+ </table>
 </body></html>)rawliteral";
 
 int watchdog = 0;
@@ -1199,7 +1285,7 @@ void reada0()
 void readTmp()
 {
     Serial.println("READ DS");
-    tmpvalue = ds.readDs();
+    // tmpvalue = ds.readDs();
 }
 // void KtypetoJSON()
 // {
@@ -1586,7 +1672,7 @@ void Apmoderun()
 
     ApMode ap("/config.cfg");
     ap.setapmodetime(cfg.getIntConfig("apmodetimeout", 3));
-    ap.setApname("ESP Sensor AP Mode");
+    ap.setApname("AP MODE D1 " + WiFi.macAddress());
     ap.run();
 }
 int disconnecttimeout = 0;
