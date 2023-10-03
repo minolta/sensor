@@ -34,7 +34,7 @@
 #include <PZEM004Tv30.h>
 
 PZEM004Tv30 pzem(&Serial);
-const String version = "131";
+const String version = "132";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -491,6 +491,8 @@ var t = document.getElementById("t");
     version.innerHTML = o.version
     var heap = document.getElementById("heap"); 
     heap.innerHTML = o.heap
+       var name = document.getElementById("name"); 
+    name.innerHTML = o.name
 
     } else if (xhr.readyState === 4) {
      console.log("could not fetch the data");
@@ -513,6 +515,9 @@ New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick=
 <hr>
 <button id=btn onClick="deleteallconfig()">Reset Config</button>
 <table id="customers">
+<tr>
+  <td>version</td><td><label id="name">0</label></td>
+    </tr>
 <tr>
   <td>version</td><td><label id="version">0</label></td>
     </tr><tr> 
