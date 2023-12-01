@@ -1223,12 +1223,12 @@ void checkin()
         Serial.print(" Play load:");
         Serial.println(payload); // Print request response payload
         deserializeJson(ddd, payload);
-        JsonObject obj = ddd.as<JsonObject>();
-        Serial.print("---------------------------------------------------------------");
-        Serial.println(obj);
-        Serial.print("---------------------------------------------------------------");
+        // JsonObject obj = ddd.as<JsonObject>();
+        // Serial.print("---------------------------------------------------------------");
+        // Serial.println(obj);
+        // Serial.print("---------------------------------------------------------------");
 
-        name = obj["name"].as<String>();
+        name = ddd["name"].as<String>();
         if (oledok)
         {
             displayslot.foot2 = "checkin ok";
