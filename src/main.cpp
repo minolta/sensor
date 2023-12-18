@@ -32,9 +32,23 @@
 #include "scanwifi.h"
 #include <ESPAsyncWebServer.h>
 #include <PZEM004Tv30.h>
-
+#include <TinyGPSPlus.h>
+#include <SoftwareSerial.h>
+#include "Hjob.h"
+#include "Runjob.h"
+#include "html.h"
+#include <time.h>
+static const int RXPin = D7, TXPin = D8;
+static const uint32_t GPSBaud = 9600;
+KDNSServer dnsServer;
+// The TinyGPSPlus object
+TinyGPSPlus gps;
+Htask *htask = new Htask();
+Hdata *hdata = new Hdata();
+// The serial connection to the GPS device
+SoftwareSerial ss(RXPin, TXPin);
 PZEM004Tv30 pzem(&Serial);
-const String version = "132";
+const String version = "133";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -65,7 +79,7 @@ int displaycounter = 0;
 int checkconnectiontime = 0;
 int readpzemtime = 0;
 Configfile cfg("/config.cfg");
-
+void Converttime();
 // #include <WiFiUdp.h>
 
 RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
@@ -233,6 +247,8 @@ struct
     String checkinurl;
     int havepzem = 0;
     int readpzemtime = 1;
+    int havegps = 0;
+    int stanalone = 0;
 } configdata;
 
 struct
@@ -287,19 +303,21 @@ void loadconfigtoram()
 
     portconfig.D3value = cfg.getIntConfig("D3mode", 0);
     portconfig.D3initvalue = cfg.getIntConfig("D3initvalue", 0);
-    portconfig.D5value = cfg.getIntConfig("D5mode");
-    portconfig.D5initvalue = cfg.getIntConfig("D5initvalue");
-    portconfig.D6value = cfg.getIntConfig("D6mode");
-    portconfig.D6initvalue = cfg.getIntConfig("D6initvalue");
-    portconfig.D7value = cfg.getIntConfig("D7mode");
-    portconfig.D7initvalue = cfg.getIntConfig("D7initvalue");
-    portconfig.D8value = cfg.getIntConfig("D8mode");
-    portconfig.D8initvalue = cfg.getIntConfig("D8initvalue");
+    portconfig.D5value = cfg.getIntConfig("D5mode", 0);
+    portconfig.D5initvalue = cfg.getIntConfig("D5initvalue", 0);
+    portconfig.D6value = cfg.getIntConfig("D6mode", 0);
+    portconfig.D6initvalue = cfg.getIntConfig("D6initvalue", 0);
+    portconfig.D7value = cfg.getIntConfig("D7mode", 0);
+    portconfig.D7initvalue = cfg.getIntConfig("D7initvalue", 0);
+    portconfig.D8value = cfg.getIntConfig("D8mode", 0);
+    portconfig.D8initvalue = cfg.getIntConfig("D8initvalue", 0);
     configdata.checkinurl = cfg.getConfig("checkinurl", "http://192.168.88.21:3333/rest/piserver/checkin");
     configdata.checkactivetimeout = cfg.getIntConfig("checkactivetimeout", 600);
     configdata.apmodetimeout = cfg.getIntConfig("apmodetimeout", 60);
     configdata.havepzem = cfg.getIntConfig("havepzem", 0);
     configdata.readpzemtime = cfg.getIntConfig("readpzemtime", 1);
+    configdata.havegps = cfg.getIntConfig("havegps", 0);
+    configdata.stanalone = cfg.getIntConfig("stanalone", 0); // บอกให้ run stan alone
 }
 
 // water  limit
@@ -314,247 +332,6 @@ String otahost = "fw1.pixka.me";
 String type = "SENSOR";
 String urlupdate = "/espupdate/nodemcu/" + version;
 // OneWire  ds(D4);  // on pin D4 (a 4.7K resistor is necessary)
-
-const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html><head>
-  <title>ESP WIFI </title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  </head><body>
-  <form action="/get">
-    SSID: <input type="text" name="ssid">
-    PASSWORD: <input type="password" name="password">
-    <input type="submit" value="Submit">
-  </form><br> contract ky@pixka.me 
-</body></html>)rawliteral";
-const char configfile_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html><head>
-  <title>Config</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    h2 {font-size: 3.0rem;}
-    p {font-size: 3.0rem;}
-    body {max-width: 600px; margin:0px auto; padding-bottom: 25px;}
-    .switch {position: relative; display: inline-block; width: 120px; height: 68px} 
-    .switch input {display: none}
-    .slider {position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 6px}
-    .slider:before {position: absolute; content: ""; height: 52px; width: 52px; left: 8px; bottom: 8px; background-color: #fff; -webkit-transition: .4s; transition: .4s; border-radius: 3px}
-    input:checked+.slider {background-color: #b30000}
-    input:checked+.slider:before {-webkit-transform: translateX(52px); -ms-transform: translateX(52px); transform: translateX(52px)}
-
-#customers {
-    /* font-family: 'Karla', Tahoma, Varela, Arial, Helvetica, sans-serif; */
-    border-collapse: collapse;
-    width: 100%%;
-    /* font-size: 12px; */
-}
-#btn {
-  border: 1px solid #777;
-  background: #6e9e2d;
-  color: #fff;
-  font: bold 11px 'Trebuchet MS';
-  padding: 4px;
-  cursor: pointer;
-  -moz-border-radius: 4px;
-  -webkit-border-radius: 4px;
-}
-.button {
-  background-color: #4CAF50; /* Green */
-  border: none;
-  color: white;
-  padding: 15px 32px;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  font-size: 16px;
-}
-#customers td,
-#customers th {
-    border: 1px solid #ddd;
-    padding: 8px;
-}
-
-
-/* #customers tr:nth-child(even){background-color: #f2f2f2;} */
-
-#customers tr:hover {
-    background-color: #ddd;
-}
-
-#customers th {
-    padding-top: 12px;
-    padding-bottom: 12px;
-    text-align: left;
-    background-color: #4CAF50;
-    color: white;
-}
-</style>
-
-<script>
-function deleteallconfig()
-{
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", "/resetconfig", true); 
-    xhr.send();
-}
-function remove(config)
-{
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", "/removeconfig?configname="+config, true); 
-
-     xhr.addEventListener("readystatechange", () => {
-     console.log(xhr.readystate);
-    if (xhr.readyState === 4 && xhr.status === 200) {
-     console.log(xhr.responseText);
-     location.reload();
-     }
- });
-    xhr.send();
-}
-function add()
-{
-  var xhr = new XMLHttpRequest();
-  var input = document.getElementById('newconfigname');
-  var value = document.getElementById('newvalue');
-  xhr.open("GET", "/setconfig?configname="+input.value+"&value="+value.value, true); 
-  xhr.addEventListener("readystatechange", () => {
-     console.log(xhr.readystate);
-    if (xhr.readyState === 4 && xhr.status === 200) {
-     console.log(xhr.responseText);
-     var o =  JSON.parse(xhr.responseText);
-     var t = document.getElementById('customers');
-     var row = t.insertRow();
-     row.innerHTML = "<td>"+o.setconfig+"</td><td>"+o.value+"</td><td><input value="+o.value+"></td>";
-     }
- });
-  xhr.send();
-}
-function setvalue(element,configname,value) {
-  console.log("Call",element);
-  var xhr = new XMLHttpRequest();
-  var input = document.getElementById(configname);
-
-  xhr.open("GET", "/setconfig?configname="+configname+"&value="+input.value, true); 
-  xhr.addEventListener("readystatechange", () => {
-     console.log(xhr.readystate);
-    if (xhr.readyState === 4 && xhr.status === 200) {
-     console.log(xhr.responseText);
-    var o =  JSON.parse(xhr.responseText);
-  var showvalue = document.getElementById(configname+'value');  
-  console.log('Showvalue',showvalue);
-  console.log('O',o);
-  showvalue.innerHTML = o.value
-    } else if (xhr.readyState === 4) {
-     console.log("could not fetch the data");
-     }
-        });
-  xhr.send();
-}
-
-setInterval(()=>{
-  
-  var xhr = new XMLHttpRequest();
-  xhr.open("GET", "/", true); 
-  xhr.addEventListener("readystatechange", () => {
-    if (xhr.readyState === 4 && xhr.status === 200) {
-    console.log(xhr.responseText);
-    var o =  JSON.parse(xhr.responseText);
-    console.log('O',o);
-    
-    var uptime = document.getElementById("uptime"); 
-    uptime.innerHTML = o.uptime 
-
-    var d1 = document.getElementById("d1"); 
-    d1.innerHTML = o.d1 
-
-var d2 = document.getElementById("d2"); 
-    d2.innerHTML = o.d2 
-
-var d3 = document.getElementById("d3"); 
-    d3.innerHTML = o.d3
-var d4 = document.getElementById("d4"); 
-    d4.innerHTML = o.d4
-var d5 = document.getElementById("d5"); 
-    d5.innerHTML = o.d5 
-
-var d6 = document.getElementById("d6"); 
-    d6.innerHTML = o.d6
-var d7 = document.getElementById("d7"); 
-    d7.innerHTML = o.d7
-var d8 = document.getElementById("d8"); 
-    d8.innerHTML = o.d8
-var t = document.getElementById("t"); 
-    t.innerHTML = o.t
-    var h = document.getElementById("h"); 
-    h.innerHTML = o.h
-    var version = document.getElementById("version"); 
-    version.innerHTML = o.version
-    var heap = document.getElementById("heap"); 
-    heap.innerHTML = o.heap
-       var name = document.getElementById("name"); 
-    name.innerHTML = o.name
-
-    } else if (xhr.readyState === 4) {
-     console.log("could not fetch the data");
-     }
-    });
-  xhr.send();
-  console.log('Call refresh');
-}
-, 500); // 3000 milliseconds = 3 seconds
-</script>
-  </head><body>
- <table id="customers">
-  <tr>
-  <td>Config</td><td>value</td><td>Set</td><td>#</td><td>x</td>
-  </tr>
-  %CONFIG%
- </table>
-<hr>
-New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick="add()">add </button>
-<hr>
-<button id=btn onClick="deleteallconfig()">Reset Config</button>
-<table id="customers">
-<tr>
-  <td>version</td><td><label id="name">0</label></td>
-    </tr>
-<tr>
-  <td>version</td><td><label id="version">0</label></td>
-    </tr><tr> 
-    <tr>
-  <td>heap</td><td><label id="heap">0</label></td>
-    </tr><tr> 
- <tr>
-  <td>uptime</td><td><label id="uptime">0</label></td>
-    </tr><tr> 
-  <td>D1</td><td><label id="d1">0</label></td>
-    </tr><tr> 
-  <td>D2</td><td><label id="d2">0</label></td>
-    </tr><tr> 
-  <td>D3</td><td><label id="d3">0</label></td>
-    </tr><tr> 
-  <td>D4</td><td><label id="d4">0</label></td>
-   </tr><tr> 
-  <td>D5</td><td><label id="d5">0</label></td>
-    </tr><tr> 
-  <td>D6</td><td><label id="d6">0</label></td>
-    </tr><tr> 
-  <td>D7</td><td><label id="d7">0</label></td>
-   </tr><tr> 
-  <td>D8</td><td><label id="d8">0</label></td>
-    </tr>
-    <tr>
-  <td>a0</td><td><label id="a0">0</label></td>
-     </tr><tr>  
-  <td>t</td><td><label id="t">0</label></td>
-  </tr>
-       <tr>
-  <td>h</td><td><label id="h">0</label></td>
-  </tr>
-
-  </tr>
- </table>
-</body></html>)rawliteral";
 
 int watchdog = 0;
 // Portio ports[someofio];
@@ -701,21 +478,35 @@ void openwater()
     //     server.send(200, "application/json", buf);
     // }
 }
+void updateRTC()
+{
+    if (configdata.havertc)
+    {
+        long t = timeClient.getEpochTime();
+        Serial.println(t);
+        // 946659600 = timestamp sine 2000 - 1 -1 - 0:0:0 - 25200 GTM+7
+        RtcDateTime manual = RtcDateTime(t - 946659600 - 25200);
+        rtcObject.SetDateTime(manual);
+    }
+}
 void updateNTP()
 {
-    timeClient.update();
-    formattedDate = timeClient.getFormattedDate();
-    Serial.println(formattedDate);
+    if (timeClient.update())
+    {
+        formattedDate = timeClient.getFormattedDate();
+        Serial.println(formattedDate);
 
-    // Extract date
-    int splitT = formattedDate.indexOf("T");
-    dayStamp = formattedDate.substring(0, splitT);
-    Serial.print("DATE: ");
-    Serial.println(dayStamp);
-    // Extract time
-    timeStamp = formattedDate.substring(splitT + 1, formattedDate.length() - 1);
-    Serial.print("HOUR: ");
-    Serial.println(timeStamp);
+        // Extract date
+        int splitT = formattedDate.indexOf("T");
+        dayStamp = formattedDate.substring(0, splitT);
+        Serial.print("DATE: ");
+        Serial.println(dayStamp);
+        // Extract time
+        timeStamp = formattedDate.substring(splitT + 1, formattedDate.length() - 1);
+        Serial.print("HOUR: ");
+        Serial.println(timeStamp);
+        updateRTC();
+    }
 }
 
 void portcheck()
@@ -941,8 +732,9 @@ void readDHT()
 }
 String makeStatus()
 {
+    int buffersize = 2000;
     cfg.setbuffer(configdata.jsonbuffer);
-    DynamicJsonDocument doc(jsonbuffersize);
+    DynamicJsonDocument doc(buffersize);
     doc["heap"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
@@ -1051,8 +843,38 @@ String makeStatus()
     doc["i"] = i;
     doc["e"] = e;
     doc["p"] = p;
-    char buf[jsonbuffersize];
-    serializeJsonPretty(doc, buf, jsonbuffersize);
+
+    //  Serial.print(gps.location.lat(), 6);
+    // Serial.print(F(","));
+    // Serial.print(gps.location.lng(), 6);
+    if (configdata.havegps)
+    {
+        if (gps.location.isValid())
+        {
+            doc["lat"] = gps.location.lat();
+            doc["lng"] = gps.location.lng();
+        }
+        if (gps.date.isValid())
+        {
+            // Serial.print(gps.date.month());
+            // Serial.print(F("/"));
+            // Serial.print(gps.date.day());
+            // Serial.print(F("/"));
+            // Serial.print(gps.date.year());
+
+            doc["gpsday"] = gps.date.day();
+            doc["gpsmonth"] = gps.date.month();
+            doc["gpsyear"] = gps.date.year();
+        }
+        if (gps.time.isValid())
+        {
+            doc["gpsh"] = gps.time.hour();
+            doc["gpsm"] = gps.time.minute();
+            doc["gpss"] = gps.time.second();
+        }
+    }
+    char buf[buffersize];
+    serializeJsonPretty(doc, buf, buffersize);
     return String(buf);
 }
 
@@ -1103,6 +925,10 @@ int getPort(String p)
     else if (p == "D8")
     {
         return D8;
+    }
+    else if (p == "D4")
+    {
+        return D4;
     }
 
     return -1;
@@ -1341,31 +1167,35 @@ void senddata()
         // }
     }
 }
+void getRtc()
+{
+    Serial.println("Update RTC");
+    RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
+
+    char str[20]; // declare a string as an array of chars
+
+    sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+            currentTime.Year(),       // get year method
+            currentTime.Month(),      // get month method
+            currentTime.Day(),        // get day method
+            currentTime.Hour(),       // get hour method
+            currentTime.Minute(),     // get minute method
+            currentTime.Second()      // get second method
+    );
+    Serial.println(str); // print the string to the serial port
+
+    m = currentTime.Minute();
+    h = currentTime.Hour();
+    s = currentTime.Second();
+    Y = currentTime.Year();
+    M = currentTime.Month();
+    d = currentTime.Day();
+}
 void readRTC()
 {
     if (cfg.getIntConfig("havertc"))
     {
-        Serial.println("Update RTC");
-        RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
-
-        char str[20]; // declare a string as an array of chars
-
-        sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-                currentTime.Year(),       // get year method
-                currentTime.Month(),      // get month method
-                currentTime.Day(),        // get day method
-                currentTime.Hour(),       // get hour method
-                currentTime.Minute(),     // get minute method
-                currentTime.Second()      // get second method
-        );
-        Serial.println(str); // print the string to the serial port
-
-        m = currentTime.Minute();
-        h = currentTime.Hour();
-        s = currentTime.Second();
-        Y = currentTime.Year();
-        M = currentTime.Month();
-        d = currentTime.Day();
+        getRtc();
     }
 }
 void inden()
@@ -1405,11 +1235,6 @@ void inden()
     // ถ้ามีการหยุดปั๊มให้
     if (waterlimitime >= 0)
         waterlimitime--;
-    // else
-    // {
-    //     //สำหรับปิด
-    //     digitalWrite(REALYPORT,0);//ปิดระบบ ตัดน้ำ
-    // }
 
     kt.run();
 }
@@ -1753,32 +1578,134 @@ void connect()
 
 void readSht()
 {
-    Serial.println("Read sht");
-    if (sht.readSample())
+
+    if (htask != NULL)
     {
-        pfHum = sht.getHumidity();
-        pfTemp = sht.getTemperature();
-        message = "Read SHT H:" + String(pfHum) + " T:" + String(pfTemp);
-        Serial.println("Read SHT H:" + String(pfHum) + " T:" + String(pfTemp));
-    }
-    else
-    {
-        Serial.println("SHT ERROR");
-        message = "Sht Error";
+        Hdata *hd;
+        htask->read(hd);
+        pfHum = htask->geth();
+        pfTemp = htask->gett();
     }
 }
 void setSht()
 {
     // D1,D2
     Wire.begin();
-    if (sht.init())
+    htask = new Htask();
+    if (htask->init())
     {
         Serial.print("SHT init(): success\n");
-        sht.setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
     }
     else
     {
         Serial.print("SHT init(): failed\n");
+    }
+}
+time_t timeSinceEpoch;
+unsigned long updatetime; // เป็นตัวบอกว่าเวลาที่รับ timestamp จาก gps
+String gpsdate = "";
+String gpstime = "";
+String gpsdatetime = "";
+String gpsloc = "";
+String gpsraw = "";
+void Converttime()
+{
+    struct tm tm = {0};
+    char buf[100];
+    strptime(gpsdatetime.c_str(), "%d-%m-%Y %H:%M:%S", &tm);
+    timeSinceEpoch = mktime(&tm);
+    updatetime = millis();
+}
+
+void displayInfo()
+{
+    Serial.print(F("Location: "));
+    if (gps.location.isValid())
+    {
+        gpsloc = "";
+        Serial.print(gps.location.lat(), 6);
+        Serial.print(F(","));
+        Serial.print(gps.location.lng(), 6);
+        gpsloc = "Location: LAT:" + String(gps.location.lat()) + " LNG:" + String(gps.location.lng());
+    }
+    else
+    {
+        Serial.print(F("INVALID"));
+    }
+
+    Serial.print(F("  Date/Time: "));
+
+    if (gps.date.isValid())
+    {
+        Serial.print(gps.date.month());
+        Serial.print(F("/"));
+        Serial.print(gps.date.day());
+        Serial.print(F("/"));
+        Serial.print(gps.date.year());
+        char b[100];
+        sprintf(b, "%d-%d-%d", gps.date.day(), gps.date.month(), gps.date.year());
+        gpsdate = String(b);
+    }
+    else
+    {
+        gpsdate = NULL;
+        Serial.print(F("INVALID"));
+    }
+
+    Serial.print(F(" "));
+    if (gps.time.isValid())
+    {
+        if (gps.time.hour() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.hour());
+        Serial.print(F(":"));
+        if (gps.time.minute() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.minute());
+        Serial.print(F(":"));
+        if (gps.time.second() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.second());
+        Serial.print(F("."));
+        if (gps.time.centisecond() < 10)
+            Serial.print(F("0"));
+        Serial.print(gps.time.centisecond());
+
+        char b[100];
+        sprintf(b, "%d:%d:%d", gps.time.hour(), gps.time.minute(), gps.time.second());
+        gpstime = String(b);
+    }
+    else
+    {
+        Serial.print(F("INVALID"));
+        gpstime = NULL;
+    }
+
+    if (gpsdate != NULL && gpstime != NULL)
+    {
+        char buf[500];
+        sprintf(buf, "%d-%d-%d %d:%d:%d", gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(),
+                gps.time.second());
+        gpsdatetime = String(buf);
+
+        Converttime();
+    }
+    Serial.println();
+}
+void readGps()
+{
+    if (configdata.havegps)
+    {
+        while (ss.available() > 0)
+            if (gps.encode(ss.read()))
+                displayInfo();
+
+        if (millis() > 15000 && gps.charsProcessed() < 10)
+        {
+            Serial.println(F("No GPS detected: check wiring."));
+            // while (true)
+            //   ;
+        }
     }
 }
 void settime()
@@ -1885,70 +1812,29 @@ void setupntp()
     timeClient.setTimeOffset(25200); // Thailand +7 = 25200
 }
 
-void setup()
+void setStanaloneWifi()
 {
+    String espname = cfg.getConfig("stanalonename", "ESP-");
+    String pass = cfg.getConfig("stanalonepassword", "1234567890");
+    const byte DNS_PORT = 53;
+    IPAddress apIP(10, 10, 10, 1); // Private network for server
+    Serial.begin(9600);
+    pinMode(2, OUTPUT);
+    WiFi.mode(WIFI_AP);
+    WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
 
-    flipper.attach(1, inden);
-    // kt.run();
-    pinMode(b_led, OUTPUT); // On Board LED
-                            //   pinMode(D4, OUTPUT);
-                            //  pinMode(LED_BUILTIN, OUTPUT);
-                            // pinMode(D6, OUTPUT);
-                            // pinMode(D5, OUTPUT);
-                            // pinMode(D1, OUTPUT);
-                            //   pinMode(D3, OUTPUT);
-                            //  digitalWrite(D3,0);
-    cfg.setbuffer(configdata.jsonbuffer);
-    if (!cfg.openFile())
-    {
-        Serial.println("Init file");
-        initConfig();
-    }
-    loadconfigtoram();
-    setport();
-    if (cfg.getIntConfig("haveoled"))
-    {
-        setupoled();
-    }
-
-    if (configdata.havewater)
-    {
-        setupwater();
-    }
-    if (configdata.havedht)
-    {
-        dht.begin();
-        readDHT();
-    }
-
-    if (configdata.havesht)
-    {
-        setSht();
-    }
-
-    // ถ้ามีการต่อ Pm Sensor
-    if (configdata.havepmsensor)
-    {
-        while (!Serial)
-            ;
-        mySerial.begin(9600);
-    }
-    if (configdata.havepzem)
-    {
-        Serial.println("Setup Pzem");
-    }
-    else
-    {
-        Serial.begin(9600);
-    }
-
-    connect();
-    setupntp();
-    setHttp();
-    settime();
-    ota();
-    checkin();
-    // setWiFiEvent();
+    String wifi = espname + " " + WiFi.macAddress().c_str();
+    WiFi.softAP(wifi, pass); // WiFi name
+    dnsServer.start(DNS_PORT, "*", apIP);
+}
+void setstanaloneGps()
+{
+    ss.begin(GPSBaud);
+}
+void runstanalone()
+{
+    setStanaloneWifi();
+    setstanaloneGps();
 }
 
 void displaySht()
@@ -2235,11 +2121,16 @@ void waterlimittask()
         }
     }
 }
+unsigned long getUptime()
+{
+    return millis() / 1000;
+}
 void havekey()
 {
     if (Serial.available())
     {
         char k = Serial.read();
+        Serial.printf("Key is %c\n", k);
         if (k == 'w')
         {
             scanwifi();
@@ -2254,6 +2145,13 @@ void havekey()
         {
             int r = WiFi.reconnect();
             Serial.printf("REconnect %s  = %d \n", cfg.getConfig("talkurl").c_str(), r);
+        }
+        else if (k == 'c')
+        {
+            getRtc();
+        }
+        else
+        {
         }
     }
 }
@@ -2272,29 +2170,276 @@ void readpzem()
         readpzemtime = 0;
     }
 }
-void loop()
+Job *js = new Job();
+String filllist(const String &var)
+{
+    // Serial.println(var);
+    char buf[2024];
+    String tr = "";
+    if (var == "list")
+    {
+        Serial.println("Fill list");
+        Espjob *index = js->getfirst();
+        // tr += "<tr><td>" + String(js->getsize()) + "</td></tr>";
+        while (index != NULL)
+        {
+            Serial.println(index->id);
+            sprintf(buf, "<tr><td>%d</td><td>%.2f</td><td>%.2f</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td><button onclick='deletejob(%d)'>delete</button></td></tr>\n",
+                    index->id, index->hlow, index->hhigh, index->port, index->runtime, index->waittime, index->out, index->enable, index->stime, index->etime, index->id);
+            tr += String(buf);
+
+            index = index->n;
+        }
+    }
+    if (var == "CONFIG")
+    {
+        Configfile cfg = Configfile("/config.cfg");
+        cfg.setbuffer(2024);
+        cfg.openFile();
+
+        // cfg.load();
+        DynamicJsonDocument dy = cfg.getAll();
+
+        JsonObject documentRoot = dy.as<JsonObject>();
+        serializeJsonPretty(documentRoot, Serial);
+        for (JsonPair keyValue : documentRoot)
+        {
+            Serial.println(keyValue.key().c_str());
+            Serial.println(keyValue.value().as<const char *>());
+
+            // String v = dy[keyValue.key()];
+            // String k = keyValue.key().c_str();
+            String v = keyValue.value().as<const char *>();
+            String k = keyValue.key().c_str();
+            tr += "<tr><td>" + k + "</td><td> <label id=" + k + "value>" + v + "</label> </td> <td> <input id = " + k + " value =\"" + v + "\"></td><td><button id=btn onClick=\"setvalue(this,'" + k + "','" + v + "')\">Set</button></td><td><button id=btn onClick=\"remove('" + k + "')\">Remove</button></td></tr>\n";
+        }
+        tr += "<tr><td>heap</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
+    }
+
+    return tr;
+}
+/**
+ * @brief
+ *
+ * @return unsigned long
+ */
+unsigned long getEP()
+{
+    return timeSinceEpoch + ((millis() - updatetime) / 1000);
+}
+int getDay()
+{
+    return (((getEP() / 86400L) + 4) % 7); // 0 is Sunday
+}
+int getHours()
+{
+    return ((getEP() % 86400L) / 3600);
+}
+int getMinutes()
+{
+    return ((getEP() % 3600) / 60);
+}
+int getSeconds()
+{
+    return (getEP() % 60);
+}
+void setstanalonehttp()
 {
 
-    havekey();
-    checkintask();
-    displaytmptask();
-    apmodetask();
-    checkconnectiontask();
-    otatask();
-    dhttask();
-    dsreadtask();
-    shtreadtask();
-    porttask();
-    ntptask();
-    rtctask();
-    pmtask();
-    distancetask();
-    countertask();
-    a0task();
-    oledtask();
-    watertask();
-    waterlimittask();
-    readpzem();
+    server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send_P(200, "text/html", configfile_html, fillconfig); });
+    //-------------------------------------------------------------------------------------------------------------------------
+    server.on("/resetconfig", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+        cfg.resettodefault();
+        loadconfigtoram();
+  request->send(200, "application/json", "{\"setconfig\":\"ok\",\"value\":\"ok\"}");
+  ESP.restart(); });
+    server.on("/setconfig", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+        String v = request->arg("configname");
+        String value = request->arg("value");
+        cfg.addConfig(v, value);
+        loadconfigtoram();
+  request->send(200, "application/json", "{\"setconfig\":\"" + v + "\",\"value\":\"" + value + "\"}"); });
+
+    server.on("/removeconfig", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+        String v = request->arg("configname");
+        cfg.remove(v);
+        loadconfigtoram();
+  request->send(200, "application/json", "{\"remove\":\"" + v + "\"}"); });
+    //-------------------------------------------------------------------------------------------------------------------------
+    server.on("/config", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+                DynamicJsonDocument dd  = cfg.getAll();
+                char buf[jsonbuffersize];
+                serializeJsonPretty(dd,buf,jsonbuffersize);
+                request->send(200, "application/json", buf); });
+
+    server.on("/deletejob", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+                int id = request->getParam("id")->value().toInt();
+               Espjob *p =  js->findById(id);
+               js->deletejob(p);
+               js->savetofile("/job.job");
+                request->send(200, "text/html", js->toString()); });
+    server.on("/time", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+             unsigned long t = getEP();
+            //  unsigned long t1 = timeSinceEpoch;
+            //  String b = "<i>"+bb+"</i> <b> "+String(t)+" </b> | GPS datetime: "+gpsdatetime +" Gps date:"+gpsdate+" Gps time:"+gpstime
+             +" "+gpsloc;
+                unsigned long heap = system_get_free_heap_size();
+             String j = "{\"datetime\":\""+gpsdatetime+"+\",\"timestamp\":"+t+",\"uptime\":"+getUptime()+",\"t\":"+htask->gett()+",\"h\":"+htask->geth()+",\"heap\":"+heap+"}";
+              request->send(200, "application/json", j ); });
+    server.on("/savejob", HTTP_GET, [](AsyncWebServerRequest *request)
+              { 
+               String port = request->getParam("port")->value();
+
+               int intport = getPort(port);
+               String hlow = request->getParam("hlow")->value();
+               String hhigh = request->getParam("hhigh")->value();
+               String runtime = request->getParam("runtime")->value();
+               String waittime = request->getParam("waittime")->value();
+               String out = request->getParam("output")->value();
+               String enable = request->getParam("enable")->value();
+               String stime = request->getParam("stime")->value();
+               String etime = request->getParam("etime")->value();
+                // Serial.println(request->getParam("port")->value());
+                // char buf [2024];
+                // sprintf(buf, "%d,%.2f,%.2f,%d,%d,%d,%d,%d", js->getsize()+1, hlow, hhigh, port, runtime, waittime, 1, out);
+                // Serial.printf("\nSave job =>  %s\n",buf);
+                js->addJob(js->newjob(js->getsize()+1,hlow.toFloat(),hhigh.toFloat(),intport,runtime.toInt(),
+                waittime.toInt(),enable.toInt(),out.toInt(),stime,etime));
+                js->savetofile("/job.job");
+                // sprintf(buf,"size:%d Port:%s runttime: %s waittime: %s OUT:%s", js->getsize() ,port,runtime,waittime,out);
+                request->send(200, "text/html","ok"); });
+    server.on("/addjob", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send_P(200, "text/html", addjob_html, filllist); });
+
+    server.on("/jobs", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "text/html", js->toString()); });
+    server.onNotFound([](AsyncWebServerRequest *request)
+                      { request->send_P(200, "text/html", indexstanalone_html); });
+    server.begin();
+}
+
+void setup()
+{
+
+    flipper.attach(1, inden);
+    // kt.run();
+    pinMode(b_led, OUTPUT); // On Board LED
+                            //   pinMode(D4, OUTPUT);
+                            //  pinMode(LED_BUILTIN, OUTPUT);
+                            // pinMode(D6, OUTPUT);
+                            // pinMode(D5, OUTPUT);
+                            // pinMode(D1, OUTPUT);
+                            //   pinMode(D3, OUTPUT);
+                            //  digitalWrite(D3,0);
+    cfg.setbuffer(configdata.jsonbuffer);
+    if (!cfg.openFile())
+    {
+        Serial.println("Init file");
+        initConfig();
+    }
+    loadconfigtoram();
+    setport();
+    if (cfg.getIntConfig("haveoled"))
+    {
+        setupoled();
+    }
+
+    if (configdata.havewater)
+    {
+        setupwater();
+    }
+    if (configdata.havedht)
+    {
+        dht.begin();
+        readDHT();
+    }
+
+    if (configdata.havesht)
+    {
+        setSht();
+    }
+
+    // ถ้ามีการต่อ Pm Sensor
+    if (configdata.havepmsensor)
+    {
+        while (!Serial)
+            ;
+        mySerial.begin(9600);
+    }
+    if (configdata.havepzem)
+    {
+        Serial.println("Setup Pzem");
+    }
+    else
+    {
+        Serial.begin(9600);
+    }
+
+    if (!configdata.stanalone)
+    {
+        connect();
+        setupntp();
+        setHttp();
+        settime();
+        ota();
+        checkin();
+    }
+    else
+    {
+        js->load("/job.job");
+        runstanalone();
+        setstanalonehttp();
+        htask->init();
+        htask->setreadNext(10);
+    }
+    if (configdata.havegps)
+    {
+        ss.begin(GPSBaud);
+    }
+    // setWiFiEvent();
+}
+
+void loop()
+{
+    if (!configdata.stanalone)
+    {
+        havekey();
+        checkintask();
+        displaytmptask();
+        apmodetask();
+        checkconnectiontask();
+        otatask();
+        dhttask();
+        dsreadtask();
+        shtreadtask();
+        porttask();
+        ntptask();
+        rtctask();
+        pmtask();
+        distancetask();
+        countertask();
+        a0task();
+        oledtask();
+        watertask();
+        waterlimittask();
+        readpzem();
+        readGps();
+    }
+    else
+    {
+
+        readGps();
+        htask->readInterval(hdata);
+        dnsServer.processNextRequest();
+        // run stan alone
+    }
 }
 
 boolean haveportrun()
