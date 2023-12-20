@@ -11,7 +11,7 @@ struct Hdata
 
 class Htask
 {
-    
+
     SHTSensor *sht;
     float t, h;
     bool readok = false;
@@ -26,11 +26,16 @@ public:
     int init()
     {
         Wire.begin();
-        sht = new SHTSensor();
+        if (sht == NULL)
+            sht = new SHTSensor();
         if (sht->init())
         {
             sht->setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
             return true;
+        }
+        else
+        {
+            Serial.println("Sht ERROR");
         }
 
         return false;
@@ -54,6 +59,21 @@ public:
 
         p = NULL;
     }
+    void read()
+    {
+        if (sht->readSample())
+        {
+            readok = true;
+            h = sht->getHumidity();
+            t = sht->getTemperature();
+        }
+        else
+        {
+            h = -200;
+            t = -200;
+            readok = false;
+        }
+    }
     void read(Hdata *d)
     {
         if (sht->readSample())
@@ -68,8 +88,8 @@ public:
         {
             h = -200;
             t = -200;
-        readok = false;
-        d = NULL;
+            readok = false;
+            d = NULL;
         }
     }
 

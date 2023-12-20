@@ -241,8 +241,8 @@ var ht = document.getElementById("ht");
  <tr><td>เวลาในการทำงาน </td><td><label><input id=runtime type="number" name="runtime"></label></td></tr>
 
  <tr><td>เวลาหยุดพัก </td><td><label><input id=waittime  type="number" name="waittime"></label></td></tr>
- <tr><td>เวลาเริ่มช่วงการทำงาน</td><td><input id=stime type="time" name="stime"></td></tr>
- <tr><td>เวลาสิ้นสุดช่วงการทำงาน</td><td> <input id=etime type="time" nmae="etime"></td></tr>
+ <tr><td>เวลาเริ่มช่วงการทำงาน</td><td><input id=stime type="time"  value="" name="stime"></td></tr>
+ <tr><td>เวลาสิ้นสุดช่วงการทำงาน</td><td> <input id=etime type="time" value="" nmae="etime"></td></tr>
   <tr><td colspan="2" align=right><button onClick='savejob()'>Add</button></td></tr>
 
   </table>

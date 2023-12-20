@@ -1,9 +1,9 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
-#include <Adafruit_Sensor.h>
-#include <DHT.h>
-#include <DHT_U.h>
-#include <OneWire.h>
+// #include <Adafruit_Sensor.h>
+// #include <DHT.h>
+// #include <DHT_U.h>
+// #include <OneWire.h>
 #include "Apmode.h"
 #include <SPI.h>
 #include <ESP8266HTTPClient.h>
@@ -19,13 +19,13 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <SoftwareSerial.h>
-#include <RtcDS3231.h> //RTC library
-#include <ESP8266Ping.h>
+// #include <RtcDS3231.h> //RTC library
+// #include <ESP8266Ping.h>
 #include <Ticker.h>
 #include "KAnalog.h"
-#include <EEPROM.h>
-#include "Adafruit_Sensor.h"
-#include "Adafruit_AM2320.h"
+// #include <EEPROM.h>
+// #include "Adafruit_Sensor.h"
+// #include "Adafruit_AM2320.h"
 #include "Configfile.h"
 #include <TM1637Display.h>
 #include <ESPAsyncTCP.h>
@@ -33,22 +33,20 @@
 #include <ESPAsyncWebServer.h>
 #include <PZEM004Tv30.h>
 #include <TinyGPSPlus.h>
-#include <SoftwareSerial.h>
 #include "Hjob.h"
 #include "Runjob.h"
 #include "html.h"
 #include <time.h>
-static const int RXPin = D7, TXPin = D8;
-static const uint32_t GPSBaud = 9600;
+#include "Gps.h"
+
+GPS *gps;
 KDNSServer dnsServer;
 // The TinyGPSPlus object
-TinyGPSPlus gps;
 Htask *htask = new Htask();
 Hdata *hdata = new Hdata();
 // The serial connection to the GPS device
-SoftwareSerial ss(RXPin, TXPin);
 PZEM004Tv30 pzem(&Serial);
-const String version = "133";
+const String version = "139";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -57,7 +55,7 @@ const String version = "133";
 #define TMCLK D7
 #define TMDIO D6
 #define REALYPORT D7 // สำหรับยกน้ำออก
-WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
+// WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
 int isDisconnect = false; // สำหรับบอกสถานะว่า wifi หลุด
 char jsonChar[jsonbuffersize];
 long distance = 0;
@@ -78,11 +76,12 @@ int displayshtcount = 0;
 int displaycounter = 0;
 int checkconnectiontime = 0;
 int readpzemtime = 0;
+int gpsdisplaytime = 0;
 Configfile cfg("/config.cfg");
 void Converttime();
 // #include <WiFiUdp.h>
 
-RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
+// RtcDS3231<TwoWire> rtcObject(Wire); // Uncomment for version 2.0.0 of the rtc library
 // สำหรับบอกว่ามีการ run port io
 long counttime = 0;
 
@@ -115,7 +114,6 @@ double loadav = 0;
 double loadtotal = 0;
 double psi = 0;
 int ledstatus = 0;
-SHTSensor sht;
 int readdistance = 0;
 // int a0readcount = 0;
 // StaticJsonDocument<jsonbuffersize> doc;
@@ -349,6 +347,7 @@ int count = 0;
 #define DHTPIN D3 // Pin which is connected to the DHT sensor.
 boolean haveportrun();
 uint8_t deviceCount = 0;
+TimeService *ts;
 float tempC;
 // Timer t;
 KAnalog analog;
@@ -367,7 +366,7 @@ const byte hx711_clock_pin = D2;
 //   https://learn.adafruit.com/dht/overview
 
 // DHT_Unified dht(DHTPIN, DHTTYPE);
-Adafruit_AM2320 am2320 = Adafruit_AM2320();
+// Adafruit_AM2320 am2320 = Adafruit_AM2320();
 int countsend = 0;
 uint32_t delayMS;
 float pfDew, pfHum, pfTemp, pfVcc;
@@ -383,7 +382,7 @@ int readshtcount = 0;
 #define DHT
 
 #ifdef DHT
-DHT_Unified dht(DHTPIN, DHTTYPE);
+// DHT_Unified dht(DHTPIN, DHTTYPE);
 #endif
 // int ktcSO = D6;
 // int ktcCS = D7;
@@ -391,6 +390,7 @@ DHT_Unified dht(DHTPIN, DHTTYPE);
 
 // MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
 // ESP8266WiFiMulti WiFiMulti;
+Runjob *runservice;
 float ktypevalue = 0;
 Ticker flipper;
 
@@ -482,11 +482,11 @@ void updateRTC()
 {
     if (configdata.havertc)
     {
-        long t = timeClient.getEpochTime();
-        Serial.println(t);
-        // 946659600 = timestamp sine 2000 - 1 -1 - 0:0:0 - 25200 GTM+7
-        RtcDateTime manual = RtcDateTime(t - 946659600 - 25200);
-        rtcObject.SetDateTime(manual);
+        // long t = timeClient.getEpochTime();
+        // Serial.println(t);
+        // // 946659600 = timestamp sine 2000 - 1 -1 - 0:0:0 - 25200 GTM+7
+        // RtcDateTime manual = RtcDateTime(t - 946659600 - 25200);
+        // rtcObject.SetDateTime(manual);
     }
 }
 void updateNTP()
@@ -689,46 +689,46 @@ void setport()
 }
 void readDHT()
 {
-    readdhtstate = 1;
+    // readdhtstate = 1;
 
-    // Delay between measurements.
-    // delay(delayMS);
-    // Get temperature event and print its value.
-    sensors_event_t event;
-    dht.begin();
-    dht.temperature().getEvent(&event);
-    if (isnan(event.temperature))
-    {
-        Serial.println("Error reading temperature!");
-        message = "ERROR reading temperature";
-    }
-    else
-    {
-        Serial.print("Temperature: ");
-        Serial.print(event.temperature);
-        Serial.println(" *C");
-        pfTemp = event.temperature;
-        dhtbuffer.t = pfTemp;
-        dhtbuffer.count = 120; // update buffer life time
-    }
-    // Get humidity event and print its value.
-    dht.humidity().getEvent(&event);
-    if (isnan(event.relative_humidity))
-    {
-        Serial.println("Error reading humidity!");
-    }
-    else
-    {
-        Serial.print("Humidity: ");
-        Serial.print(event.relative_humidity);
-        Serial.println("%");
-        pfHum = event.relative_humidity;
-        dhtbuffer.h = pfHum;
-        dhtbuffer.count = 120; // update buffer life time
-        message = "Read DHT T:" + String(pfTemp) + " H: " + String(pfHum);
-    }
+    // // Delay between measurements.
+    // // delay(delayMS);
+    // // Get temperature event and print its value.
+    // sensors_event_t event;
+    // dht.begin();
+    // dht.temperature().getEvent(&event);
+    // if (isnan(event.temperature))
+    // {
+    //     Serial.println("Error reading temperature!");
+    //     message = "ERROR reading temperature";
+    // }
+    // else
+    // {
+    //     Serial.print("Temperature: ");
+    //     Serial.print(event.temperature);
+    //     Serial.println(" *C");
+    //     pfTemp = event.temperature;
+    //     dhtbuffer.t = pfTemp;
+    //     dhtbuffer.count = 120; // update buffer life time
+    // }
+    // // Get humidity event and print its value.
+    // dht.humidity().getEvent(&event);
+    // if (isnan(event.relative_humidity))
+    // {
+    //     Serial.println("Error reading humidity!");
+    // }
+    // else
+    // {
+    //     Serial.print("Humidity: ");
+    //     Serial.print(event.relative_humidity);
+    //     Serial.println("%");
+    //     pfHum = event.relative_humidity;
+    //     dhtbuffer.h = pfHum;
+    //     dhtbuffer.count = 120; // update buffer life time
+    //     message = "Read DHT T:" + String(pfTemp) + " H: " + String(pfHum);
+    // }
 
-    readdhtstate = 0;
+    // readdhtstate = 0;
 }
 String makeStatus()
 {
@@ -809,22 +809,22 @@ String makeStatus()
     }
     if (cfg.getIntConfig("havertc"))
     {
-        RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
+        // RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
 
-        if (currentTime.Year() != 2000)
-        {
-            char str[20]; // declare a string as an array of chars
+        // if (currentTime.Year() != 2000)
+        // {
+        //     char str[20]; // declare a string as an array of chars
 
-            sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-                    currentTime.Year(),       // get year method
-                    currentTime.Month(),      // get month method
-                    currentTime.Day(),        // get day method
-                    currentTime.Hour(),       // get hour method
-                    currentTime.Minute(),     // get minute method
-                    currentTime.Second()      // get second method
-            );
-            doc["rtctime"] = str;
-        }
+        //     sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+        //             currentTime.Year(),       // get year method
+        //             currentTime.Month(),      // get month method
+        //             currentTime.Day(),        // get day method
+        //             currentTime.Hour(),       // get hour method
+        //             currentTime.Minute(),     // get minute method
+        //             currentTime.Second()      // get second method
+        //     );
+        //     doc["rtctime"] = str;
+        // }
     }
     doc["ntptime"] = timeClient.getFormattedTime();
     doc["ntptimelong"] = timeClient.getEpochTime();
@@ -849,29 +849,6 @@ String makeStatus()
     // Serial.print(gps.location.lng(), 6);
     if (configdata.havegps)
     {
-        if (gps.location.isValid())
-        {
-            doc["lat"] = gps.location.lat();
-            doc["lng"] = gps.location.lng();
-        }
-        if (gps.date.isValid())
-        {
-            // Serial.print(gps.date.month());
-            // Serial.print(F("/"));
-            // Serial.print(gps.date.day());
-            // Serial.print(F("/"));
-            // Serial.print(gps.date.year());
-
-            doc["gpsday"] = gps.date.day();
-            doc["gpsmonth"] = gps.date.month();
-            doc["gpsyear"] = gps.date.year();
-        }
-        if (gps.time.isValid())
-        {
-            doc["gpsh"] = gps.time.hour();
-            doc["gpsm"] = gps.time.minute();
-            doc["gpss"] = gps.time.second();
-        }
     }
     char buf[buffersize];
     serializeJsonPretty(doc, buf, buffersize);
@@ -973,24 +950,27 @@ void stopfill()
 
 void ota()
 {
-    Serial.println("OTA NOW");
+    Serial.println("OTA NOW ===================+++++++++++------------------");
     if (oledok)
     {
         displayslot.description = "OTA";
         dd();
     }
     WiFiClient client;
-    Serial.println("OTA");
-    Serial.println(urlupdate);
+    Serial.print("OTAURL:");
+
     String u = cfg.getConfig("otaurl", "http://192.168.88.21:2005/rest/fw/update/sensor/");
     String url = u + version;
-
+    Serial.println(url);
     t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
-    Serial.println("return " + ret);
+    String error =  ESPhttpUpdate.getLastErrorString();
+  
+    Serial.println("return #################### " + error+ "###########################3");
     switch (ret)
     {
     case HTTP_UPDATE_FAILED:
-        Serial.println("[update] Update failed.");
+        Serial.println("[update] Update failed. : "+ ESPhttpUpdate.getLastErrorString());
+        message = "update ERROR "+ESPhttpUpdate.getLastErrorString();
         break;
     case HTTP_UPDATE_NO_UPDATES:
         if (oledok)
@@ -1138,11 +1118,11 @@ void readTmp()
 
 void readAm2320()
 {
-    pfTemp = am2320.readTemperature();
-    pfHum = am2320.readHumidity();
-    dhtbuffer.t = pfTemp;
-    dhtbuffer.h = pfHum;
-    dhtbuffer.count = 120; // update buffer life time
+    // pfTemp = am2320.readTemperature();
+    // pfHum = am2320.readHumidity();
+    // dhtbuffer.t = pfTemp;
+    // dhtbuffer.h = pfHum;
+    // dhtbuffer.count = 120; // update buffer life time
 }
 void readam()
 {
@@ -1169,27 +1149,27 @@ void senddata()
 }
 void getRtc()
 {
-    Serial.println("Update RTC");
-    RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
+    // Serial.println("Update RTC");
+    // RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
 
-    char str[20]; // declare a string as an array of chars
+    // char str[20]; // declare a string as an array of chars
 
-    sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-            currentTime.Year(),       // get year method
-            currentTime.Month(),      // get month method
-            currentTime.Day(),        // get day method
-            currentTime.Hour(),       // get hour method
-            currentTime.Minute(),     // get minute method
-            currentTime.Second()      // get second method
-    );
-    Serial.println(str); // print the string to the serial port
+    // sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+    //         currentTime.Year(),       // get year method
+    //         currentTime.Month(),      // get month method
+    //         currentTime.Day(),        // get day method
+    //         currentTime.Hour(),       // get hour method
+    //         currentTime.Minute(),     // get minute method
+    //         currentTime.Second()      // get second method
+    // );
+    // Serial.println(str); // print the string to the serial port
 
-    m = currentTime.Minute();
-    h = currentTime.Hour();
-    s = currentTime.Second();
-    Y = currentTime.Year();
-    M = currentTime.Month();
-    d = currentTime.Day();
+    // m = currentTime.Minute();
+    // h = currentTime.Hour();
+    // s = currentTime.Second();
+    // Y = currentTime.Year();
+    // M = currentTime.Month();
+    // d = currentTime.Day();
 }
 void readRTC()
 {
@@ -1203,6 +1183,7 @@ void inden()
     displaycounter++;
     displayshtcount++;
     displaytmp++;
+    gpsdisplaytime++;
     makestatuscount++;
     uptime++;
     if (isDisconnect)
@@ -1303,7 +1284,11 @@ void setHttp()
     // server.on("/run", run);
     // server.on("/a0", a0);
     // server.on("/setwifi", setwifi);
+
     // server.on("/scanwifi", scanwifi);
+
+ server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send_P(200, "text/html", configfile_html, fillconfig); });
 
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send_P(200, "text/html", configfile_html, fillconfig); });
@@ -1581,8 +1566,7 @@ void readSht()
 
     if (htask != NULL)
     {
-        Hdata *hd;
-        htask->read(hd);
+        htask->read();
         pfHum = htask->geth();
         pfTemp = htask->gett();
     }
@@ -1590,15 +1574,17 @@ void readSht()
 void setSht()
 {
     // D1,D2
-    Wire.begin();
-    htask = new Htask();
+    // Wire.begin();
+    if (htask == NULL)
+        htask = new Htask();
+
     if (htask->init())
     {
-        Serial.print("SHT init(): success\n");
+        Serial.print("*********************** SHT init(): success ************************\n");
     }
     else
     {
-        Serial.print("SHT init(): failed\n");
+        Serial.print("XXXXXXXXXXXXXXXXXXXX SHT init(): failed XXXXXXXXXXXXXXXXXXXXXXX\n");
     }
 }
 time_t timeSinceEpoch;
@@ -1608,103 +1594,27 @@ String gpstime = "";
 String gpsdatetime = "";
 String gpsloc = "";
 String gpsraw = "";
-void Converttime()
-{
-    struct tm tm = {0};
-    char buf[100];
-    strptime(gpsdatetime.c_str(), "%d-%m-%Y %H:%M:%S", &tm);
-    timeSinceEpoch = mktime(&tm);
-    updatetime = millis();
-}
 
-void displayInfo()
-{
-    Serial.print(F("Location: "));
-    if (gps.location.isValid())
-    {
-        gpsloc = "";
-        Serial.print(gps.location.lat(), 6);
-        Serial.print(F(","));
-        Serial.print(gps.location.lng(), 6);
-        gpsloc = "Location: LAT:" + String(gps.location.lat()) + " LNG:" + String(gps.location.lng());
-    }
-    else
-    {
-        Serial.print(F("INVALID"));
-    }
-
-    Serial.print(F("  Date/Time: "));
-
-    if (gps.date.isValid())
-    {
-        Serial.print(gps.date.month());
-        Serial.print(F("/"));
-        Serial.print(gps.date.day());
-        Serial.print(F("/"));
-        Serial.print(gps.date.year());
-        char b[100];
-        sprintf(b, "%d-%d-%d", gps.date.day(), gps.date.month(), gps.date.year());
-        gpsdate = String(b);
-    }
-    else
-    {
-        gpsdate = NULL;
-        Serial.print(F("INVALID"));
-    }
-
-    Serial.print(F(" "));
-    if (gps.time.isValid())
-    {
-        if (gps.time.hour() < 10)
-            Serial.print(F("0"));
-        Serial.print(gps.time.hour());
-        Serial.print(F(":"));
-        if (gps.time.minute() < 10)
-            Serial.print(F("0"));
-        Serial.print(gps.time.minute());
-        Serial.print(F(":"));
-        if (gps.time.second() < 10)
-            Serial.print(F("0"));
-        Serial.print(gps.time.second());
-        Serial.print(F("."));
-        if (gps.time.centisecond() < 10)
-            Serial.print(F("0"));
-        Serial.print(gps.time.centisecond());
-
-        char b[100];
-        sprintf(b, "%d:%d:%d", gps.time.hour(), gps.time.minute(), gps.time.second());
-        gpstime = String(b);
-    }
-    else
-    {
-        Serial.print(F("INVALID"));
-        gpstime = NULL;
-    }
-
-    if (gpsdate != NULL && gpstime != NULL)
-    {
-        char buf[500];
-        sprintf(buf, "%d-%d-%d %d:%d:%d", gps.date.day(), gps.date.month(), gps.date.year(), gps.time.hour(), gps.time.minute(),
-                gps.time.second());
-        gpsdatetime = String(buf);
-
-        Converttime();
-    }
-    Serial.println();
-}
 void readGps()
 {
     if (configdata.havegps)
     {
-        while (ss.available() > 0)
-            if (gps.encode(ss.read()))
-                displayInfo();
-
-        if (millis() > 15000 && gps.charsProcessed() < 10)
+        if (gps != NULL)
         {
-            Serial.println(F("No GPS detected: check wiring."));
-            // while (true)
-            //   ;
+            gps->read();
+        }
+    }
+}
+void displayGpsData()
+{
+    if (gpsdisplaytime > 10 &&configdata.havegps)
+    {
+        Serial.print("GPS:");
+        gpsdisplaytime = 0;
+        if (gps != NULL)
+        {
+            Serial.println(gps->getData());
+            Serial.println(gps->timeEpoch());
         }
     }
 }
@@ -1723,18 +1633,18 @@ void settime()
 
         Serial.print("T: ");
         Serial.println(t);
-        if (cfg.getIntConfig("havertc"))
-        {
-            RtcDateTime currentTime = RtcDateTime(t - 946684800); // define date and time object
-            rtcObject.SetDateTime(currentTime);                   // configure the RTC with object
-        }
+        // if (cfg.getIntConfig("havertc"))
+        // {
+        //     RtcDateTime currentTime = RtcDateTime(t - 946684800); // define date and time object
+        //     rtcObject.SetDateTime(currentTime);                   // configure the RTC with object
+        // }
     }
 }
 
 void setRTC()
 {
-    if (cfg.getIntConfig("havertc"))
-        rtcObject.Begin(); // Starts I2C
+//     if (cfg.getIntConfig("havertc"))
+//         rtcObject.Begin(); // Starts I2C
 }
 
 void setupoled()
@@ -1827,14 +1737,10 @@ void setStanaloneWifi()
     WiFi.softAP(wifi, pass); // WiFi name
     dnsServer.start(DNS_PORT, "*", apIP);
 }
-void setstanaloneGps()
-{
-    ss.begin(GPSBaud);
-}
+
 void runstanalone()
 {
     setStanaloneWifi();
-    setstanaloneGps();
 }
 
 void displaySht()
@@ -2150,8 +2056,9 @@ void havekey()
         {
             getRtc();
         }
-        else
+        else if(k=='o')
         {
+            ota();
         }
     }
 }
@@ -2355,11 +2262,11 @@ void setup()
     {
         setupwater();
     }
-    if (configdata.havedht)
-    {
-        dht.begin();
-        readDHT();
-    }
+    // if (configdata.havedht)
+    // {
+    //     dht.begin();
+    //     readDHT();
+    // }
 
     if (configdata.havesht)
     {
@@ -2390,6 +2297,11 @@ void setup()
         settime();
         ota();
         checkin();
+        if (htask == NULL)
+            htask = new Htask();
+
+        htask->init();
+        htask->setreadNext(10);
     }
     else
     {
@@ -2398,10 +2310,22 @@ void setup()
         setstanalonehttp();
         htask->init();
         htask->setreadNext(10);
+        ts = new TimeService();
+        runservice = new Runjob();
+        runservice->setHtask(htask);
+        runservice->setTimeSerivce(ts);
+
+        gps = new GPS();
+        gps->start();
+        runservice->setGps(gps);
+        ts->setGps(gps);
     }
     if (configdata.havegps)
     {
-        ss.begin(GPSBaud);
+        if (gps == NULL)
+            gps = new GPS();
+
+        gps->start();
     }
     // setWiFiEvent();
 }
@@ -2431,12 +2355,14 @@ void loop()
         waterlimittask();
         readpzem();
         readGps();
+        displayGpsData();
     }
     else
     {
 
         readGps();
         htask->readInterval(hdata);
+        displayGpsData();
         dnsServer.processNextRequest();
         // run stan alone
     }

@@ -3,6 +3,7 @@
 #include "Espjob.h"
 #include "Hjob.h"
 #include "timeservice.h"
+#include "gps.h"
 #include <Arduino.h>
 // สำหรับเก็บ job ที่กำลังทำงานอยู่
 class Runtask
@@ -27,8 +28,22 @@ class Runjob
     int port;
     unsigned long r, w;
     unsigned long base = 0;
+    GPS *gps;
+    Job *jobs;
 
 public:
+    void setJob(Job *p)
+    {
+        jobs = p;
+    }
+    void setGps(GPS *g)
+    {
+        gps = g;
+    }
+    void setTimeSerivce(TimeService *p)
+    {
+        ts = p;
+    }
     void setHtask(Htask *p)
     {
         htask = p;
@@ -121,11 +136,18 @@ public:
     int checktime(Espjob *p)
     {
 
+        // ts->gettodayString();
         return false;
     }
     Espjob *getJob()
     {
         return job;
+    }
+
+    Foundjob *loadJobbyh(float h)
+    {
+        Foundjob *found = jobs->loadjobByh(10);
+        return found;
     }
 };
 #endif

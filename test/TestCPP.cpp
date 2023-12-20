@@ -4,9 +4,9 @@
 #include "./DNSServer.h"
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include <Adafruit_Sensor.h>
-#include <DHT.h>
-#include <DHT_U.h>
+// #include <Adafruit_Sensor.h>
+// #include <DHT.h>
+// #include <DHT_U.h>
 #include <OneWire.h>
 #include <Wire.h>
 #include "SHTSensor.h"
@@ -17,13 +17,13 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <SoftwareSerial.h>
-#include <RtcDS3231.h> //RTC library
-#include <ESP8266Ping.h>
+// #include <RtcDS3231.h> //RTC library
+// #include <ESP8266Ping.h>
 #include <Ticker.h>
 #include "KAnalog.h"
 #include <EEPROM.h>
-#include "Adafruit_Sensor.h"
-#include "Adafruit_AM2320.h"
+// #include "Adafruit_Sensor.h"
+// #include "Adafruit_AM2320.h"
 #include "Configfile.h"
 #include <TM1637Display.h>
 #include <SPI.h>
@@ -39,6 +39,8 @@
 #include "html.h"
 #include <time.h>
 #include <stdio.h>
+#include "gps.h"
+String filllist(const String &var);
 static const int RXPin = D7, TXPin = D8;
 static const uint32_t GPSBaud = 9600;
 unsigned long updatetime; // เป็นตัวบอกว่าเวลาที่รับ timestamp จาก gps
@@ -250,58 +252,58 @@ void testSetConfig(void)
 
 void updateRTC()
 {
-  connect();
-  RtcDS3231<TwoWire> rtcObject(Wire);
-  WiFiUDP ntpUDP;
-  NTPClient timeClient(ntpUDP);
-  timeClient.begin();
-  timeClient.setTimeOffset(25200); // Thailand +7 = 25200
-  timeClient.forceUpdate();
-  rtcObject.Begin();
+  // connect();
+  // RtcDS3231<TwoWire> rtcObject(Wire);
+  // WiFiUDP ntpUDP;
+  // NTPClient timeClient(ntpUDP);
+  // timeClient.begin();
+  // timeClient.setTimeOffset(25200); // Thailand +7 = 25200
+  // timeClient.forceUpdate();
+  // rtcObject.Begin();
 
-  String formattedDate = timeClient.getFormattedDate();
-  Serial.println(formattedDate);
+  // String formattedDate = timeClient.getFormattedDate();
+  // Serial.println(formattedDate);
 
-  // Extract date
-  int splitT = formattedDate.indexOf("T");
-  String dayStamp = formattedDate.substring(0, splitT);
-  Serial.print("DATE: ");
-  Serial.println(dayStamp);
-  // Extract time
-  String timeStamp = formattedDate.substring(splitT + 1, formattedDate.length() - 1);
-  Serial.print("HOUR: ");
-  Serial.println(timeStamp);
-  long t = timeClient.getEpochTime();
-  Serial.println(t);
-  RtcDateTime manual = RtcDateTime(t - 946659600 - 25200);
-  // RtcDateTime manual = RtcDateTime(t);
-  rtcObject.SetDateTime(manual);
+  // // Extract date
+  // int splitT = formattedDate.indexOf("T");
+  // String dayStamp = formattedDate.substring(0, splitT);
+  // Serial.print("DATE: ");
+  // Serial.println(dayStamp);
+  // // Extract time
+  // String timeStamp = formattedDate.substring(splitT + 1, formattedDate.length() - 1);
+  // Serial.print("HOUR: ");
+  // Serial.println(timeStamp);
+  // long t = timeClient.getEpochTime();
+  // Serial.println(t);
+  // RtcDateTime manual = RtcDateTime(t - 946659600 - 25200);
+  // // RtcDateTime manual = RtcDateTime(t);
+  // rtcObject.SetDateTime(manual);
 }
 void readRTC()
 {
-  Wire.begin();
-  RtcDS3231<TwoWire> rtcObject(Wire);
-  rtcObject.Begin();
-  RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
+  // Wire.begin();
+  // RtcDS3231<TwoWire> rtcObject(Wire);
+  // rtcObject.Begin();
+  // RtcDateTime currentTime = rtcObject.GetDateTime(); // get the time from the RTC
 
-  char str[20]; // declare a string as an array of chars
-  Serial.println(currentTime.Epoch64Time());
-  sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
-          currentTime.Year(),       // get year method
-          currentTime.Month(),      // get month method
-          currentTime.Day(),        // get day method
-          currentTime.Hour(),       // get hour method
-          currentTime.Minute(),     // get minute method
-          currentTime.Second()      // get second method
-  );
-  Serial.println(str); // print the string to the serial port
+  // char str[20]; // declare a string as an array of chars
+  // Serial.println(currentTime.Epoch64Time());
+  // sprintf(str, "%d/%d/%d %d:%d:%d", //%d allows to print an integer to the string
+  //         currentTime.Year(),       // get year method
+  //         currentTime.Month(),      // get month method
+  //         currentTime.Day(),        // get day method
+  //         currentTime.Hour(),       // get hour method
+  //         currentTime.Minute(),     // get minute method
+  //         currentTime.Second()      // get second method
+  // );
+  // Serial.println(str); // print the string to the serial port
 
-  int m = currentTime.Minute();
-  int h = currentTime.Hour();
-  int s = currentTime.Second();
-  int Y = currentTime.Year();
-  int M = currentTime.Month();
-  int d = currentTime.Day();
+  // int m = currentTime.Minute();
+  // int h = currentTime.Hour();
+  // int s = currentTime.Second();
+  // int Y = currentTime.Year();
+  // int M = currentTime.Month();
+  // int d = currentTime.Day();
 }
 void testRead(void)
 {
@@ -695,6 +697,39 @@ void testEspjobRun()
     }
   }
 }
+int getPort(String p)
+{
+  if (p == "D1")
+  {
+    return D1;
+  }
+  else if (p == "D2")
+  {
+    return D2;
+  }
+  else if (p == "D5")
+  {
+    return D5;
+  }
+  else if (p == "D6")
+  {
+    return D6;
+  }
+  else if (p == "D7")
+  {
+    return D7;
+  }
+  else if (p == "D8")
+  {
+    return D8;
+  }
+  else if (p == "D4")
+  {
+    return D4;
+  }
+
+  return -1;
+}
 void testDeleteEspjob()
 {
   Job *jobs = new Job();
@@ -778,6 +813,9 @@ void testAddjobviawww()
 
   server.on("/addjob", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "text/html", addjob_html); });
+  server.on("/remove", HTTP_GET, [](AsyncWebServerRequest *request)
+            { js->removefile("/j1.job");
+              request->send(200, "text/html","remove"); });
   server.on("/savejob", HTTP_GET, [](AsyncWebServerRequest *request)
             { 
                String port = request->getParam("port")->value();
@@ -786,14 +824,23 @@ void testAddjobviawww()
                String runtime = request->getParam("runtime")->value();
                String waittime = request->getParam("waittime")->value();
                String out = request->getParam("output")->value();
-                Serial.println(request->getParam("port")->value());
+               String stime = request->getParam("stime")->value();
+               String etime = request->getParam("etime")->value();
+              //  Espjob *jjj = js->newjob(js->getsize(),hlow.toDouble(),hhigh.toDouble(),
+              //  port.toInt(),runtime.toInt(),waittime.toInt(),1,out.toInt(),stime,etime);
+                // Serial.println(request->getParam("port")->value());
+              
                 char buf [2024];
-                sprintf(buf, "%d,%.2f,%.2f,%d,%d,%d,%d,%d|", js->getsize()+1, hlow, hhigh, port, runtime, waittime, 1, out);
-                js->addJob(js->n(buf));
+                // sprintf(buf, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s|", js->getsize()+1,
+                //  hlow, hhigh, port, runtime, waittime, 1, out,stime,etime);
+                //  Serial.printf("ADD : %s\n",buf);
+                  int pp = getPort(port);
+                js->addJob(js->newjob(js->getsize(),hlow.toDouble(),hhigh.toDouble(),pp,runtime.toInt(),waittime.toInt(),1,out.toInt(),stime,etime));
                 sprintf(buf,"size:%d Port:%s runttime: %s waittime: %s OUT:%s", js->getsize() ,port,runtime,waittime,out);
+                js->savetofile("/j1.job");
                 request->send(200, "text/html",buf); });
   server.onNotFound([](AsyncWebServerRequest *request)
-                    { request->send(200, "text/html", addjob_html); });
+                    { request->send_P(200, "text/html", addjob_html, filllist); });
   server.begin();
 }
 
@@ -804,15 +851,14 @@ String filllist(const String &var)
   String tr = "";
   if (var == "list")
   {
-
     Serial.println("Fill list");
     Espjob *index = js->getfirst();
     // tr += "<tr><td>" + String(js->getsize()) + "</td></tr>";
     while (index != NULL)
     {
       Serial.println(index->id);
-      sprintf(buf, "<tr><td>%d</td><td>%.2f</td><td>%.2f</td><td>%d</td><td>%d</td><td>%d</td></tr>\n",
-              index->id, index->hlow, index->hhigh, index->port, index->runtime, index->waittime);
+      sprintf(buf, "<tr><td>%d</td><td>%.2f</td><td>%.2f</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td><button onclick='deletejob(%d)'>delete</button></td></tr>\n",
+              index->id, index->hlow, index->hhigh, index->port, index->runtime, index->waittime, index->out, index->enable, index->stime, index->etime, index->id);
       tr += String(buf);
 
       index = index->n;
@@ -825,7 +871,6 @@ String filllist(const String &var)
     cfg.openFile();
 
     // cfg.load();
-    cfg.addConfig("test-add", "11111");
     DynamicJsonDocument dy = cfg.getAll();
 
     JsonObject documentRoot = dy.as<JsonObject>();
@@ -839,7 +884,7 @@ String filllist(const String &var)
       // String k = keyValue.key().c_str();
       String v = keyValue.value().as<const char *>();
       String k = keyValue.key().c_str();
-      tr += "<tr><td>" + k + "</td><td> <label id=" + k + "value>" + v + "</label> </td> <td> <input id = " + k + " value =\"" + v + "\"></td><td><button id=btn onClick=\"setvalue(this,'" + k + "','" + v + "')\">Set</button></td><td><button id=btn onClick=\"remove('" + k + "')\">Remove</button></td></tr>";
+      tr += "<tr><td>" + k + "</td><td> <label id=" + k + "value>" + v + "</label> </td> <td> <input id = " + k + " value =\"" + v + "\"></td><td><button id=btn onClick=\"setvalue(this,'" + k + "','" + v + "')\">Set</button></td><td><button id=btn onClick=\"remove('" + k + "')\">Remove</button></td></tr>\n";
     }
     tr += "<tr><td>heap</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
   }
@@ -964,9 +1009,88 @@ void testtimejobtotimestamp()
   String bu = String(buf) + " 5:00:00";
   struct tm startt = {0};
   char bbb[100];
-  bu.toCharArray(bbb,bu.length());
+  bu.toCharArray(bbb, bu.length());
   strptime(bbb, "%d-%m-%Y %H:%M:%S", &startt);
-  Serial.println( mktime(&startt));
+  Serial.println(mktime(&startt));
+}
+GPS *gpsobj;
+void testGetGPStimenow()
+{
+  // delay(5000);
+  unsigned long b = millis() * 20;
+  while (gpsobj->timeEpoch() < 0)
+  {
+
+    gpsobj->read();
+    if (millis() > b)
+      break;
+  }
+
+  Serial.println(gpsobj->timeEpoch());
+}
+void testloadjobbyh()
+{
+  Foundjob *found = js->loadjobByh(15);
+  TEST_ASSERT(js->getFoundsize() == 1);
+  Serial.println(js->toString());
+  js->printFound(found);
+
+  found = js->loadjobByh(70);
+  TEST_ASSERT(js->getFoundsize() == 2);
+  js->printFound(found);
+}
+void testloadjobbytime()
+{
+  TimeService *ts = new TimeService();
+  Serial.println("Jobs:");
+  Serial.println(js->toStringln());
+  ts->setTime(1703068517);
+  js->setTimeService(ts);
+  Foundjob *found = js->loadjobByt();
+  Serial.println();
+  Serial.println("-------------------------------------");
+  Serial.println(ts->getTimeString());
+  Serial.println(js->getFoundsize());
+  js->printFound(found);
+  Serial.println("-------------------------------------");
+
+  found = js->loadjobByh(20,found);
+  js->printFound(found);
+}
+void testHTASK()
+{
+  Htask *t = new Htask();
+  if (t->init())
+  {
+    Serial.println("SHT is ok");
+    t->read();
+    Serial.printf("T:%f H:%f", t->gett(), t->geth());
+  }
+}
+void testScanstime()
+{
+  char *bb = "10,10,22:00,10:00,";
+  int i1, i2;
+  char b[10], a[10];
+
+  sscanf(bb, "%d,%d,%[^,],%[^,]", &i1, &i2, b, a);
+  // sscanf(bb,"%d,%d",&i1,&i2);
+  Serial.printf("\nDATA:%d %d %s %s\n", i1, i2, b, a);
+}
+void testconvertjobtime()
+{
+  struct tm t;
+  char buf[] = "10-12-2023 10:40";
+  strptime(buf, "%d-%m-%Y %H:%M", &t);
+  unsigned long tt = mktime(&t);
+  Serial.println(tt);
+}
+void testemptystring()
+{
+
+  String s = "";
+
+  TEST_ASSERT(s == "");
 }
 void setup()
 {
@@ -997,16 +1121,28 @@ void setup()
   // RUN_TEST(testEspjobRun);
   // RUN_TEST(testDeleteEspjob);
   // RUN_TEST(testDirectrun);
-  // RUN_TEST(testAddjobviawww);
-  // js->load("/j.job");
+  js->load("/j1.job");
+
+  // RUN_TEST(testScanstime);
   // RUN_TEST(testListjobs);
 
   // RUN_TEST(testloadjob);
   // RUN_TEST(testFill);
   // RUN_TEST(testNTP);
   // RUN_TEST(testConverttime);
-  RUN_TEST(testtimejobtotimestamp);
+  // RUN_TEST(testtimejobtotimestamp);
 
+  // gpsobj = new GPS();
+  // gpsobj->start();
+  // RUN_TEST(testGetGPStimenow);
+  // js->load("/j.job");
+  // RUN_TEST(testloadjobbyh);
+  // RUN_TEST(testAddjobviawww);
+  RUN_TEST(testloadjobbytime);
+  // RUN_TEST(testconvertjobtime);
+  // RUN_TEST(testHTASK);
+
+  // RUN_TEST(testemptystring);
   UNITY_END();
 }
 
@@ -1016,14 +1152,5 @@ void loop()
   digitalWrite(2, !digitalRead(2));
   delay(300);
 
-  // while (ss.available() > 0)
-  //   if (gps.encode(ss.read()))
-  //     displayInfo();
-
-  // if (millis() > 1000 && gps.charsProcessed() < 10)
-  // {
-  //   Serial.println(F("No GPS detected: check wiring."));
-  //   // while (true)
-  //   //   ;
-  // }
+  // gpsobj->read();
 }

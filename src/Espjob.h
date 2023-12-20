@@ -1,5 +1,6 @@
 #ifndef ESPJOB_H
 #define ESPJOB_H
+#include "timeservice.h"
 struct Espjob
 {
     int id;
@@ -13,6 +14,7 @@ struct Espjob
     int runtime = 0;
     int waittime = 0;
     int out = 1;
+
     bool enable = false;
     String stime;
     String etime;
@@ -20,7 +22,12 @@ struct Espjob
     Espjob *n;
     /* data */
 };
-
+struct Foundjob
+{
+    Espjob *job; // ใช้ชี้ไปงาน
+    Foundjob *p;
+    Foundjob *n;
+};
 class Job
 {
 
@@ -28,6 +35,8 @@ class Job
     Espjob *f = NULL;
     Espjob *l = NULL;
     int size = 0;
+    int foundjobsize = 0;
+    TimeService *ts = NULL;
 
 public:
     void addJob(Espjob *job)
@@ -82,6 +91,20 @@ public:
     {
         return l;
     }
+    void printFound(Foundjob *ff)
+    {
+        Foundjob *f = ff;
+        while (f != NULL)
+        {
+            Serial.printf("id: %d %f %f  Stime:%s Etime:%s\n", f->job->id, f->job->hlow, f->job->hhigh, f->job->stime,
+                          f->job->etime);
+            f = f->n;
+        }
+    }
+    void setTimeService(TimeService *p)
+    {
+        ts = p;
+    }
     /**
      * @brief เปลียน link list ไปเป็น String ชุดสำหรับเก็บลง file
      *
@@ -95,10 +118,33 @@ public:
         {
             char b[512];
             // Serial.printf("\nData %d\n", t->id);
-            sprintf(b, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s|", t->id, t->hlow, t->hhigh, t->port, t->runtime, t->waittime, t->enable, t->out,t->stime,t->etime);
+            sprintf(b, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s|", t->id, t->hlow, t->hhigh, t->port, t->runtime, t->waittime, t->enable, t->out, t->stime, t->etime);
             jobs += String(b);
+
             t = t->n;
         }
+
+        return jobs;
+    }
+    /**
+     * @brief เปลียน link list ไปเป็น String ชุดสำหรับเก็บลง file
+     *
+     * @return String
+     */
+    String toStringln()
+    {
+        String jobs = "";
+        Espjob *t = f;
+        for (; t != NULL;)
+        {
+            char b[512];
+            // Serial.printf("\nData %d\n", t->id);
+            sprintf(b, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s\n", t->id, t->hlow, t->hhigh, t->port, t->runtime, t->waittime, t->enable, t->out, t->stime, t->etime);
+            jobs += String(b);
+
+            t = t->n;
+        }
+
         return jobs;
     }
     /**
@@ -109,19 +155,24 @@ public:
      */
     Espjob *n(String d)
     {
-        int size = d.length();
+        String ff = d + "T"; // ปิดท้ายด้วย T
+        int size = ff.length();
         char buf[size];
-        d.toCharArray(buf, size);
+        ff.toCharArray(buf, size);
         Serial.println(buf);
         Espjob *t = new Espjob();
         t->p = NULL;
         t->n = NULL;
+        char a[20], b[20];
         ///          %d,%.2f,%.2f,%d,%d,%d,%d,%d
-        sscanf(buf, "%d,%f,%f,%d,%d,%d,%d,%d,%s,%s",
-         &t->id, &t->hlow, &t->hhigh, &t->port, &t->runtime, &t->waittime, &t->enable, &t->out,&t->stime,&t->etime);
+        sscanf(buf, "%d,%f,%f,%d,%d,%d,%d,%d,%[^,],%[^T]",
+               &t->id, &t->hlow, &t->hhigh, &t->port, &t->runtime, &t->waittime, &t->enable, &t->out, a, b);
+
+        t->stime = a;
+        t->etime = b;
         return t;
     }
-    Espjob * newjob(int id,float hlow,float hhigh,int port,int runtime,int waittime,int enable,int out,String stime,String etime)
+    Espjob *newjob(int id, float hlow, float hhigh, int port, int runtime, int waittime, int enable, int out, String stime, String etime)
     {
         Espjob *t = new Espjob();
         t->p = NULL;
@@ -134,7 +185,9 @@ public:
         t->waittime = waittime;
         t->enable = enable;
         t->out = out;
+        // if (stime.length() > 3)
         t->stime = stime.c_str();
+        // if (etime.length() > 3)
         t->etime = etime.c_str();
         return t;
     }
@@ -209,11 +262,11 @@ public:
             return true;
             // node สุดท้าย
         }
-        if(todelete == f)
+        if (todelete == f)
         {
             size = 0;
-            delete(todelete);
-            
+            delete (todelete);
+
             data = f = NULL;
             return true;
         }
@@ -235,7 +288,7 @@ public:
         File file = LittleFS.open(filename.c_str(), "r");
 
         String to = file.readStringUntil('|');
-        Serial.printf("TO:%s", to.c_str());
+        Serial.printf("TO: +++++ %s", to.c_str());
         while (to != NULL)
         {
             // Serial.printf("=======>%s\n", to.c_str());
@@ -245,7 +298,18 @@ public:
         file.close();
         return true;
     }
+    bool removefile(String fn)
+    {
 
+        if (!LittleFS.begin())
+        {
+            Serial.println("ERROR LITTLEFS");
+            return false;
+        }
+        // File file = LittleFS.open(Fn.c_str(), "w");
+        return LittleFS.remove(fn);
+        // file.close();
+    }
     bool savetofile(String Fn)
     {
 
@@ -255,11 +319,171 @@ public:
             return false;
         }
         File file = LittleFS.open(Fn.c_str(), "w");
-
-        file.print(toString());
+        String tofile = toString();
+        file.print(tofile);
         file.close();
         return true;
     }
+    Foundjob *newFoudnjob(Foundjob *from, Espjob *t)
+    {
+        Foundjob *nf = new Foundjob();
+        nf->p = from;
+        from->n = nf;
+        nf->job = t;
+        // from = nf;
+        return nf;
+    }
+    int getFoundsize()
+    {
+        return foundjobsize;
+    }
+    /**
+     * @brief ใส่เวลาเข้ามาระบบจะค้นหางานที่ต้องทำในช้วงนี้
+     *
+     * @param t
+     * @return Foundjob*
+     */
+    Foundjob *loadjobByt()
+    {
+        foundjobsize = 0;
+        if (ts == NULL)
+            ts = new TimeService();
+
+        Espjob *index = f;
+        Foundjob *found = NULL;
+        Foundjob *fi = NULL;
+        while (index != NULL)
+        {
+            long stime = ts->getjobTimestamp(index->stime);
+            long etime = ts->getjobTimestamp(index->etime);
+            long ctime = ts->getTime();
+            // Serial.printf("###### %s %s", index->stime.c_str(), index->etime.c_str());
+            if (stime == etime)
+            { // ไม่กำหนดเวลา
+                Serial.println("not set time");
+                if (found == NULL)
+                {
+                    found = new Foundjob();
+                    found->p = found->n = NULL;
+                    found->job = index;
+                    fi = found; // อันแรก
+                    foundjobsize++;
+                }
+                else
+                {
+                    found = newFoudnjob(found, index);
+                    foundjobsize++;
+                }
+            }
+            else
+            {
+
+                Serial.printf("\nid:%d  %s <=  %s <= %s \n", index->id, ts->getTimeString(stime).c_str(), ts->getTimeString(ctime).c_str(), ts->getTimeString(etime).c_str());
+                if (stime <= ctime && ctime <= etime)
+                {
+                    Serial.println("IN");
+                    if (found == NULL)
+                    {
+                        found = new Foundjob();
+                        found->p = found->n = NULL;
+                        found->job = index;
+                        fi = found; // อันแรก
+                        foundjobsize++;
+                    }
+                    else
+                    {
+                        found = newFoudnjob(found, index);
+                        foundjobsize++;
+                    }
+                }
+            }
+
+            index = index->n;
+        }
+
+        return fi;
+    }
+    /**
+     * @brief ค้นหา  job จากการ รับ h เข้ามาถ้า hlow == hhigh ทำตลอด
+     *
+     * @param h
+     * @return Foundjob*
+     */
+    Foundjob *loadjobByh(float h)
+    {
+
+        foundjobsize = 0;
+        Foundjob *found = NULL;
+        Foundjob *fi = NULL;
+        Espjob *t = f;
+        while (t != NULL)
+        {
+
+            if ((t->hlow <= h && h <= t->hhigh) || (t->hlow == t->hhigh)) // t->l == t->h ถ้าไม่ได้ set ก็ออกไปเลย
+            {
+
+                // Serial.println(t->id);
+                if (found == NULL)
+                {
+                    found = new Foundjob();
+                    found->p = found->n = NULL;
+                    found->job = t;
+                    fi = found; // อันแรก
+                    foundjobsize++;
+                }
+                else
+                {
+                    found = newFoudnjob(found, t);
+                    foundjobsize++;
+                }
+            }
+
+            t = t->n;
+        }
+
+        return fi;
+    }
+    /**
+     * @brief ค้นหา  job จากการ รับ h เข้ามาถ้า hlow == hhigh ทำตลอด
+     *
+     * @param h
+     * @return Foundjob*
+     */
+    Foundjob *loadjobByh(float h, Foundjob *p)
+    {
+
+        foundjobsize = 0;
+        Foundjob *found = NULL;
+        Foundjob *fi = NULL;
+        Espjob *t;
+        while (p != NULL)
+        {
+            t = p->job;
+            if ((t->hlow <= h && h <= t->hhigh) || (t->hlow == t->hhigh)) // t->l == t->h ถ้าไม่ได้ set ก็ออกไปเลย
+            {
+
+                // Serial.println(t->id);
+                if (found == NULL)
+                {
+                    found = new Foundjob();
+                    found->p = found->n = NULL;
+                    found->job = t;
+                    fi = found; // อันแรก
+                    foundjobsize++;
+                }
+                else
+                {
+                    found = newFoudnjob(found, t);
+                    foundjobsize++;
+                }
+            }
+
+            p = p->n;
+        }
+
+        return fi;
+    }
+   
 };
 
 #endif
