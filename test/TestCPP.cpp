@@ -1,4 +1,7 @@
 #include <Arduino.h>
+// #define TIMEDEBUG 1
+// #define JOBDEBUG 1
+#define TASKDEBUG 1
 #include <unity.h>
 #include "Configfile.h"
 #include "./DNSServer.h"
@@ -40,6 +43,8 @@
 #include <time.h>
 #include <stdio.h>
 #include "gps.h"
+#include "taskservice.h"
+
 String filllist(const String &var);
 static const int RXPin = D7, TXPin = D8;
 static const uint32_t GPSBaud = 9600;
@@ -1054,7 +1059,7 @@ void testloadjobbytime()
   js->printFound(found);
   Serial.println("-------------------------------------");
 
-  found = js->loadjobByh(20,found);
+  found = js->loadjobByh(20, found);
   js->printFound(found);
 }
 void testHTASK()
@@ -1091,6 +1096,158 @@ void testemptystring()
   String s = "";
 
   TEST_ASSERT(s == "");
+}
+
+void testTaskServicereadh()
+{
+
+  TaskService *ts = new TaskService();
+
+  Htask *htask = new Htask();
+  htask->init();
+  htask->read();
+  ts->setHtask(htask);
+
+  Serial.println(ts->readH());
+}
+void testTaskserviceLoadjobByh()
+{
+
+  TaskService *ts = new TaskService();
+  Htask *htask = new Htask();
+  htask->init();
+  htask->read();
+  ts->setHtask(htask);
+  ts->setJobService(js);
+  Foundjob *found = ts->loadbyh();
+  TEST_ASSERT(js->getFoundsize() > 1);
+  js->printFound(found);
+
+  TimeService *tis = new TimeService();
+  tis->setTime(1703129018); // time stamp is 10:35
+  ts->setTimeService(tis);
+
+  found = ts->loadbytime();
+  js->printFound(found);
+}
+void testLoadalljob()
+{
+
+  TimeService *tis = new TimeService();
+  tis->setTime(1703154217); // time stamp is 10:35
+  js->setTimeService(tis);
+  Htask *htask = new Htask();
+  htask->init();
+  htask->read();
+  unsigned long aa = system_get_free_heap_size();
+  for (int i = 0; i < 1000; i++)
+  {
+    Foundjob *found = js->loadalljob(htask->geth());
+    js->printFound(found);
+    js->freeFoundjobs(found);
+  }
+  unsigned long bb = system_get_free_heap_size();
+  Serial.printf("\n-----------------------  AAA:%d BBB:%d ----------------------\n", aa, bb);
+}
+
+void testFreememloadh()
+{
+  TimeService *t = new TimeService();
+  js->setTimeService(t);
+  unsigned long a = system_get_free_heap_size();
+  Foundjob *jobs = js->loadjobByh(50);
+  unsigned long b = system_get_free_heap_size();
+  js->freeFoundjobs(jobs);
+  unsigned long c = system_get_free_heap_size();
+  Serial.printf("\n-----------------------  AAA:%d BBB:%d CCC:%d----------------------\n", a, b, c);
+
+  a = system_get_free_heap_size();
+  for (int i = 0; i < 100; i++)
+  {
+    jobs = js->loadjobByt(1703154217);
+    js->freeFoundjobs(jobs);
+  }
+  b = system_get_free_heap_size();
+
+  c = system_get_free_heap_size();
+  Serial.printf("\n-----------------------  AAA:%d BBB:%d CCC:%d----------------------\n", a, b, c);
+}
+void testGettodaymemuser()
+{
+  TimeService *t = new TimeService();
+  unsigned long a = system_get_free_heap_size();
+  for (int i = 0; i < 100; i++)
+  {
+    String today = t->gettodayString(1703154217);
+    Serial.println(today);
+    // delete today;
+  }
+  unsigned long b = system_get_free_heap_size();
+  Serial.printf("\n-----------------------  AAA:%d BBB:%d ----------------------\n", a, b);
+}
+void testtaskservicecheckid()
+{
+  TaskService *taskservice = new TaskService();
+  Htask *htask = new Htask();
+  htask->init();
+  htask->read();
+  taskservice->setHtask(htask);
+  Foundjob *jobs = js->loadjobByh(50);
+  Foundjob *j = new Foundjob();
+  j->job = new Espjob();
+  j->job->id = 1;
+  Task *task = new Task();
+  task->setJob(j->job);
+
+  taskservice->setTask(task);
+  while (jobs != NULL)
+  {
+    Serial.printf("Job %d  ", jobs->job->id);
+    bool t = taskservice->checkrun(jobs);
+    Serial.printf("Can run %d\n", t);
+    jobs = jobs->n;
+  }
+}
+TaskService *taskservice = new TaskService();
+TimeService *timeService = new TimeService();
+void testpushjobtaskservice()
+{
+  // 1703405990 //8 โมง
+  timeService->setTime(1703405990);
+  Htask *htask = new Htask();
+  htask->init();
+  htask->read();
+  taskservice->setHtask(htask);
+  taskservice->setJobService(js);
+  taskservice->setTimeService(timeService);
+  unsigned long aa = system_get_free_heap_size();
+  // Serial.println(js->toStringln());
+  //   Serial.println("---------------------------------------------------");
+  // Foundjob *tj = js->loadjobByt();
+  // Serial.printf("Found T job %d time :%s\n", js->getFoundsize(), timeService->getTimeString(timeService->getTime()).c_str());
+  //  Serial.println("print time job --------------------------------------");
+  // js->printFound(tj);
+
+  // Serial.println("Load h");
+  // Foundjob *final = js->loadjobByh(40, tj);
+  //   Serial.printf("print final ----------------------------------------> %d\n",js->getFoundsize());
+  // js->printFound(final);
+
+  // js->printFound(js->loadalljob(40));
+  taskservice->run(js->loadalljob(40));
+ 
+  Task *fi = taskservice->getF();
+  while (fi!=NULL)
+  {
+    taskservice->updateExce();
+    taskservice->freeTask();
+    fi = taskservice->getF();
+    Serial.printf("FI %x\n",fi);
+    delay(1000);
+  }
+  unsigned long bb = system_get_free_heap_size();
+  Serial.printf("\n\nTOTAL: %ld  -  %ld \n\n", aa, bb);
+  // delay(1000 * 20);
 }
 void setup()
 {
@@ -1138,19 +1295,30 @@ void setup()
   // js->load("/j.job");
   // RUN_TEST(testloadjobbyh);
   // RUN_TEST(testAddjobviawww);
-  RUN_TEST(testloadjobbytime);
+  // RUN_TEST(testloadjobbytime);
   // RUN_TEST(testconvertjobtime);
   // RUN_TEST(testHTASK);
 
   // RUN_TEST(testemptystring);
+  // RUN_TEST(testTaskServicereadh);
+  // RUN_TEST(testTaskserviceLoadjobByh);
+  // RUN_TEST(testLoadalljob);
+  // RUN_TEST(testFreememloadh);
+  // RUN_TEST(testGettodaymemuser);
+  // RUN_TEST(testtaskservicecheckid);
+  RUN_TEST(testpushjobtaskservice);
   UNITY_END();
 }
 
 void loop()
 {
 
-  digitalWrite(2, !digitalRead(2));
-  delay(300);
-
+  // digitalWrite(2, !digitalRead(2));
+  // delay(300);
+  // Foundjob *alljob = js->loadalljob(60);
+  // taskservice->run(alljob);
+  delay(100);
+  // taskservice->updateExce();
+  // taskservice->printTask();
   // gpsobj->read();
 }

@@ -22,13 +22,13 @@ public:
     }
     time_t getTime()
     {
-        return ts + (updatetime / 1000);
+        return ts + ((updatetime + millis()) / 1000);
     }
     String getTimeString(time_t t)
     {
         return ctime(&t);
     }
-
+    
     String getTimeString()
     {
         time_t t = getTime();
@@ -49,11 +49,22 @@ public:
      */
     String gettodayString(time_t t)
     {
-        // time_t t = getEP
-        struct tm *tt = gmtime(&t);
-        char buf[100];
-        strftime(buf, sizeof(buf), "%d-%m-%Y", tt);
-        return buf;
+
+        // struct tm *ptm = localtime(&t);
+        struct tm *ptm = gmtime(&t);
+        char buffer[100];
+        // Format: Mo, 15.06.2009 20:20:00
+        strftime(buffer, 100, "%d-%m-%Y", ptm);
+//    delete(ptm,sizeof(tm));
+// time_t t = getEP
+// struct tm *tt = gmtime(&t);
+// char buf[100];
+// strftime(buf, sizeof(buf), "%d-%m-%Y", tt);
+// delete (tt);
+#ifdef TIMEDEBUG
+        Serial.printf("ToDAY:%s", buffer);
+#endif
+        return String(buffer);
     }
     String gettodayString()
     {
@@ -81,17 +92,16 @@ public:
      */
     time_t getjobTimestamp(String s)
     {
-        String today = gettodayString();
+        String today = String(gettodayString());
         String g = today + " " + s;
-
         struct tm t = {0};
         char buf[200];
-        g.toCharArray(buf, g.length() + 1);
-        Serial.printf("\n+++++++++++ %s\n", buf);
+        g.toCharArray(buf, 200);
+#ifdef TIMEDEBUG
+        Serial.printf("Today %s\n", g.c_str());
+#endif
         strptime(buf, "%d-%m-%Y %H:%M", &t);
         unsigned long tt = mktime(&t);
-        Serial.println(buf);
-        Serial.println(tt);
         return tt;
     }
 };

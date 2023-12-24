@@ -46,5 +46,6 @@
         "system_error": "cpp",
         "ctime": "cpp"
     },
-    "C_Cpp.intelliSenseEngineFallback": "Enabled"
+    "C_Cpp.intelliSenseEngineFallback": "Enabled",
+    "cmake.sourceDirectory": "C:/src/d1/sensor-lowdisk/.pio/libdeps/d1_mini_lite/ArduinoJson"
 }

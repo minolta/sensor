@@ -1,6 +1,7 @@
 #ifndef ESPJOB_H
 #define ESPJOB_H
 #include "timeservice.h"
+
 struct Espjob
 {
     int id;
@@ -96,9 +97,14 @@ public:
         Foundjob *f = ff;
         while (f != NULL)
         {
-            Serial.printf("id: %d %f %f  Stime:%s Etime:%s\n", f->job->id, f->job->hlow, f->job->hhigh, f->job->stime,
-                          f->job->etime);
+            Serial.println("------------------------------------------------------------------------------");
+            Serial.printf("id: %d %f %f  Stime:%s Etime:%s  P:%x N:%x\n", f->job->id, f->job->hlow, f->job->hhigh, f->job->stime,
+                          f->job->etime, f->p, f->n);
+            Serial.printf("\n###### %d #####\n", f->job->id);
+            Serial.println("------------------------------------------------------------------------------");
+            
             f = f->n;
+
         }
     }
     void setTimeService(TimeService *p)
@@ -324,55 +330,72 @@ public:
         file.close();
         return true;
     }
-    Foundjob *newFoudnjob(Foundjob *from, Espjob *t)
+    Foundjob *newFoudnjob(Foundjob *ff, Espjob *t)
     {
+#ifdef JOBDEBUG
+        Serial.printf("new FROM %x  next:%x \n", ff, ff->n);
+#endif
+
         Foundjob *nf = new Foundjob();
-        nf->p = from;
-        from->n = nf;
+        nf->p = ff;
+        nf->n = NULL;
         nf->job = t;
+
         // from = nf;
+
+#ifdef JOBDEBUG
+
+#endif JOBDEBUG
         return nf;
     }
     int getFoundsize()
     {
         return foundjobsize;
     }
+
     /**
      * @brief ใส่เวลาเข้ามาระบบจะค้นหางานที่ต้องทำในช้วงนี้
      *
      * @param t
      * @return Foundjob*
      */
-    Foundjob *loadjobByt()
+    Foundjob *loadjobByt(unsigned long ctime)
     {
         foundjobsize = 0;
-        if (ts == NULL)
-            ts = new TimeService();
-
         Espjob *index = f;
-        Foundjob *found = NULL;
+        Foundjob *fo = NULL;
         Foundjob *fi = NULL;
+        long stime;
+        long etime;
         while (index != NULL)
         {
-            long stime = ts->getjobTimestamp(index->stime);
-            long etime = ts->getjobTimestamp(index->etime);
-            long ctime = ts->getTime();
-            // Serial.printf("###### %s %s", index->stime.c_str(), index->etime.c_str());
+
+            stime = ts->getjobTimestamp(index->stime);
+            etime = ts->getjobTimestamp(index->etime);
+            // // Serial.printf("###### %s %s", index->stime.c_str(), index->etime.c_str());
             if (stime == etime)
             { // ไม่กำหนดเวลา
                 Serial.println("not set time");
-                if (found == NULL)
+                if (fo == NULL)
                 {
-                    found = new Foundjob();
-                    found->p = found->n = NULL;
-                    found->job = index;
-                    fi = found; // อันแรก
+                    fo = new Foundjob();
+                    fo->p = NULL;
+                    fo->n = NULL;
+                    fo->job = index;
+                    fi = fo; // อันแรก
+                    Serial.printf("FFF1: %x %x", fo->p, fo->n);
                     foundjobsize++;
                 }
                 else
                 {
-                    found = newFoudnjob(found, index);
+                    Foundjob *nf = new Foundjob();
+                    nf->p = fo;
+                    nf->n = NULL;
+                    nf->job = index;
+                    fo->n = nf;
+                    fo = nf;
                     foundjobsize++;
+                    Serial.printf("FFF2: %x %x", fo->p, fo->n);
                 }
             }
             else
@@ -382,17 +405,26 @@ public:
                 if (stime <= ctime && ctime <= etime)
                 {
                     Serial.println("IN");
-                    if (found == NULL)
+                    if (f == NULL)
                     {
-                        found = new Foundjob();
-                        found->p = found->n = NULL;
-                        found->job = index;
-                        fi = found; // อันแรก
+
+                        fo = new Foundjob();
+                        fo->p = NULL;
+                        fo->n = NULL;
+                        fo->job = index;
+                        Serial.printf("FFF3: %x %x", fo->p, fo->n);
+                        fi = fo; // อันแรก
                         foundjobsize++;
                     }
                     else
                     {
-                        found = newFoudnjob(found, index);
+                        Foundjob *nf = new Foundjob();
+                        nf->p = fo;
+                        nf->n = NULL;
+                        nf->job = index;
+                        Serial.printf("FFF4: %x %x", fo->p, fo->n);
+                        fo->n = nf;
+                        fo = nf;
                         foundjobsize++;
                     }
                 }
@@ -400,8 +432,22 @@ public:
 
             index = index->n;
         }
-
+#ifdef JOBDEBUG
+        Serial.print("Load TIME JOB");
+        printFound(fi);
+#endif
         return fi;
+    }
+    /**
+     * @brief ใส่เวลาเข้ามาระบบจะค้นหางานที่ต้องทำในช้วงนี้
+     *
+     * @param t
+     * @return Foundjob*
+     */
+    Foundjob *loadjobByt()
+    {
+
+        return loadjobByt(ts->getTime());
     }
     /**
      * @brief ค้นหา  job จากการ รับ h เข้ามาถ้า hlow == hhigh ทำตลอด
@@ -443,47 +489,83 @@ public:
 
         return fi;
     }
+    void freeFound(Foundjob *p)
+    {
+        if (p->n != NULL && p->p)
+        {
+            p->n->p = p->p; // ตัดตัวชี้
+        }
+        if (p->p != NULL)
+        {
+            p->p->n = p->n;
+        }
+        delete (p);
+    }
     /**
      * @brief ค้นหา  job จากการ รับ h เข้ามาถ้า hlow == hhigh ทำตลอด
-     *
+     * ตัวนี้จะกรองจาก by time
      * @param h
      * @return Foundjob*
      */
     Foundjob *loadjobByh(float h, Foundjob *p)
     {
-
+        Foundjob *f = p; // backup
+#ifdef JOBDEBUG
+        Serial.print("GET JOB FROM");
+        printFound(f);
+#endif
         foundjobsize = 0;
-        Foundjob *found = NULL;
-        Foundjob *fi = NULL;
         Espjob *t;
         while (p != NULL)
         {
             t = p->job;
+#ifdef JOBDEBUG
+            Serial.printf("jobID:%d %f <= %f <= %f\n", t->id, t->hlow, h, t->hhigh);
+#endif
             if ((t->hlow <= h && h <= t->hhigh) || (t->hlow == t->hhigh)) // t->l == t->h ถ้าไม่ได้ set ก็ออกไปเลย
             {
 
-                // Serial.println(t->id);
-                if (found == NULL)
-                {
-                    found = new Foundjob();
-                    found->p = found->n = NULL;
-                    found->job = t;
-                    fi = found; // อันแรก
-                    foundjobsize++;
-                }
-                else
-                {
-                    found = newFoudnjob(found, t);
-                    foundjobsize++;
-                }
+                p = p->n;
+                foundjobsize++;
             }
+            else
+            {
+                if (p->p != NULL)
+                    p->p->n = p->n;
+                if(p->n!=NULL)
+                  p->n->n =  p->n;
 
-            p = p->n;
+                  Foundjob *todelete = p;
+                  p=p->n;
+                  delete todelete;    
+            }
         }
 
-        return fi;
+        return f;
     }
-   
+    Foundjob *loadalljob(float h)
+    {
+        Foundjob *found = loadjobByt();
+
+        Foundjob *final = loadjobByh(h, found);
+
+        return final;
+    }
+    int freeFoundjobs(Foundjob *p)
+    {
+        int deletecount = 0;
+
+        Foundjob *index;
+        while (p != NULL)
+        {
+            deletecount++;
+            index = p;
+            p = p->n;
+            freeFound(index);
+        }
+
+        return deletecount;
+    }
 };
 
 #endif
