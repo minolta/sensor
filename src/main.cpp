@@ -2314,7 +2314,6 @@ void setup()
         runservice = new Runjob();
         runservice->setHtask(htask);
         runservice->setTimeSerivce(ts);
-
         gps = new GPS();
         gps->start();
         runservice->setGps(gps);

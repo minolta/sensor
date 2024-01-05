@@ -10,6 +10,11 @@ class TimeService
     unsigned long updatetime;
 
 public:
+    /**
+     * @brief Set the Gps objectสำหรับรับเวลาจาก gps
+     *
+     * @param p
+     */
     void setGps(GPS *p)
     {
         gps = p;
@@ -20,19 +25,44 @@ public:
         ts = t;
         updatetime = millis();
     }
+    void printFreemem()
+    {
+
+        Serial.printf("\n %s  = %ld\n", toString().c_str(), system_get_free_heap_size());
+    }
     time_t getTime()
     {
+        if (gps != NULL)
+        {
+            unsigned long gpstime = gps->timeEpoch();
+            if (gpstime > ts)
+            {
+                ts = gpstime;
+                updatetime = millis();
+            }
+        }
         return ts + ((updatetime + millis()) / 1000);
     }
     String getTimeString(time_t t)
     {
         return ctime(&t);
     }
-    
+
     String getTimeString()
     {
         time_t t = getTime();
         return ctime(&t);
+    }
+
+    String toString()
+    {
+        time_t t = getTime();
+        struct tm *ptm = gmtime(&t);
+        char buffer[100];
+        // Format: Mo, 15.06.2009 20:20:00
+        strftime(buffer, 100, "%d-%m-%Y %H:%M", ptm);
+
+        return buffer;
     }
     unsigned long getTimeNow()
     {
@@ -79,7 +109,9 @@ public:
         struct tm t;
         char buf[200];
         s.toCharArray(buf, s.length() + 1);
+#ifdef TIMEDEBUG
         Serial.printf("\n+++++++++++ %s\n", buf);
+#endif
         strptime(buf, "%d-%m-%Y %H:%M:%S", &t);
         return mktime(&t);
     }
@@ -103,6 +135,28 @@ public:
         strptime(buf, "%d-%m-%Y %H:%M", &t);
         unsigned long tt = mktime(&t);
         return tt;
+    }
+/**
+ * @brief เปลียน
+ * 
+ * @param s 
+ * @return time_t 
+ */
+    time_t stl(String s)
+    {
+        struct tm t = {0};
+        char buf[20];
+        s.toCharArray(buf, 20);
+#ifdef TIMEDEBUG
+        Serial.printf("Today %s\n", s.c_str());
+#endif
+        strptime(buf, "%H:%M", &t);
+        unsigned long tt = mktime(&t);
+        return tt;
+    }
+    unsigned long uptime()
+    {
+        return millis() / 1000;
     }
 };
 

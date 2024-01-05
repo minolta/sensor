@@ -92,17 +92,13 @@ class TaskService
     Job *jobservice = NULL;
     Htask *htask = NULL; // สำหรับอ่าน sht
     TimeService *timeService = NULL;
-    GPS *gps;
 
 public:
     Task *getF()
     {
         return firsttask;
     }
-    void setGps(GPS *p)
-    {
-        gps = p;
-    }
+
     void setTimeService(TimeService *p)
     {
         timeService = p;
@@ -123,39 +119,45 @@ public:
         Task *todelete = NULL;
         while (i != NULL)
         {
-            todelete=NULL;
+            todelete = NULL;
             if (i->getEnd())
             {
                 todelete = i;
+#ifdef TASKDEBUG
                 Serial.printf("End %d\n", todelete->getJob()->id);
+#endif
                 if (todelete->getp() != NULL && todelete->getn() != NULL)
                 {
+#ifdef TASKDEBUG
                     Serial.println("last delete");
+#endif
                     todelete->getp()->setNext(todelete->getn());
                     todelete->getn()->setPrv(todelete->getp());
                     // firsttask = NULL; //ตัดตัวสุดท้ายแล้ว
-
                 }
-                else if(todelete->getp()==NULL && todelete->getn()!=NULL)
+                else if (todelete->getp() == NULL && todelete->getn() != NULL)
                 {
-                    //เป็นตัวแรก
+                    // เป็นตัวแรก
+#ifdef TASKDEBUG
                     Serial.println("first delete");
-                    todelete->getn()->setPrv(todelete->getp()); 
-                    firsttask = todelete->getn();//ย้ายตัวชี้แรกไป node ต่อไป
-                    
+#endif
+                    todelete->getn()->setPrv(todelete->getp());
+                    firsttask = todelete->getn(); // ย้ายตัวชี้แรกไป node ต่อไป
                 }
-                else if(todelete->getp()!=NULL && todelete->getn()==NULL)
+                else if (todelete->getp() != NULL && todelete->getn() == NULL)
                 {
+#ifdef TASKDEBUG
                     Serial.println("delete last");
-                    //เป็นตัวสุดท้าย
-                    todelete->getp()->setNext(todelete->getn()); //ตัดแล้ว
-                    if(todelete->getp()->getp()==NULL)
+#endif
+                    // เป็นตัวสุดท้าย
+                    todelete->getp()->setNext(todelete->getn()); // ตัดแล้ว
+                    if (todelete->getp()->getp() == NULL)
                     {
-                        //ตัวสุดท้ายแล้ว
+                        // ตัวสุดท้ายแล้ว
                         firsttask = todelete->getn();
                     }
                 }
-                else if(todelete->getp()==NULL && todelete->getn()==NULL)
+                else if (todelete->getp() == NULL && todelete->getn() == NULL)
                 {
                     firsttask = NULL;
                 }
@@ -163,10 +165,9 @@ public:
 
             i = i->getn();
 
-            if(todelete!=NULL)
+            if (todelete != NULL)
             {
                 delete todelete;
-
             }
         }
     }
@@ -198,7 +199,9 @@ public:
     {
         if (from == NULL)
         {
+#ifdef TASKDEBUG
             Serial.println("New first task");
+#endif
             Task *t = new Task();
             t->setJob(p->job);
             t->setNext(NULL);
@@ -210,8 +213,9 @@ public:
         }
         else
         {
+#ifdef TASKDEBUG
             Serial.println("New next task");
-
+#endif
             Task *t = new Task();
             t->setJob(p->job);
             t->setNext(NULL);
@@ -224,7 +228,9 @@ public:
     }
     void exec(Task *p)
     {
+#ifdef TASKDEBUG
         Serial.println(p->getJob()->id);
+#endif
         Espjob *job = p->getJob();
         time_t base = timeService->getTime();
         unsigned long r = job->runtime + base;
@@ -236,7 +242,9 @@ public:
     void deleteTask(Task *p)
     {
 
+#ifdef TASKDEBUG
         Serial.printf("\ncTO delete %x %x %x\n", p->getp(), p->getn(), p);
+#endif
         if (p != NULL)
         {
             if (p->getn() != NULL)
@@ -256,13 +264,26 @@ public:
         if (t->getWaittime() <= timeService->getTime() && !t->getEnd())
         {
             t->setEnd(true);
+#ifdef TASKDEBUG
             Serial.println("End task");
+#endif
         }
         else if (t->getRuntime() <= timeService->getTime() && t != NULL)
         {
             digitalWrite(t->getJob()->port, !t->getJob()->out);
             t->setRunok(true);
         }
+    }
+
+    void runLoop()
+    {
+        Foundjob *timejobs = jobservice->loadjobByt();
+        Foundjob *alljob = jobservice->loadjobByh(htask->read(), timejobs);
+        // jobservice->printFound(alljob);
+        run(alljob);
+        updateExce();
+        jobservice->freeFoundjobs(alljob);
+        jobservice->freeFoundjobs(timejobs);
     }
 
     // สำหรับ loop
@@ -280,7 +301,9 @@ public:
             if (f != NULL)
                 f = f->getn();
         }
+        freeTask();
     }
+
     /**
      * @brief รับ job เข้ามาในระบบ
      *
@@ -317,8 +340,10 @@ public:
         while (fp != NULL)
         {
             Espjob *p = fp->getJob();
+
             Serial.printf("ID:%d HL:%f - HH:%f\n RUN Time:%d  Waittime:%d runtime:%ld - waittime:%ld  %ld", p->id, p->hlow, p->hhigh,
                           p->runtime, p->waittime, fp->getRuntime(), fp->getWaittime(), timeService->getTime());
+
             fp = fp->getn();
         }
         Serial.print("==================================\n");
@@ -341,7 +366,9 @@ public:
     {
 
         float hnow = htask->geth();
+#ifdef TASKDEBUG
         Serial.printf("H: now %.2f", hnow);
+#endif
         return NULL;
     }
     Foundjob *loadbyh()
@@ -371,6 +398,52 @@ public:
     void setJobService(Job *p)
     {
         jobservice = p;
+    }
+    String tasktojson(Task *t)
+    {
+        Espjob *job = t->getJob();
+        if (job != NULL)
+        {
+            int id = job->id;
+            float hl = job->hlow;
+            float hh = job->hhigh;
+            String stime = job->stime;
+            String etime = job->etime;
+            int runtime = job->runtime;
+            int waittime = job->waittime;
+            int status = t->getRunok();
+            String buf = "{\"id\":" + String(id) + ",\"hlow\":" + hl + ",\"hhigh\":" + hh + ",\"stime\":\"" + stime + "\",\"etime\":\"" + etime + "\",\"runtime\":" + runtime + ",\"waittime\":" + waittime + ",\"status\":" + status + "}";
+            return buf;
+        }
+
+        return "{}";
+    }
+    String toJson(Task *list)
+    {
+        int count = 0;
+        String b;
+        Task *t = list;
+        if (t != NULL)
+        {
+            while (t != NULL)
+            {
+                int id = t->getJob()->id;
+                if (count == 0)
+                {
+                    b = tasktojson(t);
+                }
+                else
+                {
+                    b += "," + tasktojson(t);
+                }
+                count++;
+                t = t->getn();
+            }
+
+            return "[" + b + "]";
+        }
+
+        return "";
     }
 };
 

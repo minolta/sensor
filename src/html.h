@@ -160,8 +160,13 @@ let url ="/savejob?hlow="+hlow.value+"&hhigh="+hhigh.value+"&output="+output.val
   xhr.addEventListener("readystatechange", () => {
     if (xhr.readyState === 4 && xhr.status === 200) {
         // location.reload();
-       setTimeout(function(){location.reload(); }, 2000);
+      //  setTimeout(function(){location.reload(); }, 2000);
+        hlow.innerHTML = "";
+        hhigh.innerHTML = "";
+        runtime.innerHTML = "";
+        waittime.innerHTML="";
         console.log('saveurl',url);
+        console.log('save',xhr.responseText);
         }
         });
   xhr.send();
@@ -199,6 +204,34 @@ var ht = document.getElementById("ht");
   // console.log('Call refresh');
 }
 , 500);
+
+
+
+//for task
+setInterval(()=>{
+  
+  var xhr = new XMLHttpRequest();
+  xhr.open("GET", "/task", true); 
+  xhr.addEventListener("readystatechange", () => {
+    if (xhr.readyState === 4 && xhr.status === 200) {
+    // console.log(xhr.responseText);
+    var o =  JSON.parse(xhr.responseText);
+    console.debug('task list',o);
+    
+    var tasktable = document.getElementById("tasklist"); 
+    let b = "<tr><td><h1>Task</h1></td></tr><tr><td>id</td><td>runtime</td><td>waittim</td><td>hlow</td><td>hhigh</td><td>run</td></tr>";
+    for(let task of o)
+     b+= "<tr><td>"+task.id+"</td><td>"+task.runtime+"</td><td>"+task.waittime+"</td><td>"+task.hlow+"</td><td>"+task.hhigh+"</td><td>"+task.status+"</td></tr>";
+  tasktable.innerHTML = b;
+    } else if (xhr.readyState === 4) {
+     console.debug("could not fetch the data");
+     }
+    });
+  xhr.send();
+  // console.log('Call refresh');
+}
+, 1000);
+
 
 
 
@@ -241,8 +274,8 @@ var ht = document.getElementById("ht");
  <tr><td>เวลาในการทำงาน </td><td><label><input id=runtime type="number" name="runtime"></label></td></tr>
 
  <tr><td>เวลาหยุดพัก </td><td><label><input id=waittime  type="number" name="waittime"></label></td></tr>
- <tr><td>เวลาเริ่มช่วงการทำงาน</td><td><input id=stime type="time"  value="" name="stime"></td></tr>
- <tr><td>เวลาสิ้นสุดช่วงการทำงาน</td><td> <input id=etime type="time" value="" nmae="etime"></td></tr>
+ <tr><td>เวลาเริ่มช่วงการทำงาน</td><td><input id=stime type="time"  value="00:00" name="stime"></td></tr>
+ <tr><td>เวลาสิ้นสุดช่วงการทำงาน</td><td> <input id=etime type="time" value="00:00" nmae="etime"></td></tr>
   <tr><td colspan="2" align=right><button onClick='savejob()'>Add</button></td></tr>
 
   </table>
@@ -252,7 +285,7 @@ var ht = document.getElementById("ht");
 %CONFIG%
 </table>
 
-
+<h1>Job List</h1>
 <table id='customers'>
     <tr>
         <td colspan="11">Jobs</td>
@@ -276,6 +309,9 @@ var ht = document.getElementById("ht");
     <tr>
         %list%
     </tr>
+</table>
+
+<table id="tasklist">
 </table>
 </body>)rawliteral";
 const char indexstanalone_html[] PROGMEM = R"rawliteral(

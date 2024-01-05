@@ -17,6 +17,8 @@ struct Espjob
     int out = 1;
 
     bool enable = false;
+    unsigned long st;
+    unsigned long et;
     String stime;
     String etime;
     Espjob *p;
@@ -92,20 +94,24 @@ public:
     {
         return l;
     }
-    void printFound(Foundjob *ff)
+    void printFound(String tag = "default:", Foundjob *ff = NULL)
     {
         Foundjob *f = ff;
         while (f != NULL)
         {
             Serial.println("------------------------------------------------------------------------------");
-            Serial.printf("id: %d %f %f  Stime:%s Etime:%s  P:%x N:%x\n", f->job->id, f->job->hlow, f->job->hhigh, f->job->stime,
-                          f->job->etime, f->p, f->n);
+            Serial.printf("%s id: %d %f %f   Stime:%s Etime:%s  P:%x N:%x  runtime:%ld ,waittime:%ld \n", tag.c_str(), f->job->id, f->job->hlow, f->job->hhigh, f->job->stime,
+                          f->job->etime, f->p, f->n, f->job->runtime, f->job->waittime);
             Serial.printf("\n###### %d #####\n", f->job->id);
             Serial.println("------------------------------------------------------------------------------");
-            
-            f = f->n;
 
+            f = f->n;
         }
+    }
+    int printfound()
+    {
+        Serial.println("Found " + foundjobsize);
+        return foundjobsize;
     }
     void setTimeService(TimeService *p)
     {
@@ -124,7 +130,7 @@ public:
         {
             char b[512];
             // Serial.printf("\nData %d\n", t->id);
-            sprintf(b, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s|", t->id, t->hlow, t->hhigh, t->port, t->runtime, t->waittime, t->enable, t->out, t->stime, t->etime);
+            sprintf(b, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s|", t->id, t->hlow, t->hhigh, t->port, t->runtime, t->waittime, t->enable, t->out, t->stime.c_str(), t->etime.c_str());
             jobs += String(b);
 
             t = t->n;
@@ -141,13 +147,13 @@ public:
     {
         String jobs = "";
         Espjob *t = f;
-        for (; t != NULL;)
+        char b[1000];
+        while (t != NULL)
         {
-            char b[512];
+
             // Serial.printf("\nData %d\n", t->id);
             sprintf(b, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s\n", t->id, t->hlow, t->hhigh, t->port, t->runtime, t->waittime, t->enable, t->out, t->stime, t->etime);
             jobs += String(b);
-
             t = t->n;
         }
 
@@ -165,7 +171,9 @@ public:
         int size = ff.length();
         char buf[size];
         ff.toCharArray(buf, size);
-        Serial.println(buf);
+#ifdef JOBDEBUG
+        Serial.printf("\n new object in file  %s ]\n", buf);
+#endif
         Espjob *t = new Espjob();
         t->p = NULL;
         t->n = NULL;
@@ -178,7 +186,8 @@ public:
         t->etime = b;
         return t;
     }
-    Espjob *newjob(int id, float hlow, float hhigh, int port, int runtime, int waittime, int enable, int out, String stime, String etime)
+    Espjob *newjob(int id, float hlow, float hhigh, int port, int runtime, int waittime, int enable,
+                   int out, String stime, String etime)
     {
         Espjob *t = new Espjob();
         t->p = NULL;
@@ -278,6 +287,22 @@ public:
         }
         return false;
     }
+
+    void clearjobs()
+    {
+        Espjob *ff = getfirst();
+        while (ff != NULL)
+        {
+#ifdef JOBDEBUG
+            Serial.printf("FREE JOB Link list: +++++ %x  next node%x \n", ff, ff->n);
+#endif
+
+            Espjob *n = ff->n;
+            delete ff;
+            ff = n;
+            f = n;
+        }
+    }
     /**
      * @brief load job into linklist
      *
@@ -292,12 +317,20 @@ public:
             return false;
         }
         File file = LittleFS.open(filename.c_str(), "r");
-
         String to = file.readStringUntil('|');
-        Serial.printf("TO: +++++ %s", to.c_str());
+#ifdef JOBDEBUG
+        Serial.printf("TO: +++++ %s\n", to.c_str());
+#endif
+
+#ifdef JOBDEBUG
+        Serial.println("Go loop: +++++ ");
+#endif
+
         while (to != NULL)
         {
-            // Serial.printf("=======>%s\n", to.c_str());
+#ifdef JOBDEBUG
+            Serial.printf("=======>%s\n", to.c_str());
+#endif
             addJob(n(to));
             to = file.readStringUntil('|');
         }
@@ -333,7 +366,8 @@ public:
     Foundjob *newFoudnjob(Foundjob *ff, Espjob *t)
     {
 #ifdef JOBDEBUG
-        Serial.printf("new FROM %x  next:%x \n", ff, ff->n);
+        if (ff != NULL)
+            Serial.printf("new FROM %x  next:%x \n", ff, ff->n);
 #endif
 
         Foundjob *nf = new Foundjob();
@@ -345,7 +379,7 @@ public:
 
 #ifdef JOBDEBUG
 
-#endif JOBDEBUG
+#endif
         return nf;
     }
     int getFoundsize()
@@ -375,7 +409,9 @@ public:
             // // Serial.printf("###### %s %s", index->stime.c_str(), index->etime.c_str());
             if (stime == etime)
             { // ไม่กำหนดเวลา
+#ifdef JOBDEBUG
                 Serial.println("not set time");
+#endif
                 if (fo == NULL)
                 {
                     fo = new Foundjob();
@@ -383,7 +419,9 @@ public:
                     fo->n = NULL;
                     fo->job = index;
                     fi = fo; // อันแรก
-                    Serial.printf("FFF1: %x %x", fo->p, fo->n);
+#ifdef JOBDEBUG
+                    Serial.printf("FFF1: %x %x %x\n", fo, fo->p, fo->n);
+#endif
                     foundjobsize++;
                 }
                 else
@@ -395,24 +433,32 @@ public:
                     fo->n = nf;
                     fo = nf;
                     foundjobsize++;
-                    Serial.printf("FFF2: %x %x", fo->p, fo->n);
+#ifdef JOBDEBUG
+                    Serial.printf("FFF2: %x %x %x\n", fo, fo->p, fo->n);
+#endif
                 }
             }
             else
             {
 
+#ifdef JOBDEBUG
                 Serial.printf("\nid:%d  %s <=  %s <= %s \n", index->id, ts->getTimeString(stime).c_str(), ts->getTimeString(ctime).c_str(), ts->getTimeString(etime).c_str());
+#endif
                 if (stime <= ctime && ctime <= etime)
                 {
+#ifdef JOBDEBUG
                     Serial.println("IN");
-                    if (f == NULL)
+#endif
+                    if (fo == NULL)
                     {
 
                         fo = new Foundjob();
                         fo->p = NULL;
                         fo->n = NULL;
                         fo->job = index;
+#ifdef JOBDEBUG
                         Serial.printf("FFF3: %x %x", fo->p, fo->n);
+#endif
                         fi = fo; // อันแรก
                         foundjobsize++;
                     }
@@ -422,7 +468,9 @@ public:
                         nf->p = fo;
                         nf->n = NULL;
                         nf->job = index;
+#ifdef JOBDEBUG
                         Serial.printf("FFF4: %x %x", fo->p, fo->n);
+#endif
                         fo->n = nf;
                         fo = nf;
                         foundjobsize++;
@@ -434,7 +482,7 @@ public:
         }
 #ifdef JOBDEBUG
         Serial.print("Load TIME JOB");
-        printFound(fi);
+        printFound("LOAD TIME JOB", fi);
 #endif
         return fi;
     }
@@ -491,15 +539,28 @@ public:
     }
     void freeFound(Foundjob *p)
     {
-        if (p->n != NULL && p->p)
+        if (p != NULL)
         {
-            p->n->p = p->p; // ตัดตัวชี้
+            if (p->p != NULL && p->n != NULL)
+            { // ตัวกลาง
+                p->p->n = p->n;
+                p->n->p = p->p;
+            }
+            else if (p->p == NULL && p->n != NULL)
+            {
+                // ตัวแรก
+                p->n->p = p->p;
+                p->n = NULL; // ไม่ชี้ใครแล้ว
+            }
+            else if (p->p != NULL && p->n == NULL)
+            {
+                // ตัวสุดท้าย
+                p->p->n = NULL;
+                p->p = NULL;
+            }
         }
-        if (p->p != NULL)
-        {
-            p->p->n = p->n;
-        }
-        delete (p);
+
+        delete p;
     }
     /**
      * @brief ค้นหา  job จากการ รับ h เข้ามาถ้า hlow == hhigh ทำตลอด
@@ -510,9 +571,10 @@ public:
     Foundjob *loadjobByh(float h, Foundjob *p)
     {
         Foundjob *f = p; // backup
+        Foundjob *hf = NULL;
 #ifdef JOBDEBUG
         Serial.print("GET JOB FROM");
-        printFound(f);
+        printFound("In load by h fun:", f);
 #endif
         foundjobsize = 0;
         Espjob *t;
@@ -524,24 +586,14 @@ public:
 #endif
             if ((t->hlow <= h && h <= t->hhigh) || (t->hlow == t->hhigh)) // t->l == t->h ถ้าไม่ได้ set ก็ออกไปเลย
             {
-
-                p = p->n;
                 foundjobsize++;
+                hf = newFoudnjob(hf, t);
             }
-            else
-            {
-                if (p->p != NULL)
-                    p->p->n = p->n;
-                if(p->n!=NULL)
-                  p->n->n =  p->n;
 
-                  Foundjob *todelete = p;
-                  p=p->n;
-                  delete todelete;    
-            }
+            p = p->n;
         }
 
-        return f;
+        return hf;
     }
     Foundjob *loadalljob(float h)
     {

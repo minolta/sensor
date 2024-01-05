@@ -30,6 +30,9 @@ public:
             sht = new SHTSensor();
         if (sht->init())
         {
+#ifdef HDEBUG
+            Serial.println("\n Sensor is ok");
+#endif
             sht->setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
             return true;
         }
@@ -59,20 +62,38 @@ public:
 
         p = NULL;
     }
-    void read()
+    float readInterval()
+    {
+        if (millis() > nextreadtime)
+        {
+            nextreadtime = intervalread * 1000 + millis();
+            return read();
+        }
+
+        return -100;
+    }
+    float read()
     {
         if (sht->readSample())
         {
             readok = true;
             h = sht->getHumidity();
             t = sht->getTemperature();
+#ifdef HDEBUG
+            Serial.printf("\n H value H:%f T:%f ", h, t);
+#endif
         }
         else
         {
             h = -200;
             t = -200;
+#ifdef HDEBUG
+            Serial.println("\n Can not read\n");
+#endif
             readok = false;
         }
+
+        return h;
     }
     void read(Hdata *d)
     {

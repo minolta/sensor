@@ -19,12 +19,17 @@ class GPS
     String gpsdatetime;
     unsigned long timeSinceEpoch;
     unsigned long updatetime;
+    unsigned long timezone = 0;
 
 public:
     void start()
     {
         ss = new SoftwareSerial(RXPin, TXPin);
         ss->begin(GPSBaud);
+    }
+    void settimezone(int tz)
+    {
+        timezone = tz * 3600;
     }
     void setRx(int pin)
     {
@@ -104,7 +109,11 @@ public:
     }
     unsigned long timeEpoch()
     {
-        return timeSinceEpoch + (updatetime/1000);
+        return timeSinceEpoch + (updatetime/1000)+timezone;
+    }
+    void print()
+    {
+        Serial.println("GPS DATA: "+gpsloc +" "+ gpsdate+" "+gpstime+" TZ "+timeEpoch());
     }
 };
 

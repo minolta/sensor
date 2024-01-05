@@ -1,7 +1,10 @@
 #include <Arduino.h>
 // #define TIMEDEBUG 1
-// #define JOBDEBUG 1
-#define TASKDEBUG 1
+#define JOBDEBUG 1
+// #define TASKDEBUG 1
+
+#define JOBFILE "/j1.job"
+// #define HDEBUG 1
 #include <unity.h>
 #include "Configfile.h"
 #include "./DNSServer.h"
@@ -41,10 +44,15 @@
 #include "Runjob.h"
 #include "html.h"
 #include <time.h>
-#include <stdio.h>
+// #include <stdio.h>
 #include "gps.h"
 #include "taskservice.h"
-
+void runs();
+GPS *gpsservice = new GPS();
+TimeService *timeservice = new TimeService();
+TaskService *taskservice = new TaskService();
+TimeService *timeService = new TimeService();
+Htask *hservice = new Htask();
 String filllist(const String &var);
 static const int RXPin = D7, TXPin = D8;
 static const uint32_t GPSBaud = 9600;
@@ -101,12 +109,16 @@ const char getpassword_html[] PROGMEM = R"rawliteral(
 </html>)rawliteral";
 void connect()
 {
-  WiFi.begin("forpi", "04qwerty");
+  WiFi.begin("siri", "04qwerty");
   while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
   {
+    digitalWrite(D4, 0);
     Serial.print(".");
-    delay(1000);
+    delay(200);
+    digitalWrite(D4, 1);
   }
+  Serial.print("IP:");
+  Serial.println(WiFi.localIP());
 }
 void testEspjobtofile()
 {
@@ -427,12 +439,8 @@ void testCheckin()
 }
 void checkconn()
 {
-  WiFi.begin("forpi", "04qwerty");
-  while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
-  {
-    Serial.print(".");
-    delay(200);
-  }
+  connect();
+  Serial.printf("\n IP : is %s", WiFi.localIP().toString().c_str());
   Configfile cfg("/config1.cfg");
   cfg.openFile();
   cfg.addConfig("talkurl", "http://192.168.88.2");
@@ -809,18 +817,35 @@ Job *js = new Job();
 void testAddjobviawww()
 {
 
-  IPAddress apIP(10, 10, 10, 1); // Private network for server
-  Serial.begin(9600);
-  pinMode(2, OUTPUT);
-  WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
-  WiFi.softAP("TestAddjob", "12345678"); // WiFi name
-
+  // WiFi.mode(WIFI_AP);
+  // WiFi.softAPConfig(apIP, apIP, IPAddress(255, 255, 255, 0));
+  // WiFi.softAP("TestAddjob", "12345678"); // WiFi name
+  // IPAddress apIP(10, 10, 10, 1); // Private network for server
+  connect();
+  server.on("/deletejob", HTTP_GET, [](AsyncWebServerRequest *request)
+            { 
+                int id = request->getParam("id")->value().toInt();
+               Espjob *p =  js->findById(id);
+               js->deletejob(p);
+               js->savetofile(JOBFILE);
+                request->send(200, "text/html", js->toString()); });
   server.on("/addjob", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(200, "text/html", addjob_html); });
   server.on("/remove", HTTP_GET, [](AsyncWebServerRequest *request)
-            { js->removefile("/j1.job");
+            { js->removefile(JOBFILE);
               request->send(200, "text/html","remove"); });
+  server.on("/time", HTTP_GET, [](AsyncWebServerRequest *request)
+            { 
+             unsigned long t = timeservice->getTime()-25200; //สำหรับ เวลา GTM
+             unsigned long heap = system_get_free_heap_size();
+             String j = "{\"datetime\":\""+gpsdatetime+"+\",\"timestamp\":"+t+",\"uptime\":"+timeservice->uptime()+",\"t\":"+hservice->gett()+",\"h\":"+hservice->geth()+",\"heap\":"+heap+"}";
+              request->send(200, "application/json", j ); });
+
+  server.on("/task", HTTP_GET, [](AsyncWebServerRequest *request)
+            { 
+             String buf = taskservice->toJson(taskservice->getF());
+
+             request->send(200, "application/json", buf); });
   server.on("/savejob", HTTP_GET, [](AsyncWebServerRequest *request)
             { 
                String port = request->getParam("port")->value();
@@ -831,22 +856,24 @@ void testAddjobviawww()
                String out = request->getParam("output")->value();
                String stime = request->getParam("stime")->value();
                String etime = request->getParam("etime")->value();
-              //  Espjob *jjj = js->newjob(js->getsize(),hlow.toDouble(),hhigh.toDouble(),
-              //  port.toInt(),runtime.toInt(),waittime.toInt(),1,out.toInt(),stime,etime);
-                // Serial.println(request->getParam("port")->value());
               
                 char buf [2024];
-                // sprintf(buf, "%d,%.2f,%.2f,%d,%d,%d,%d,%d,%s,%s|", js->getsize()+1,
-                //  hlow, hhigh, port, runtime, waittime, 1, out,stime,etime);
-                //  Serial.printf("ADD : %s\n",buf);
-                  int pp = getPort(port);
-                js->addJob(js->newjob(js->getsize(),hlow.toDouble(),hhigh.toDouble(),pp,runtime.toInt(),waittime.toInt(),1,out.toInt(),stime,etime));
-                sprintf(buf,"size:%d Port:%s runttime: %s waittime: %s OUT:%s", js->getsize() ,port,runtime,waittime,out);
-                js->savetofile("/j1.job");
+                int pp = getPort(port);
+                Espjob *nj = js->newjob(js->getsize(),hlow.toDouble(),hhigh.toDouble(),pp,runtime.toInt(),waittime.toInt(),1,out.toInt(),stime,etime);
+                js->addJob(nj);
+                sprintf(buf,"add newjob size:%d Port:%s runttime: %s waittime: %s OUT:%s", js->getsize() ,port,runtime,waittime,out);
+                js->savetofile(JOBFILE);
+                // js->clearjobs();
+                // js->load(JOBFILE);
                 request->send(200, "text/html",buf); });
   server.onNotFound([](AsyncWebServerRequest *request)
                     { request->send_P(200, "text/html", addjob_html, filllist); });
   server.begin();
+  while (1)
+  {
+    runs();
+    delay(1);
+  }
 }
 
 String filllist(const String &var)
@@ -858,14 +885,12 @@ String filllist(const String &var)
   {
     Serial.println("Fill list");
     Espjob *index = js->getfirst();
-    // tr += "<tr><td>" + String(js->getsize()) + "</td></tr>";
     while (index != NULL)
     {
       Serial.println(index->id);
       sprintf(buf, "<tr><td>%d</td><td>%.2f</td><td>%.2f</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td><button onclick='deletejob(%d)'>delete</button></td></tr>\n",
               index->id, index->hlow, index->hhigh, index->port, index->runtime, index->waittime, index->out, index->enable, index->stime, index->etime, index->id);
       tr += String(buf);
-
       index = index->n;
     }
   }
@@ -1038,11 +1063,11 @@ void testloadjobbyh()
   Foundjob *found = js->loadjobByh(15);
   TEST_ASSERT(js->getFoundsize() == 1);
   Serial.println(js->toString());
-  js->printFound(found);
+  js->printFound("By h 15", found);
 
   found = js->loadjobByh(70);
   TEST_ASSERT(js->getFoundsize() == 2);
-  js->printFound(found);
+  js->printFound("By h 70", found);
 }
 void testloadjobbytime()
 {
@@ -1056,11 +1081,11 @@ void testloadjobbytime()
   Serial.println("-------------------------------------");
   Serial.println(ts->getTimeString());
   Serial.println(js->getFoundsize());
-  js->printFound(found);
+  js->printFound("By time:", found);
   Serial.println("-------------------------------------");
 
   found = js->loadjobByh(20, found);
-  js->printFound(found);
+  js->printFound("By h:", found);
 }
 void testHTASK()
 {
@@ -1121,14 +1146,14 @@ void testTaskserviceLoadjobByh()
   ts->setJobService(js);
   Foundjob *found = ts->loadbyh();
   TEST_ASSERT(js->getFoundsize() > 1);
-  js->printFound(found);
+  js->printFound("By h", found);
 
   TimeService *tis = new TimeService();
   tis->setTime(1703129018); // time stamp is 10:35
   ts->setTimeService(tis);
 
   found = ts->loadbytime();
-  js->printFound(found);
+  js->printFound("bytime", found);
 }
 void testLoadalljob()
 {
@@ -1143,7 +1168,7 @@ void testLoadalljob()
   for (int i = 0; i < 1000; i++)
   {
     Foundjob *found = js->loadalljob(htask->geth());
-    js->printFound(found);
+    js->printFound("All job:", found);
     js->freeFoundjobs(found);
   }
   unsigned long bb = system_get_free_heap_size();
@@ -1208,8 +1233,7 @@ void testtaskservicecheckid()
     jobs = jobs->n;
   }
 }
-TaskService *taskservice = new TaskService();
-TimeService *timeService = new TimeService();
+
 void testpushjobtaskservice()
 {
   // 1703405990 //8 โมง
@@ -1235,19 +1259,117 @@ void testpushjobtaskservice()
 
   // js->printFound(js->loadalljob(40));
   taskservice->run(js->loadalljob(40));
- 
+
   Task *fi = taskservice->getF();
-  while (fi!=NULL)
+  while (fi != NULL)
   {
     taskservice->updateExce();
     taskservice->freeTask();
     fi = taskservice->getF();
-    Serial.printf("FI %x\n",fi);
+    Serial.printf("FI %x\n", fi);
     delay(1000);
   }
   unsigned long bb = system_get_free_heap_size();
   Serial.printf("\n\nTOTAL: %ld  -  %ld \n\n", aa, bb);
   // delay(1000 * 20);
+}
+
+void runs()
+{
+  Foundjob *timejobs = js->loadjobByt();
+  js->printFound("Time jobs:", timejobs);
+
+  if (timejobs != NULL)
+  {
+    Foundjob *alljob = js->loadjobByh(hservice->read(), timejobs);
+    js->printFound("All jobs:", alljob);
+    taskservice->run(alljob);
+    taskservice->updateExce();
+    // delay(500);
+    js->freeFoundjobs(alljob);
+    js->freeFoundjobs(timejobs);
+  }
+
+  gpsservice->read();
+  hservice->readInterval();
+}
+void runloop()
+{
+
+  while (1)
+  {
+
+    runs();
+    // Foundjob *foundbytime = js->loadjobByt();
+    // js->printFound(foundbytime);
+    // hservice->read();
+    // float h = hservice->geth();
+    // Foundjob *fh = js->loadjobByh(hservice->geth(), foundbytime);
+    // js->printFound(fh);
+    // taskservice->runLoop();
+    // // js->printfound();
+    // gpsservice->read();
+    // // gpsservice->print();
+    // timeservice->printFreemem();
+    // delay(10);
+    // // js->freeFoundjobs(foundbytime);
+    // // js->freeFoundjobs(fh);
+    // timeservice->printFreemem();
+  }
+}
+void ld()
+{
+
+  while (1)
+  {
+    Serial.println(js->toStringln());
+    delay(1000);
+  }
+}
+void nfun()
+{
+  String st, et;
+  st = NULL;
+  et = NULL;
+  // Espjob *nj = js->n(33, 0.5, 80, 4, 1, 2, 1, 1, st, et);
+}
+void testTasktojson()
+{
+  // taskservice->addTask()
+
+  Espjob *j = new Espjob();
+  j->id = 1111;
+  j->hhigh = 90;
+  j->hlow = 10;
+  j->etime = "10:10";
+  j->stime = "9:00";
+  j->runtime = 100;
+  j->waittime = 1;
+
+  Task *t = new Task();
+  t->setJob(j);
+  t->setNext(NULL);
+  t->setPrv(NULL);
+
+  Serial.println(taskservice->tasktojson(t));
+
+  j = new Espjob();
+  j->id = 2222;
+  j->hhigh = 90;
+  j->hlow = 10;
+  j->etime = "10:10";
+  j->stime = "9:00";
+  j->runtime = 100;
+  j->waittime = 1;
+
+  Task *t1 = new Task();
+  t1->setJob(j);
+  t1->setPrv(t);
+  t->setNext(t1);
+
+ 
+  Serial.println(taskservice->toJson(t));
+
 }
 void setup()
 {
@@ -1256,6 +1378,18 @@ void setup()
   pinMode(2, OUTPUT);
   // delay(2000);
   ss.begin(GPSBaud);
+  gpsservice->start();
+  gpsservice->settimezone(7);
+  timeservice->setGps(gpsservice);
+  hservice->init();
+  hservice->setreadNext(15);
+  taskservice->setJobService(js);
+  taskservice->setTimeService(timeservice);
+  taskservice->setHtask(hservice);
+
+  js->setTimeService(timeservice);
+  js->load(JOBFILE);
+  Serial.println("Setup ok");
   UNITY_BEGIN();
   // RUN_TEST(checkconn);
   // RUN_TEST(testCheckin);
@@ -1278,7 +1412,6 @@ void setup()
   // RUN_TEST(testEspjobRun);
   // RUN_TEST(testDeleteEspjob);
   // RUN_TEST(testDirectrun);
-  js->load("/j1.job");
 
   // RUN_TEST(testScanstime);
   // RUN_TEST(testListjobs);
@@ -1294,7 +1427,7 @@ void setup()
   // RUN_TEST(testGetGPStimenow);
   // js->load("/j.job");
   // RUN_TEST(testloadjobbyh);
-  // RUN_TEST(testAddjobviawww);
+
   // RUN_TEST(testloadjobbytime);
   // RUN_TEST(testconvertjobtime);
   // RUN_TEST(testHTASK);
@@ -1306,7 +1439,13 @@ void setup()
   // RUN_TEST(testFreememloadh);
   // RUN_TEST(testGettodaymemuser);
   // RUN_TEST(testtaskservicecheckid);
-  RUN_TEST(testpushjobtaskservice);
+  // RUN_TEST(testpushjobtaskservice);
+  // RUN_TEST(runloop);
+
+  // RUN_TEST(ld);
+  // RUN_TEST(nfun);
+  // RUN_TEST(testTasktojson);
+  RUN_TEST(testAddjobviawww);
   UNITY_END();
 }
 
@@ -1317,8 +1456,16 @@ void loop()
   // delay(300);
   // Foundjob *alljob = js->loadalljob(60);
   // taskservice->run(alljob);
-  delay(100);
+  // runloop();
+  delay(1);
+  // runs();
+  // hservice->readInterval();
+  // gpsservice->read();
+
+  // yield();
+  // runs();
   // taskservice->updateExce();
   // taskservice->printTask();
   // gpsobj->read();
+  // taskservice->runLoop();
 }
