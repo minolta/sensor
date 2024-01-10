@@ -107,6 +107,11 @@ public:
         timeSinceEpoch = mktime(&tm);
         updatetime = millis();
     }
+    void setTime(time_t t)
+    {
+        timeSinceEpoch  = t;
+        updatetime = millis();
+    }
     unsigned long timeEpoch()
     {
         return timeSinceEpoch + (updatetime/1000)+timezone;

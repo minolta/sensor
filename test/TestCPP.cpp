@@ -1096,6 +1096,10 @@ void testHTASK()
     t->read();
     Serial.printf("T:%f H:%f", t->gett(), t->geth());
   }
+  else
+  {
+    Serial.println("ERROR");
+  }
 }
 void testScanstime()
 {

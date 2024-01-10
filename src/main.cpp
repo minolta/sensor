@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#define JOBFILE "/j1.job"
 // #include <Adafruit_Sensor.h>
 // #include <DHT.h>
 // #include <DHT_U.h>
@@ -37,16 +38,23 @@
 #include "Runjob.h"
 #include "html.h"
 #include <time.h>
-#include "Gps.h"
-
+#include "gps.h"
+#include "taskservice.h"
 GPS *gps;
+Job *js = new Job();
 KDNSServer dnsServer;
+TimeService *timeservice = new TimeService();
+TaskService *taskservice = new TaskService();
+static const int RXPin = D7, TXPin = D8;
 // The TinyGPSPlus object
-Htask *htask = new Htask();
-Hdata *hdata = new Hdata();
+// Htask *htask = new Htask();
+// Hdata *hdata = new Hdata();
+GPS *gpsservice = new GPS();
+Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
-const String version = "139";
+SoftwareSerial ss(RXPin, TXPin);
+const String version = "140";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -60,7 +68,7 @@ int isDisconnect = false; // สำหรับบอกสถานะว่า
 char jsonChar[jsonbuffersize];
 long distance = 0;
 // ntp
-
+static const uint32_t GPSBaud = 9600;
 // สำหรับนับ จำนวนน้ำที่ผ่าน
 #define Warterinterruppin D5
 TM1637Display tm1(TMCLK, TMDIO);
@@ -493,6 +501,15 @@ void updateNTP()
 {
     if (timeClient.update())
     {
+
+        if(timeservice!=NULL)
+        {
+            timeservice->setTime(timeClient.getEpochTime());
+        }
+        if(gps!=NULL)
+        {
+            gps->setTime(timeClient.getEpochTime());
+        }
         formattedDate = timeClient.getFormattedDate();
         Serial.println(formattedDate);
 
@@ -963,14 +980,14 @@ void ota()
     String url = u + version;
     Serial.println(url);
     t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
-    String error =  ESPhttpUpdate.getLastErrorString();
-  
-    Serial.println("return #################### " + error+ "###########################3");
+    String error = ESPhttpUpdate.getLastErrorString();
+
+    Serial.println("return #################### " + error + "###########################3");
     switch (ret)
     {
     case HTTP_UPDATE_FAILED:
-        Serial.println("[update] Update failed. : "+ ESPhttpUpdate.getLastErrorString());
-        message = "update ERROR "+ESPhttpUpdate.getLastErrorString();
+        Serial.println("[update] Update failed. : " + ESPhttpUpdate.getLastErrorString());
+        message = "update ERROR " + ESPhttpUpdate.getLastErrorString();
         break;
     case HTTP_UPDATE_NO_UPDATES:
         if (oledok)
@@ -1276,18 +1293,18 @@ void setHttp()
 
     if (WiFi.status() != WL_CONNECTED)
         return; // ออกเลยถ้าไม่ต่อ wifi
-    // server.on("/dht", DHTtoJSON);
-    // server.on("/pressure", PressuretoJSON);
-    // server.on("/ktype", KtypetoJSON);
-    // server.on("/info", info);
-    // server.on("/ds18b20", readDS);
-    // server.on("/run", run);
-    // server.on("/a0", a0);
-    // server.on("/setwifi", setwifi);
+                // server.on("/dht", DHTtoJSON);
+                // server.on("/pressure", PressuretoJSON);
+                // server.on("/ktype", KtypetoJSON);
+                // server.on("/info", info);
+                // server.on("/ds18b20", readDS);
+                // server.on("/run", run);
+                // server.on("/a0", a0);
+                // server.on("/setwifi", setwifi);
 
     // server.on("/scanwifi", scanwifi);
 
- server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
+    server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send_P(200, "text/html", configfile_html, fillconfig); });
 
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -1564,21 +1581,21 @@ void connect()
 void readSht()
 {
 
-    if (htask != NULL)
+    if (hservice != NULL)
     {
-        htask->read();
-        pfHum = htask->geth();
-        pfTemp = htask->gett();
+        hservice->read();
+        pfHum = hservice->geth();
+        pfTemp = hservice->gett();
     }
 }
 void setSht()
 {
     // D1,D2
     // Wire.begin();
-    if (htask == NULL)
-        htask = new Htask();
+    if (hservice == NULL)
+        hservice = new Htask();
 
-    if (htask->init())
+    if (hservice->init())
     {
         Serial.print("*********************** SHT init(): success ************************\n");
     }
@@ -1607,7 +1624,7 @@ void readGps()
 }
 void displayGpsData()
 {
-    if (gpsdisplaytime > 10 &&configdata.havegps)
+    if (gpsdisplaytime > 10 && configdata.havegps)
     {
         Serial.print("GPS:");
         gpsdisplaytime = 0;
@@ -1643,8 +1660,8 @@ void settime()
 
 void setRTC()
 {
-//     if (cfg.getIntConfig("havertc"))
-//         rtcObject.Begin(); // Starts I2C
+    //     if (cfg.getIntConfig("havertc"))
+    //         rtcObject.Begin(); // Starts I2C
 }
 
 void setupoled()
@@ -2056,7 +2073,7 @@ void havekey()
         {
             getRtc();
         }
-        else if(k=='o')
+        else if (k == 'o')
         {
             ota();
         }
@@ -2077,7 +2094,6 @@ void readpzem()
         readpzemtime = 0;
     }
 }
-Job *js = new Job();
 String filllist(const String &var)
 {
     // Serial.println(var);
@@ -2198,7 +2214,7 @@ void setstanalonehttp()
             //  String b = "<i>"+bb+"</i> <b> "+String(t)+" </b> | GPS datetime: "+gpsdatetime +" Gps date:"+gpsdate+" Gps time:"+gpstime
              +" "+gpsloc;
                 unsigned long heap = system_get_free_heap_size();
-             String j = "{\"datetime\":\""+gpsdatetime+"+\",\"timestamp\":"+t+",\"uptime\":"+getUptime()+",\"t\":"+htask->gett()+",\"h\":"+htask->geth()+",\"heap\":"+heap+"}";
+             String j = "{\"datetime\":\""+gpsdatetime+"+\",\"timestamp\":"+t+",\"uptime\":"+getUptime()+",\"t\":"+hservice->gett()+",\"h\":"+hservice->geth()+",\"heap\":"+heap+"}";
               request->send(200, "application/json", j ); });
     server.on("/savejob", HTTP_GET, [](AsyncWebServerRequest *request)
               { 
@@ -2297,27 +2313,26 @@ void setup()
         settime();
         ota();
         checkin();
-        if (htask == NULL)
-            htask = new Htask();
+        if (hservice == NULL)
+            hservice = new Htask();
 
-        htask->init();
-        htask->setreadNext(10);
+        hservice->init();
+        hservice->setreadNext(10);
     }
     else
     {
-        js->load("/job.job");
-        runstanalone();
-        setstanalonehttp();
-        htask->init();
-        htask->setreadNext(10);
-        ts = new TimeService();
-        runservice = new Runjob();
-        runservice->setHtask(htask);
-        runservice->setTimeSerivce(ts);
-        gps = new GPS();
-        gps->start();
-        runservice->setGps(gps);
-        ts->setGps(gps);
+        ss.begin(GPSBaud);
+        gpsservice->start();
+        gpsservice->settimezone(7);
+        timeservice->setGps(gpsservice);
+        hservice->init();
+        hservice->setreadNext(15);
+        taskservice->setJobService(js);
+        taskservice->setTimeService(timeservice);
+        taskservice->setHtask(hservice);
+
+        js->setTimeService(timeservice);
+        js->load(JOBFILE);
     }
     if (configdata.havegps)
     {
@@ -2327,6 +2342,26 @@ void setup()
         gps->start();
     }
     // setWiFiEvent();
+}
+void runs()
+{
+    Foundjob *timejobs = js->loadjobByt();
+    js->printFound("Time jobs:", timejobs);
+
+    if (timejobs != NULL)
+    {
+        Foundjob *alljob = js->loadjobByh(hservice->read(), timejobs);
+        js->printFound("All jobs:", alljob);
+        taskservice->run(alljob);
+        taskservice->updateExce();
+        // delay(500);
+        js->freeFoundjobs(alljob);
+        js->freeFoundjobs(timejobs);
+    }
+
+    gpsservice->read();
+    hservice->readInterval();
+    // run stan alone
 }
 
 void loop()
@@ -2358,12 +2393,7 @@ void loop()
     }
     else
     {
-
-        readGps();
-        htask->readInterval(hdata);
-        displayGpsData();
-        dnsServer.processNextRequest();
-        // run stan alone
+        runs();
     }
 }
 
