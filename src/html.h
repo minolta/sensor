@@ -505,6 +505,8 @@ var t = document.getElementById("t");
        var name = document.getElementById("name"); 
     name.innerHTML = o.name
 
+    var name = document.getElementById("flow"); 
+    name.innerHTML = o.flow
     } else if (xhr.readyState === 4) {
      console.log("could not fetch the data");
      }
@@ -561,9 +563,12 @@ New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick=
   </tr>
        <tr>
   <td>h</td><td><label id="h">0</label></td>
-  </tr>
 
   </tr>
+  <tr>
+    <td>Flow</td><td><label id="flow">0</label></td>
+  </tr>
+
  </table>
 </body></html>)rawliteral";
 #endif

@@ -204,6 +204,8 @@ public:
         t->stime = stime.c_str();
         // if (etime.length() > 3)
         t->etime = etime.c_str();
+        t->st = ts->StringtoTime(stime,"HH:MM");
+        t->et = ts->StringtoTime(etime,"HH:MM");
         return t;
     }
     Espjob *findById(int id)

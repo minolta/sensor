@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "140";
+const String version = "147";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -177,9 +177,12 @@ class Portio
 public:
     int port;
     int value;
-    int delay;
+    unsigned long delay;
+    unsigned long flowchecktime;
     int waittime;
     int run = 0;
+    unsigned long endtime; // เวลาที่จะหยุด run
+    int defaultvalue = 0;
     String closetime;
     String name;
     Portio *n;
@@ -255,6 +258,8 @@ struct
     int readpzemtime = 1;
     int havegps = 0;
     int stanalone = 0;
+    int flowlow = 10; // การไหลของน้ำ
+    unsigned long flowchecktime = 5;
 } configdata;
 
 struct
@@ -324,6 +329,7 @@ void loadconfigtoram()
     configdata.readpzemtime = cfg.getIntConfig("readpzemtime", 1);
     configdata.havegps = cfg.getIntConfig("havegps", 0);
     configdata.stanalone = cfg.getIntConfig("stanalone", 0); // บอกให้ run stan alone
+    configdata.flowlow = cfg.getIntConfig("flowlow", 10);
 }
 
 // water  limit
@@ -382,7 +388,9 @@ float a0value;
 float rawvalue = 0;
 
 // สำหรับอ่านค่าน้ำ --------------
+
 volatile int flow_frequency;
+volatile unsigned long totalflow_frequency;
 volatile int fordisplay = 0;
 //----------------------------
 
@@ -452,16 +460,8 @@ ICACHE_RAM_ATTR void flow() // Interrupt function
 {
 
     flow_frequency++;
-    if (fordisplay > 0)
-    {
-        fordisplay--;
-    }
-    else
-    {
-        digitalWrite(D1, 0); // ปิดน้ำไม่มีการจ่ายน้ำอีกแล้ว
-    }
-
-    Serial.println(flow_frequency);
+    totalflow_frequency++;
+    // Serial.println(flow_frequency);
 }
 
 void displayTOTM(float d)
@@ -502,11 +502,11 @@ void updateNTP()
     if (timeClient.update())
     {
 
-        if(timeservice!=NULL)
+        if (timeservice != NULL)
         {
             timeservice->setTime(timeClient.getEpochTime());
         }
-        if(gps!=NULL)
+        if (gps != NULL)
         {
             gps->setTime(timeClient.getEpochTime());
         }
@@ -531,24 +531,42 @@ void portcheck()
 
     for (int i = 0; i < ioport; i++)
     {
-        if (ports[i].delay > 0)
+
+        unsigned long t = millis();
+        if (ports[i].run == 1 && configdata.havewater && ports[i].flowchecktime <= t)
+        {
+            if (flow_frequency <= configdata.flowlow) // ดูค่าใน flow_frequency น้อยกว่าที่กำหนดหรือเปล่าถ้าน้อยปิดระบบเลย
+            {
+                // ถ่าไม่มีการไหลของน้ำเลยให้หยุด port เลย flow ต่อกับ D6
+                ports[i].run = 0;
+                ports[i].endtime = 0;
+                digitalWrite(ports[i].port, ports[i].defaultvalue);
+                message = "Open pump but no flow off pump";
+                Serial.println(message);
+                flow_frequency = 0;
+            }
+            else
+            {
+                flow_frequency = 0;
+                ports[i].flowchecktime = t + (configdata.flowchecktime * 1000); // ปรับเวลาตรวจสอบรอบหน้า
+                message = "Have flow runok set next check ";
+                Serial.println(message);
+            }
+        }
+        // end job
+
+        if (ports[i].run == 1 && ports[i].endtime <= t)
         {
             Serial.println("Check port");
-            ports[i].delay--;
             Serial.print("Port  ");
             Serial.println(ports[i].port);
             Serial.print(" Delay ");
             Serial.println(ports[i].delay);
-            if (ports[i].delay == 0)
-            {
-                ports[i].run = 0;
-                digitalWrite(ports[i].port, !ports[i].value);
-                Serial.println("End job");
-            }
-        }
-
-        if (ports[i].delay == 0)
             ports[i].run = 0;
+            ports[i].endtime = 0;
+            digitalWrite(ports[i].port, ports[i].defaultvalue);
+            Serial.println("End job");
+        }
     }
 }
 void readA0()
@@ -690,18 +708,25 @@ void setport()
     digitalWrite(D8, portconfig.D8initvalue);
     ports[0].port = D5;
     ports[0].name = "D5";
+    ports[0].defaultvalue = portconfig.D5initvalue;
     ports[1].port = D6;
     ports[1].name = "D6";
+    ports[1].defaultvalue = portconfig.D6initvalue;
     ports[2].port = D7;
     ports[2].name = "D7";
+    ports[2].defaultvalue = portconfig.D7initvalue;
     ports[3].port = D1;
     ports[3].name = "D1";
+    ports[3].defaultvalue = portconfig.D3initvalue;
     ports[4].port = D2;
     ports[4].name = "D2";
+    //  ports[4].defaultvalue = portconfig.D2initvalue;
     ports[5].port = D8;
     ports[5].name = "D8";
+    ports[5].defaultvalue = portconfig.D8initvalue;
     ports[6].port = D3;
     ports[6].name = "D3";
+    ports[6].defaultvalue = portconfig.D6initvalue;
     pinMode(D4, OUTPUT);
 }
 void readDHT()
@@ -817,6 +842,8 @@ String makeStatus()
     doc["datetime"] = formattedDate;
     doc["date"] = dayStamp;
     doc["time"] = timeStamp;
+    doc["currentflow"] = flow_frequency;
+    doc["totalflow"] = totalflow_frequency;
 
     if (cfg.getIntConfig("havepm25"))
     {
@@ -860,7 +887,9 @@ String makeStatus()
     doc["i"] = i;
     doc["e"] = e;
     doc["p"] = p;
-
+    doc["mills"] = millis();
+    doc["flow"] = flow_frequency;
+    doc["totalflow"] = totalflow_frequency;
     //  Serial.print(gps.location.lat(), 6);
     // Serial.print(F(","));
     // Serial.print(gps.location.lng(), 6);
@@ -880,14 +909,16 @@ boolean addTorun(int port, int delay, int value, int wait)
     {
         if (ports[i].port == port)
         {
-
+            unsigned long t = millis();
             ports[i].value = value;
-            if (ports[i].delay < delay)
-                ports[i].delay = delay;
+            // if (ports[i].delay < delay)
+            ports[i].delay = delay;
+            ports[i].endtime = t + (delay * 1000);                          // บอกเวลาหยุดทำงาน
+            ports[i].flowchecktime = t + (configdata.flowchecktime * 1000); // บอกเวลาให้ตรวจสอบน้ำไหล
             ports[i].waittime = wait;
             ports[i].run = 1;
             digitalWrite(ports[i].port, value);
-            Serial.println("Set port");
+            Serial.printf("Set port %d %ld\n", ports[i].run, ports[i].endtime);
             return true;
         }
     }
@@ -1725,12 +1756,11 @@ void initConfig()
 }
 void setupwater()
 {
-    tm1.setBrightness(0x0f);
-    tm1.showNumberDec(0000);
-    pinMode(Warterinterruppin, INPUT);
-    pinMode(D1, OUTPUT);
-    digitalWrite(D1, 0);
-    attachInterrupt(Warterinterruppin, flow, RISING); // Setup Interrupt
+    String p = cfg.getConfig("flowinterrrupport", "D6");
+    int pt = getPort(p);
+    pinMode(getPort(p), INPUT);
+    // pinMode(D6, INPUT);
+    attachInterrupt(pt, flow, RISING); // Setup Interrupt
     Serial.println("Setup Interrup  for water ...");
 }
 void setupntp()
@@ -1872,11 +1902,8 @@ void shtreadtask()
 }
 void porttask()
 {
-    if (porttrick > 0 && counttime >= 0)
-    {
-        porttrick = 0;
-        portcheck();
-    }
+
+    portcheck();
 }
 void ntptask()
 {
@@ -1978,15 +2005,13 @@ void a0task()
 }
 void watertask()
 {
-    if (configdata.havewater && displaytmp > 1)
-    {
-        Serial.printf("Water %d\n", fordisplay);
-        displaytmp = 0;
-        int a = 1;
-        if (fordisplay <= 0)
-            a = 0;
-        displayTOTM((fordisplay * 0.0022) + a);
-    }
+    // ยังไม่ใช้ตอนนี้
+    //  if (configdata.havewater && flow_frequency > 0)
+    //  {
+    //      Serial.printf("\nWater %d\n", flow_frequency);
+    //      // flow_frequency = 0;
+    //      // displayTOTM((fordisplay * 0.0022) + a);
+    //  }
 }
 void loadtask()
 {

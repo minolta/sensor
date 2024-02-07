@@ -1371,9 +1371,40 @@ void testTasktojson()
   t1->setPrv(t);
   t->setNext(t1);
 
- 
   Serial.println(taskservice->toJson(t));
+}
+void testStringtotime()
+{
+  char buf[500];
+  tm t = {0};
+  // t.tm_year = 2019 - 1900; // Year - 1900
+  // t.tm_mon = 7;            // Month, where 0 = jan
+  // t.tm_mday = 8;           // Day of the month
+  // t.tm_hour = 16;
+  // t.tm_min = 11;
+  // t.tm_sec = 42;
+  // t.tm_isdst = -1;
+  // str.toCharArray(buf, str.length() + 1);
+  // Serial.println(str);
+  strptime("1900-1-1 19:00", "%H:%M", &t);
 
+  time_t tt = mktime(&t);
+  Serial.println(tt);
+}
+volatile int flow_frequency=0;
+ICACHE_RAM_ATTR void flow() // Interrupt function
+{
+
+    flow_frequency++;
+    Serial.println(flow_frequency);
+}
+void testFlow()
+{
+  pinMode(D5, INPUT);
+  attachInterrupt(D5, flow, RISING); // Setup Interrupt
+  delay(3000);
+  Serial.print("-=--------===============");
+  Serial.println(flow_frequency);
 }
 void setup()
 {
@@ -1449,7 +1480,9 @@ void setup()
   // RUN_TEST(ld);
   // RUN_TEST(nfun);
   // RUN_TEST(testTasktojson);
-  RUN_TEST(testAddjobviawww);
+  // RUN_TEST(testAddjobviawww);
+  // RUN_TEST(testStringtotime);
+  RUN_TEST(testFlow);
   UNITY_END();
 }
 

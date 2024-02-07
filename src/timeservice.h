@@ -71,6 +71,22 @@ public:
 
         return ts;
     }
+    time_t StringtoTime(String str, String format)
+    {
+        char buf[500];
+        tm t;
+        // t.tm_year = 2019 - 1900; // Year - 1900
+        // t.tm_mon = 7;            // Month, where 0 = jan
+        // t.tm_mday = 8;           // Day of the month
+        // t.tm_hour = 16;
+        // t.tm_min = 11;
+        // t.tm_sec = 42;
+        // t.tm_isdst = -1;
+        str.toCharArray(buf, str.length() + 1);
+        Serial.println(str);
+        strptime(buf, format.c_str(), &t);
+        return mktime(&t);
+    }
     /**
      * @brief เอาสติงของวันนี้ไปเป็นออกไปบวกกับเวลาของ job
      *
@@ -136,12 +152,12 @@ public:
         unsigned long tt = mktime(&t);
         return tt;
     }
-/**
- * @brief เปลียน
- * 
- * @param s 
- * @return time_t 
- */
+    /**
+     * @brief เปลียน
+     *
+     * @param s
+     * @return time_t
+     */
     time_t stl(String s)
     {
         struct tm t = {0};
