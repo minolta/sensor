@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "147";
+const String version = "148";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -330,6 +330,7 @@ void loadconfigtoram()
     configdata.havegps = cfg.getIntConfig("havegps", 0);
     configdata.stanalone = cfg.getIntConfig("stanalone", 0); // บอกให้ run stan alone
     configdata.flowlow = cfg.getIntConfig("flowlow", 10);
+    configdata.flowchecktime = cfg.getIntConfig("flowchecktime",10);
 }
 
 // water  limit
