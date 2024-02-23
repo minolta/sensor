@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "148";
+const String version = "149";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -179,6 +179,8 @@ public:
     int value;
     unsigned long delay;
     unsigned long flowchecktime;
+    unsigned long flowfailcount = 0; // ตัวนับสูบไม่ขึ้น
+    unsigned long flowfailtime = 0;  // เวลาที่จะหยุดการทำงาน
     int waittime;
     int run = 0;
     unsigned long endtime; // เวลาที่จะหยุด run
@@ -260,6 +262,8 @@ struct
     int stanalone = 0;
     int flowlow = 10; // การไหลของน้ำ
     unsigned long flowchecktime = 5;
+    int flowfaillimit = 5; // จับว่าน้ำไม่มีกี่ครั้งให้หยุดตามเวลาที่กำหนด
+    int flowfailtime = 60; // เวลาหยุดการการดูดน้ำก่อน
 } configdata;
 
 struct
@@ -330,7 +334,9 @@ void loadconfigtoram()
     configdata.havegps = cfg.getIntConfig("havegps", 0);
     configdata.stanalone = cfg.getIntConfig("stanalone", 0); // บอกให้ run stan alone
     configdata.flowlow = cfg.getIntConfig("flowlow", 10);
-    configdata.flowchecktime = cfg.getIntConfig("flowchecktime",10);
+    configdata.flowchecktime = cfg.getIntConfig("flowchecktime", 10);
+    configdata.flowfaillimit = cfg.getIntConfig("flowfaillimit", 5); // ครั้งที่สูบไม่ขึ้น
+    configdata.flowfailtime = cfg.getIntConfig("flowfailtime", 60);  // เวลาหยุดสูบน้ำ
 }
 
 // water  limit
@@ -542,6 +548,12 @@ void portcheck()
                 ports[i].run = 0;
                 ports[i].endtime = 0;
                 digitalWrite(ports[i].port, ports[i].defaultvalue);
+                ports[i].flowfailcount++;
+                if (ports[i].flowfailcount >= configdata.flowfaillimit)
+                {
+                    ports[i].flowfailtime = t + configdata.flowfailtime * 1000; // กำหนดเวลาหยุดทำงาน
+                    ports[i].flowfailcount = 0;                                 // ถ้าน้ำมาแล้ว reset ใหม่
+                }
                 message = "Open pump but no flow off pump";
                 Serial.println(message);
                 flow_frequency = 0;
@@ -549,6 +561,9 @@ void portcheck()
             else
             {
                 flow_frequency = 0;
+                ports[i].flowfailcount = 0; // ถ้าน้ำมาแล้ว reset ใหม่
+                ports[i].flowfailtime = 0;  // ถ้าน้ำมาแล้ว reset ใหม่
+
                 ports[i].flowchecktime = t + (configdata.flowchecktime * 1000); // ปรับเวลาตรวจสอบรอบหน้า
                 message = "Have flow runok set next check ";
                 Serial.println(message);
@@ -904,11 +919,12 @@ String makeStatus()
 
 boolean addTorun(int port, int delay, int value, int wait)
 {
+    unsigned long t = millis();
     if (delay > counttime)
         counttime = delay;
     for (int i = 0; i < ioport; i++)
     {
-        if (ports[i].port == port)
+        if (ports[i].port == port && ports[i].flowfailtime <= t) // ถ้า flowfailtime น้อยกว่าหรือเท่ากับ t ให้ set port ได้แต่ถ้ายังไม่ครบกำหนดให้หยุด set port ก่อน
         {
             unsigned long t = millis();
             ports[i].value = value;
