@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "150";
+const String version = "152";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -265,6 +265,16 @@ struct
     unsigned long flowchecktime = 5;
     int flowfaillimit = 5; // จับว่าน้ำไม่มีกี่ครั้งให้หยุดตามเวลาที่กำหนด
     int flowfailtime = 60; // เวลาหยุดการการดูดน้ำก่อน
+    int havefastport = 0;
+    int fastport1status = 0;
+    int fastport0status = 0;
+    unsigned long fastport0nextcheck = 0;
+    int fastport0statustime = 0; // เวลาในการแสดงสถานะ tig
+    int fastport1statustime = 0;
+    unsigned long fastport0statusendtime = 0; // เป็นเวลาที่ใช้แสดง status ของ port ว่าจะให้แสดงนานเท่าไหร่
+    unsigned long fastport1statusendtime = 0;
+    unsigned long fastport1nextcheck = 0;
+
 } configdata;
 
 struct
@@ -304,6 +314,7 @@ void loadconfigtoram()
     configdata.havesht = cfg.getIntConfig("havesht", 0);
     configdata.havetorestart = cfg.getIntConfig("havetorestart", 0);
     configdata.havesonic = cfg.getIntConfig("havesonic", 0);
+    configdata.havefastport = cfg.getIntConfig("havefastport", 0);
     configdata.wifitimeout = cfg.getIntConfig("wifitimeout", 60);
     if (configdata.wifitimeout <= 0)
         configdata.wifitimeout = 60;
@@ -338,6 +349,8 @@ void loadconfigtoram()
     configdata.flowchecktime = cfg.getIntConfig("flowchecktime", 10);
     configdata.flowfaillimit = cfg.getIntConfig("flowfaillimit", 5); // ครั้งที่สูบไม่ขึ้น
     configdata.flowfailtime = cfg.getIntConfig("flowfailtime", 60);  // เวลาหยุดสูบน้ำ
+    configdata.fastport0statustime = cfg.getIntConfig("fastport0statustime", 5);
+    configdata.fastport1statustime = cfg.getIntConfig("fastport1statustime", 5);
 }
 
 // water  limit
@@ -552,8 +565,8 @@ void portcheck()
                 ports[i].flowfailcount++;
                 if (ports[i].flowfailcount >= configdata.flowfaillimit)
                 {
-                    String od = ports[i].flowfailcount + "";
-                    message = "Flow fail count is  " + od + " spend " + ports[i].flowfailtime/1000;
+                    String eeem = ports[i].flowfailcount + "";
+                    message = "Flow fail count is  " + eeem + " spend " + ports[i].flowfailtime / 1000;
                     errormessage = message;
                     ports[i].flowfailtime = t + configdata.flowfailtime * 1000; // กำหนดเวลาหยุดทำงาน
                     ports[i].flowfailcount = 0;                                 // ถ้าน้ำมาแล้ว reset ใหม่
@@ -830,6 +843,7 @@ String makeStatus()
     doc["havetosht"] = configdata.havesht;
     doc["havetortc"] = configdata.havertc;
     doc["havesonic"] = configdata.havesonic;
+    doc["havefastport"] = configdata.havefastport;
     doc["distance"] = distance;
     doc["config.wifitimeout"] = configdata.wifitimeout;
     doc["config.checkintime"] = configdata.checkintime;
@@ -859,6 +873,9 @@ String makeStatus()
     doc["d6"] = digitalRead(D6);
     doc["d7"] = digitalRead(D7);
     doc["d8"] = digitalRead(D8);
+    doc["fastport0status"] = configdata.fastport0status;
+    doc["fastport1status"] = configdata.fastport1status;
+
     doc["datetime"] = formattedDate;
     doc["date"] = dayStamp;
     doc["time"] = timeStamp;
@@ -2297,6 +2314,7 @@ void setstanalonehttp()
 void setup()
 {
 
+    Serial.begin(9600);
     flipper.attach(1, inden);
     // kt.run();
     pinMode(b_led, OUTPUT); // On Board LED
@@ -2335,9 +2353,16 @@ void setup()
         setSht();
     }
 
+    if (configdata.havefastport)
+    {
+        Serial.println("######## check fast port ##########");
+    }
+
     // ถ้ามีการต่อ Pm Sensor
     if (configdata.havepmsensor)
     {
+        Serial.println("######## Have Pm sensor check ##########");
+
         while (!Serial)
             ;
         mySerial.begin(9600);
@@ -2409,6 +2434,104 @@ void runs()
     hservice->readInterval();
     // run stan alone
 }
+/**
+ * @brief สำหรับบอกว่าว่า port ไปตามที่กำหนดตามเวาลหรืไม่หรือไม่
+ *
+ * เช่นกำหนด D6 == 1 สองวิ  ถ้า D6 เป็น วิเดียวก็จะไม่แสดงไปที่ portstatus0 ใน make
+ *
+ */
+
+void fastcheckport()
+{
+    String fastport0 = cfg.getConfig("fastport0", "");
+    int fastport0check = cfg.getIntConfig("fastport0check", 1); // เอาไว้ตรวจสอบว่าเป็น 1
+    int fastport0time = cfg.getIntConfig("fastport0time", 1);   // เวลาที่เอาไว้ตรวจสอบ
+    if (!fastport0.equals(""))
+    {
+        int p = getPort(fastport0);
+
+        if (digitalRead(p) == fastport0check && configdata.fastport0nextcheck == 0)
+        {
+            // ถ้าเป็นไปตามที่กำหนดให้รอตามเวลา
+            // delay(fastport0time * 1000);
+            configdata.fastport0nextcheck = millis() + (fastport0time * 1000); // เวลาที่จะมา check อีกรอบ
+            Serial.print("port check time " + String(fastport0time));
+            Serial.println(" Next check : " + String(configdata.fastport0nextcheck));
+        }
+
+        if (configdata.fastport0nextcheck > 0 && configdata.fastport0nextcheck <= millis() && digitalRead(p) == fastport0check)
+        { // ถ้าเวลาที่กำหนด น้อยกว่าหรือเท่ากับเวลาตรวจสอบจริง ละ อ่านค่ายังได้เท่าเดิมหรือมีข้อมูลเข้ามาใช้เปลียน status เป็น 1
+
+            configdata.fastport0status = 1;
+            configdata.fastport0nextcheck = 0;                                                      // reset ไปเลยเพื่อนให้เข้า start loop ใหม่
+            configdata.fastport0statusendtime = millis() + (configdata.fastport0statustime * 1000); // เวลาแสดงต่อไปจะกลับไปเป็น 0
+            Serial.print(" In condition port  set fastport0 status to 1 and next 0 in " + String(configdata.fastport0statusendtime));
+            Serial.println(" Status time " + String(configdata.fastport0statustime) + " next end " + String(configdata.fastport0statusendtime));
+        }
+
+        if (configdata.fastport0nextcheck > 0 && digitalRead(p) != fastport0check)
+        {
+
+            configdata.fastport0nextcheck = 0;
+            Serial.println("not in rang " + String(fastport0time));
+        }
+
+        if (configdata.fastport0statusendtime > 0 && configdata.fastport0statusendtime <= millis())
+        {
+            Serial.println("End fast status job");
+            configdata.fastport0status = 0; // เปลียน status
+            configdata.fastport0statusendtime = 0;
+        }
+    }
+
+    String fastport1 = cfg.getConfig("fastport1", "");
+    int fastport1check = cfg.getIntConfig("fastport1check", 1); // เอาไว้ตรวจสอบว่าเป็น 1
+    int fastport1time = cfg.getIntConfig("fastport1time", 1);   // เวลาที่เอาไว้ตรวจสอบ
+    if (!fastport1.equals(""))
+    {
+        int p = getPort(fastport1);
+
+        if (digitalRead(p) == fastport1check && configdata.fastport1nextcheck == 0)
+        {
+            // ถ้าเป็นไปตามที่กำหนดให้รอตามเวลา
+            // delay(fastport0time * 1000);
+            configdata.fastport1nextcheck = millis() + (fastport1time * 1000); // เวลาที่จะมา check อีกรอบ
+            Serial.print("port check time " + String(fastport1time));
+            Serial.println(" Next check : " + String(configdata.fastport1nextcheck));
+        }
+
+        if (configdata.fastport1nextcheck > 0 && configdata.fastport1nextcheck <= millis() && digitalRead(p) == fastport1check)
+        { // ถ้าเวลาที่กำหนด น้อยกว่าหรือเท่ากับเวลาตรวจสอบจริง ละ อ่านค่ายังได้เท่าเดิมหรือมีข้อมูลเข้ามาใช้เปลียน status เป็น 1
+
+            configdata.fastport1status = true;
+            configdata.fastport1nextcheck = 0;                                                      // reset ไปเลยเพื่อนให้เข้า start loop ใหม่
+            configdata.fastport1statusendtime = millis() + (configdata.fastport1statustime * 1000); // เวลาแสดงต่อไปจะกลับไปเป็น 0
+            Serial.print(" In condition port  set fastport 0 status to 1 and next 0 in " + String(configdata.fastport1statusendtime));
+            Serial.println(" Status time " + String(configdata.fastport1statustime) + " next end " + String(configdata.fastport1statusendtime));
+        }
+
+        if (configdata.fastport1nextcheck > 0 && digitalRead(p) != fastport1check)
+        {
+
+            configdata.fastport1nextcheck = 0;
+            Serial.println("not in rang " + String(fastport1time));
+        }
+
+        if (configdata.fastport1statusendtime > 0 && configdata.fastport1statusendtime <= millis())
+        {
+            Serial.println("End fast status job");
+            configdata.fastport1status = 0; // เปลียน status
+            configdata.fastport1statusendtime = 0;
+        }
+    }
+}
+void havefp()
+{
+    if (configdata.havefastport)
+    {
+        fastcheckport();
+    }
+}
 
 void loop()
 {
@@ -2436,6 +2559,7 @@ void loop()
         readpzem();
         readGps();
         displayGpsData();
+        havefp();
     }
     else
     {
