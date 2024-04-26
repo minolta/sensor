@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "149";
+const String version = "150";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -110,6 +110,7 @@ long porttrick = 0;
 long readdstime = 0;
 long apmodetime = 0;
 String message = "";
+String errormessage = "";
 long reada0time = 0;
 float tmpvalue = 0;
 long rtctime = 0;
@@ -551,6 +552,9 @@ void portcheck()
                 ports[i].flowfailcount++;
                 if (ports[i].flowfailcount >= configdata.flowfaillimit)
                 {
+                    String od = ports[i].flowfailcount + "";
+                    message = "Flow fail count is  " + od + " spend " + ports[i].flowfailtime/1000;
+                    errormessage = message;
                     ports[i].flowfailtime = t + configdata.flowfailtime * 1000; // กำหนดเวลาหยุดทำงาน
                     ports[i].flowfailcount = 0;                                 // ถ้าน้ำมาแล้ว reset ใหม่
                 }
@@ -860,7 +864,7 @@ String makeStatus()
     doc["time"] = timeStamp;
     doc["currentflow"] = flow_frequency;
     doc["totalflow"] = totalflow_frequency;
-
+    doc["errormessage"] = errormessage;
     if (cfg.getIntConfig("havepm25"))
     {
         doc["pm25"] = pmdata.pm2_5;
