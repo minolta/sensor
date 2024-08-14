@@ -502,11 +502,18 @@ var t = document.getElementById("t");
     version.innerHTML = o.version
     var heap = document.getElementById("heap"); 
     heap.innerHTML = o.heap
-       var name = document.getElementById("name"); 
+    var name = document.getElementById("name"); 
     name.innerHTML = o.name
 
     var name = document.getElementById("flow"); 
     name.innerHTML = o.flow
+    
+    var mesaage = document.getElementById("message"); 
+    message.innerHTML = o.message
+    
+    var errormessage = document.getElementById("errormessage"); 
+    errormessage.innerHTML = o.errormessage
+    
     } else if (xhr.readyState === 4) {
      console.log("could not fetch the data");
      }
@@ -568,7 +575,14 @@ New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick=
   <tr>
     <td>Flow</td><td><label id="flow">0</label></td>
   </tr>
-
+  <tr>
+    <td>message</td><td><label id="message"></label></td>
+  </tr>
+   <tr>
+    <td>error message</td><td><label id="errormessage"></label></td>
+  </tr>
  </table>
+ <h1>Help</h1>
+ 
 </body></html>)rawliteral";
 #endif

@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "152";
+const String version = "155";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -730,12 +730,22 @@ void setport()
 
     pinMode(D3, portconfig.D3value);
     digitalWrite(D3, portconfig.D3initvalue);
-    pinMode(D5, portconfig.D5value);
+    if (portconfig.D5value == 0)
+        pinMode(D5, INPUT_PULLUP);
+    else
+        pinMode(D5, portconfig.D5value);
     digitalWrite(D5, portconfig.D5initvalue);
-    pinMode(D6, portconfig.D6value);
+
+    if (portconfig.D6value == 0)
+        pinMode(D6, INPUT_PULLUP);
+    else
+        pinMode(D6, portconfig.D6value);
     digitalWrite(D6, portconfig.D6initvalue);
 
-    pinMode(D7, portconfig.D7value);
+    if (portconfig.D7value == 0)
+        pinMode(D7, INPUT_PULLUP);
+    else
+        pinMode(D7, portconfig.D7value);
     digitalWrite(D7, portconfig.D7initvalue);
     pinMode(D8, portconfig.D8value);
     digitalWrite(D8, portconfig.D8initvalue);
