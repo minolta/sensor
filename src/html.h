@@ -536,7 +536,7 @@ New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick=
 <button id=btn onClick="deleteallconfig()">Reset Config</button>
 <table id="customers">
 <tr>
-  <td>version</td><td><label id="name">0</label></td>
+  <td>name</td><td><label id="name">0</label></td>
     </tr>
 <tr>
   <td>version</td><td><label id="version">0</label></td>
