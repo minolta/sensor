@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "156";
+const String version = "157";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -95,6 +95,7 @@ long counttime = 0;
 
 volatile int wateruse = 0;       // สำหรับบอกว่าใช้น้ำไปเท่าไหรแล้ว
 volatile int idlewaterlimit = 0; // บอกว่าไม่มีการใช้น้ำ
+void findTDE();
 // KDS ds(D3);
 Ktimer kt;
 SSD1306Wire display(0x3c, D2, D1);
@@ -129,6 +130,8 @@ int readdistance = 0;
 int wifitimeout = 0;
 int makestatuscount = 0;
 float v;
+float tde;
+float firstted = 0;
 float i;
 float p;
 float e;
@@ -938,6 +941,8 @@ String makeStatus()
     doc["i"] = i;
     doc["e"] = e;
     doc["p"] = p;
+    doc["tde"] = tde;
+    doc["firsttde"] = firstted;
     doc["mills"] = millis();
     doc["flow"] = flow_frequency;
     doc["totalflow"] = totalflow_frequency;
@@ -2165,6 +2170,7 @@ void readpzem()
         p = pzem.power();
         e = pzem.energy();
         f = pzem.frequency();
+        findTDE();
         pf = pzem.pf();
         float s = v * i;
         q = sqrt(pow(s, 2) - pow(p, 2));
@@ -2544,6 +2550,42 @@ void havefp()
     if (configdata.havefastport)
     {
         fastcheckport();
+    }
+}
+boolean checkDaytime()
+{
+    // จะส่งค่าออกมาถ้าเป็นช่วงกลางวัน
+    int h = timeClient.getHours();
+    if (h >= 6 && h <= 18)
+    {
+        return true;
+    }
+
+    return false;
+}
+void resetTed()
+{
+    tde = 0;
+    firstted = 0;
+}
+// find TDE
+void findTDE()
+{
+
+    // ทำงานช่วง 6 - 18.00
+    if (!checkDaytime())
+    {
+        resetTed();
+    }
+    else
+    {
+        // ถ้า TDE  == 0
+        if (firstted == 0)
+        {
+            firstted = e; // กำหนด e เป็นตัวแรก
+        }
+
+        tde = e - firstted;
     }
 }
 

@@ -1391,12 +1391,12 @@ void testStringtotime()
   time_t tt = mktime(&t);
   Serial.println(tt);
 }
-volatile int flow_frequency=0;
+volatile int flow_frequency = 0;
 ICACHE_RAM_ATTR void flow() // Interrupt function
 {
 
-    flow_frequency++;
-    Serial.println(flow_frequency);
+  flow_frequency++;
+  Serial.println(flow_frequency);
 }
 void testFlow()
 {
@@ -1405,6 +1405,22 @@ void testFlow()
   delay(3000);
   Serial.print("-=--------===============");
   Serial.println(flow_frequency);
+}
+
+#define DEBUG_NTPClient 1
+void testDaytime()
+{
+
+  connect();
+  WiFiUDP ntpUDP;
+  timeClient.setTimeOffset(25200); // Thailand +7 = 25200
+  timeClient.begin();
+  if (timeClient.forceUpdate())
+  {
+    Serial.print("Date =========================>");
+    Serial.println(timeClient.getEpochTime());
+    Serial.printf("\nH:%d\n",timeClient.getHours());
+  }
 }
 void setup()
 {
@@ -1426,6 +1442,7 @@ void setup()
   js->load(JOBFILE);
   Serial.println("Setup ok");
   UNITY_BEGIN();
+  RUN_TEST(testDaytime);
   // RUN_TEST(checkconn);
   // RUN_TEST(testCheckin);
   // RUN_TEST(testSetConfig);
@@ -1482,7 +1499,7 @@ void setup()
   // RUN_TEST(testTasktojson);
   // RUN_TEST(testAddjobviawww);
   // RUN_TEST(testStringtotime);
-  RUN_TEST(testFlow);
+  // RUN_TEST(testFlow);
   UNITY_END();
 }
 
