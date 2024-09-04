@@ -54,7 +54,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "157";
+const String version = "158";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -2565,7 +2565,7 @@ boolean checkDaytime()
 }
 void resetTed()
 {
-    tde = 0;
+    // tde = 0; // เอาออกไป reset ตอนเช้า
     firstted = 0;
 }
 // find TDE
@@ -2583,6 +2583,7 @@ void findTDE()
         if (firstted == 0)
         {
             firstted = e; // กำหนด e เป็นตัวแรก
+            tde = 0; // reset ตอนเช้า
         }
 
         tde = e - firstted;
