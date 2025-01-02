@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #define JOBFILE "/j1.job"
+
 // #include <Adafruit_Sensor.h>
 // #include <DHT.h>
 // #include <DHT_U.h>
@@ -39,7 +40,9 @@
 #include "html.h"
 #include <time.h>
 #include "gps.h"
+#include "moveavg.h"
 #include "taskservice.h"
+
 GPS *gps;
 Job *js = new Job();
 KDNSServer dnsServer;
@@ -54,7 +57,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "158";
+const String version = "159";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -1665,6 +1668,8 @@ void connect()
         printIPAddressOfHost("fw1.pixka.me");
     }
 }
+MoveAvg havg(16);
+MoveAvg tavg(16);
 
 void readSht()
 {
@@ -1672,8 +1677,10 @@ void readSht()
     if (hservice != NULL)
     {
         hservice->read();
-        pfHum = hservice->geth();
-        pfTemp = hservice->gett();
+        havg.pushValue(hservice->geth());
+        pfHum = havg.getTotal() / havg.getSize();
+        tavg.pushValue(hservice->gett());
+        pfTemp = tavg.getTotal() / tavg.getSize();
     }
 }
 void setSht()
@@ -2583,7 +2590,7 @@ void findTDE()
         if (firstted == 0)
         {
             firstted = e; // กำหนด e เป็นตัวแรก
-            tde = 0; // reset ตอนเช้า
+            tde = 0;      // reset ตอนเช้า
         }
 
         tde = e - firstted;

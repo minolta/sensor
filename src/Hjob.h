@@ -1,6 +1,7 @@
 #ifndef HJOB_H
 #define HJOB_H
 #include "SHTSensor.h"
+
 // เป็น class สำหรับ run
 struct Hdata
 {
