@@ -57,7 +57,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "159";
+const String version = "160";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -1395,6 +1395,22 @@ void setHttp()
 
     // server.on("/scanwifi", scanwifi);
 
+    server.onNotFound([](AsyncWebServerRequest *request)
+                      {
+                        if (request->method() == HTTP_OPTIONS)
+    {
+    AsyncWebServerResponse *response = request->beginResponse(204, "text/html",  "not found");
+        response->addHeader("Access-Control-Allow-Origin", "*"); 
+         response->addHeader("Access-Control-Max-Age", "10000");
+         response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
+         response->addHeader("Access-Control-Allow-Headers", "*");
+         request->send(response);   
+    }
+    else
+    {
+        request->send(404, "text/plain", "");
+    }
+                         request->send(404); });
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send_P(200, "text/html", configfile_html, fillconfig); });
 
@@ -1431,7 +1447,14 @@ void setHttp()
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               { 
                 String status = makeStatus();
-                request->send(200, "application/json", status); });
+                 AsyncWebServerResponse *response = request->beginResponse(200, "application/json",  status);
+         response->addHeader("Access-Control-Allow-Origin", "*"); 
+         response->addHeader("Access-Control-Max-Age", "10000");
+         response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
+         response->addHeader("Access-Control-Allow-Headers", "*");
+         request->send(response);
+         
+          });
     //------------------------------------------------------------------------------------------------------------------------
 
     server.on("/scanwifi", HTTP_GET, [](AsyncWebServerRequest *request)
