@@ -57,7 +57,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "160";
+const String version = "161";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -1445,16 +1445,15 @@ void setHttp()
                 serializeJsonPretty(dd,buf,jsonbuffersize);
                 request->send(200, "application/json", buf); });
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { 
-                String status = makeStatus();
-                 AsyncWebServerResponse *response = request->beginResponse(200, "application/json",  status);
-         response->addHeader("Access-Control-Allow-Origin", "*"); 
-         response->addHeader("Access-Control-Max-Age", "10000");
-         response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
-         response->addHeader("Access-Control-Allow-Headers", "*");
-         request->send(response);
-         
-          });
+              {
+                  String status = makeStatus();
+                  AsyncWebServerResponse *response = request->beginResponse(200, "application/json", status);
+                  response->addHeader("Access-Control-Allow-Origin", "*");
+                  response->addHeader("Access-Control-Max-Age", "10000");
+                  response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
+                  response->addHeader("Access-Control-Allow-Headers", "*");
+                  request->send(response);
+              });
     //------------------------------------------------------------------------------------------------------------------------
 
     server.on("/scanwifi", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -1493,7 +1492,13 @@ void setHttp()
     dy["ntptimelong"] = timeClient.getEpochTime();
 
     serializeJson(dy, b, jsonbuffersize);
-    request->send(200, "application/json", b);
+    // request->send(200, "application/json", b);
+         AsyncWebServerResponse *response = request->beginResponse(200, "application/json",  b);
+         response->addHeader("Access-Control-Allow-Origin", "*"); 
+         response->addHeader("Access-Control-Max-Age", "10000");
+         response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
+         response->addHeader("Access-Control-Allow-Headers", "*");
+         request->send(response);
     for (int i = 0; i < 40; i++)
     {
       digitalWrite(2, !digitalRead(2));
@@ -1523,7 +1528,12 @@ void setHttp()
   dy["ip"] = WiFi.localIP().toString();
   dy["uptime"] = uptime;
   serializeJson(dy, b, jsonbuffersize);
-   request->send(200, "application/json", b); });
+           AsyncWebServerResponse *response = request->beginResponse(200, "application/json",  b);
+         response->addHeader("Access-Control-Allow-Origin", "*"); 
+         response->addHeader("Access-Control-Max-Age", "10000");
+         response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
+         response->addHeader("Access-Control-Allow-Headers", "*");
+         request->send(response); });
     //------------------------------------------------------------------------------------------------------------------------
 
     // server.on("/setconfig", setconfig);
@@ -1571,7 +1581,12 @@ void setHttp()
         doc["runtimer"] = time;
         char buf[jsonbuffersize];
         serializeJsonPretty(doc, buf, jsonbuffersize);
-                request->send(200, "application/json", buf); });
+                         AsyncWebServerResponse *response = request->beginResponse(200, "application/json",  buf);
+         response->addHeader("Access-Control-Allow-Origin", "*"); 
+         response->addHeader("Access-Control-Max-Age", "10000");
+         response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
+         response->addHeader("Access-Control-Allow-Headers", "*");
+         request->send(response); });
 
     if (configdata.havewater)
     {
