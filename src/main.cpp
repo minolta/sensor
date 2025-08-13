@@ -21,13 +21,8 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 #include <SoftwareSerial.h>
-// #include <RtcDS3231.h> //RTC library
-// #include <ESP8266Ping.h>
 #include <Ticker.h>
 #include "KAnalog.h"
-// #include <EEPROM.h>
-// #include "Adafruit_Sensor.h"
-// #include "Adafruit_AM2320.h"
 #include "Configfile.h"
 #include <TM1637Display.h>
 #include <ESPAsyncTCP.h>
@@ -57,7 +52,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "161";
+const String version = "166";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -280,7 +275,7 @@ struct
     unsigned long fastport0statusendtime = 0; // เป็นเวลาที่ใช้แสดง status ของ port ว่าจะให้แสดงนานเท่าไหร่
     unsigned long fastport1statusendtime = 0;
     unsigned long fastport1nextcheck = 0;
-
+    String description ;
 } configdata;
 
 struct
@@ -357,6 +352,7 @@ void loadconfigtoram()
     configdata.flowfailtime = cfg.getIntConfig("flowfailtime", 60);  // เวลาหยุดสูบน้ำ
     configdata.fastport0statustime = cfg.getIntConfig("fastport0statustime", 5);
     configdata.fastport1statustime = cfg.getIntConfig("fastport1statustime", 5);
+    configdata.description = cfg.getConfig("description");
 }
 
 // water  limit
@@ -830,6 +826,7 @@ String makeStatus()
     int buffersize = 2000;
     cfg.setbuffer(configdata.jsonbuffer);
     DynamicJsonDocument doc(buffersize);
+    doc["description"] = configdata.description;
     doc["heap"] = system_get_free_heap_size();
     doc["version"] = version;
     doc["name"] = name;
@@ -1143,6 +1140,7 @@ void checkin()
         // Serial.print("---------------------------------------------------------------");
 
         name = ddd["name"].as<String>();
+        cfg.addConfig("name",name);
         if (oledok)
         {
             displayslot.foot2 = "checkin ok";
@@ -1447,7 +1445,7 @@ void setHttp()
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               {
                   String status = makeStatus();
-                  AsyncWebServerResponse *response = request->beginResponse(200, "application/json", status);
+                  AsyncWebServerResponse *response = request->beginResponse(200, "application/json; charset=utf-8", status);
                   response->addHeader("Access-Control-Allow-Origin", "*");
                   response->addHeader("Access-Control-Max-Age", "10000");
                   response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
