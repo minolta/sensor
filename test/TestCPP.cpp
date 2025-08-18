@@ -1443,6 +1443,10 @@ void setup()
   Serial.println("Setup ok");
   UNITY_BEGIN();
   RUN_TEST(testDaytime);
+  pinMode(D3,OUTPUT);
+    pinMode(D2,OUTPUT);
+  digitalWrite(D3,0);
+  digitalWrite(D2,0);
   // RUN_TEST(checkconn);
   // RUN_TEST(testCheckin);
   // RUN_TEST(testSetConfig);
@@ -1511,7 +1515,9 @@ void loop()
   // Foundjob *alljob = js->loadalljob(60);
   // taskservice->run(alljob);
   // runloop();
-  delay(1);
+  digitalWrite(D3,digitalRead(D5));
+  digitalWrite(D2,!digitalRead(D2));
+  delay(1000);
   // runs();
   // hservice->readInterval();
   // gpsservice->read();
