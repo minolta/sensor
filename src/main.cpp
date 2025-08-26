@@ -38,6 +38,10 @@
 #include "moveavg.h"
 #include "taskservice.h"
 
+// เป็นความต่างเวลาของ diff กับ timestamp
+unsigned long difftimevalue = 0;
+// เป็นเวลาที่รับมาครั้งสุดท้าย
+unsigned long timestamp = 0;
 GPS *gps;
 Job *js = new Job();
 KDNSServer dnsServer;
@@ -123,6 +127,7 @@ double loadtotal = 0;
 double psi = 0;
 int ledstatus = 0;
 int readdistance = 0;
+int updatetimecounter = 0;
 // int a0readcount = 0;
 // StaticJsonDocument<jsonbuffersize> doc;
 int wifitimeout = 0;
@@ -282,7 +287,9 @@ struct
     int fastport1;
     int fastport0time;
     int fastport1time;
+    int updatetime = 3600;
     String description;
+    String updatetimestampurl;
 } configdata;
 
 struct
@@ -296,6 +303,31 @@ struct
  *
  * */
 int getPort(String);
+/**
+ * @brief Set the Timestamp object สำหรับ ปรับเวลาให้ esp เมื่อรับ timestamp มาแล้วหา diff กับ mills() แล้วเก็บไว้เวลาเรียกก็ใช้บวก Diff ด้วย
+ *
+ * @param request
+ */
+void setTimestamp(AsyncWebServerRequest *request)
+{
+    char *endptr;
+    const char *c_str = request->getParam("t")->value().c_str();
+    unsigned long t = strtoul(c_str, &endptr, 10);
+    if (*endptr == '\0' && endptr != c_str)
+    {
+        Serial.print("Conversion successful. The unsigned long value is: ");
+        Serial.println(t);
+        difftimevalue = t - (millis() / 1000);
+        timestamp = t;
+        timeClient.setEpochTime(t);
+        String re = "{\"message\":\"Conversion successful. The unsigned long value is: " + t + String("\"}");
+        request->send(200, "application/json", re);
+    }
+    else
+        request->send(500, "application/json", "{\"message\":\"ERROR Convert\"}");
+
+    // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
+}
 void loadconfigtoram()
 {
     Serial.println("Load config to ram");
@@ -354,8 +386,8 @@ void loadconfigtoram()
     configdata.havegps = cfg.getIntConfig("havegps", 0);
     configdata.stanalone = cfg.getIntConfig("stanalone", 0); // บอกให้ run stan alone
     configdata.flowlow = cfg.getIntConfig("flowlow", 10);
-    configdata.fastport0 = getPort(cfg.getConfig("fastport0","D5"));
-    configdata.fastport1 = getPort(cfg.getConfig("fastport1","D6"));
+    configdata.fastport0 = getPort(cfg.getConfig("fastport0", "D5"));
+    configdata.fastport1 = getPort(cfg.getConfig("fastport1", "D6"));
     configdata.fastport0check = cfg.getIntConfig("fastport0check", 1);
     configdata.fastport1check = cfg.getIntConfig("fastport1check", 1);
 
@@ -364,9 +396,11 @@ void loadconfigtoram()
     configdata.flowfailtime = cfg.getIntConfig("flowfailtime", 60);  // เวลาหยุดสูบน้ำ
     configdata.fastport0statustime = cfg.getIntConfig("fastport0statustime", 5);
     configdata.fastport1statustime = cfg.getIntConfig("fastport1statustime", 5);
-    configdata.fastport0time = cfg.getIntConfig("fastport0time",3);
-    configdata.fastport1time = cfg.getIntConfig("fastport1time",3);
+    configdata.fastport0time = cfg.getIntConfig("fastport0time", 3);
+    configdata.fastport1time = cfg.getIntConfig("fastport1time", 3);
     configdata.description = cfg.getConfig("description");
+    configdata.updatetimestampurl = cfg.getConfig("updatetimestampurl", "http://192.168.88.191/timestamp");
+    configdata.updatetime = cfg.getIntConfig("updatetimestamp", 3600);
 }
 
 // water  limit
@@ -684,7 +718,52 @@ void readA0()
     a0value = psi;
     // rawvalue = sensorValue;
 }
+void updateTime()
+{
+    WiFiClient client;
+    HTTPClient http;
+    http.begin(client, configdata.updatetimestampurl);
 
+    int httpResponseCode = http.GET();
+
+    if (httpResponseCode == 200)
+    {
+        String payload = http.getString();
+        Serial.println("HTTP Response Code: " + String(httpResponseCode));
+        Serial.println("Received JSON:");
+        Serial.println(payload);
+
+        DynamicJsonDocument ddd(200);
+        Serial.print(" Play load:");
+        deserializeJson(ddd, payload);
+        String tt = ddd["timestamp"].as<String>();
+        // --- Parse the JSON ---
+
+        char *endptr;
+        unsigned long number = strtoul(tt.c_str(), &endptr, 10);
+
+        if (*endptr == '\0')
+        {
+            Serial.print("Conversion successful: ");
+            Serial.println(number);
+            timestamp = number;
+            difftimevalue = number - (millis() / 1000);
+            timeClient.setEpochTime(number);
+        }
+        else
+        {
+            Serial.print("Conversion failed. Found non-numeric character: ");
+            Serial.println(*endptr);
+        }
+    }
+    else
+    {
+        Serial.print("HTTP request failed, error code: ");
+        Serial.println(httpResponseCode);
+    }
+
+    http.end();
+}
 void setwifi()
 {
     // server.send(200, "text/html", index_html);
@@ -993,6 +1072,8 @@ String makeStatus()
     doc["mills"] = millis();
     doc["flow"] = flow_frequency;
     doc["totalflow"] = totalflow_frequency;
+    doc["localtimestamp"] = (millis() / 1000) + difftimevalue;
+    doc["lasttimestart"] = timestamp;
     //  Serial.print(gps.location.lat(), 6);
     // Serial.print(F(","));
     // Serial.print(gps.location.lng(), 6);
@@ -1322,6 +1403,7 @@ void inden()
     readdistance++;
     readpzemtime++;
     checkconnectiontime++;
+    updatetimecounter++;
     if (apmode)
     {
         apmodetime++;
@@ -1632,6 +1714,7 @@ void setHttp()
     // // closetime parameter have to show on oled
     // server.on("/setclosetime", runtimer); // time parameter to count
 
+    server.on("/settimestamp", setTimestamp);
     server.begin(); // เปิด TCP Server
     Serial.println("Server started");
     if (oledok)
@@ -2216,6 +2299,11 @@ void havekey()
         {
             ota();
         }
+        else if (k == 't' || k == 'T')
+        {
+            Serial.println("Update time from ip ");
+            updateTime();
+        }
     }
 }
 void readpzem()
@@ -2540,22 +2628,22 @@ void ICACHE_RAM_ATTR insensor1()
  */
 void fastcheckport()
 {
-     
-     // เอาไว้ตรวจสอบว่าเป็น
+
+    // เอาไว้ตรวจสอบว่าเป็น
     if (configdata.fastport0 != 0)
     {
 
-        if (digitalRead(configdata.fastport0) ==  configdata.fastport0check && configdata.fastport0nextcheck == 0)
+        if (digitalRead(configdata.fastport0) == configdata.fastport0check && configdata.fastport0nextcheck == 0)
         {
             // ถ้าเป็นไปตามที่กำหนดให้รอตามเวลา
             // delay(fastport0time * 1000);
             unsigned long now = millis();
             configdata.fastport0nextcheck = now + (configdata.fastport0time * 1000); // เวลาที่จะมา check อีกรอบ
-            Serial.print("port "+String(configdata.fastport0)+" check time " + String(configdata.fastport0time) +" Check logic is "+String( configdata.fastport0check));
-            Serial.println(" Now :"+ String(now) +" Next check : " + String(configdata.fastport0nextcheck));
+            Serial.print("port " + String(configdata.fastport0) + " check time " + String(configdata.fastport0time) + " Check logic is " + String(configdata.fastport0check));
+            Serial.println(" Now :" + String(now) + " Next check : " + String(configdata.fastport0nextcheck));
         }
 
-        if (configdata.fastport0nextcheck > 0 && configdata.fastport0nextcheck <= millis() && digitalRead(configdata.fastport0) ==  configdata.fastport0check)
+        if (configdata.fastport0nextcheck > 0 && configdata.fastport0nextcheck <= millis() && digitalRead(configdata.fastport0) == configdata.fastport0check)
         { // ถ้าเวลาที่กำหนด น้อยกว่าหรือเท่ากับเวลาตรวจสอบจริง ละ อ่านค่ายังได้เท่าเดิมหรือมีข้อมูลเข้ามาใช้เปลียน status เป็น 1
 
             configdata.fastport0status = 1;
@@ -2566,7 +2654,7 @@ void fastcheckport()
             Serial.println(" Status time " + String(configdata.fastport0statustime) + " next end " + String(configdata.fastport0statusendtime));
         }
 
-        if (configdata.fastport0nextcheck > 0 && digitalRead(configdata.fastport0) !=  configdata.fastport0check)
+        if (configdata.fastport0nextcheck > 0 && digitalRead(configdata.fastport0) != configdata.fastport0check)
         {
 
             configdata.fastport0nextcheck = 0;
@@ -2582,9 +2670,8 @@ void fastcheckport()
         }
     }
 
-    if (configdata.fastport1!=0)
+    if (configdata.fastport1 != 0)
     {
-       
 
         if (digitalRead(configdata.fastport1) == configdata.fastport1check && configdata.fastport1nextcheck == 0)
         {
@@ -2664,7 +2751,14 @@ void findTDE()
         tde = e - firstted;
     }
 }
-
+void updatetimefn()
+{
+    if (updatetimecounter > configdata.updatetime)
+    {
+        updatetimecounter = 0;
+        updateTime();
+    }
+}
 void loop()
 {
     if (!configdata.stanalone)
@@ -2692,6 +2786,7 @@ void loop()
         readGps();
         displayGpsData();
         havefp();
+        updatetimefn();
     }
     else
     {
