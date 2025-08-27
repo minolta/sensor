@@ -56,7 +56,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "168";
+const String version = "170";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -2580,6 +2580,8 @@ void setup()
 
         gps->start();
     }
+
+    updateTime();
     // setWiFiEvent();
 }
 void runs()

@@ -514,6 +514,10 @@ var t = document.getElementById("t");
     var errormessage = document.getElementById("errormessage"); 
     errormessage.innerHTML = o.errormessage
     
+    var timestamp = document.getElementById("timestamp"); 
+    timestamp.innerHTML = o.localtimestamp
+    
+
     } else if (xhr.readyState === 4) {
      console.log("could not fetch the data");
      }
@@ -580,6 +584,9 @@ New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick=
   </tr>
    <tr>
     <td>error message</td><td><label id="errormessage"></label></td>
+  </tr>
+  <tr>
+    <td>timestamp</td><td><label id="timestamp"></label></td>
   </tr>
  </table>
  <h1>Help</h1>
