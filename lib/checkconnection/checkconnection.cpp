@@ -17,5 +17,6 @@ int talktoServer(String ip, String name, long uptime, Configfile *p)
   int httpResponseCode = http.GET();
   Serial.println(httpResponseCode);
   Serial.println(http.getString());
+  http.end();
   return httpResponseCode;
 }

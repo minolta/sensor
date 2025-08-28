@@ -37,7 +37,7 @@
 #include "gps.h"
 #include "moveavg.h"
 #include "taskservice.h"
-
+int timezone = 25000;
 // เป็นความต่างเวลาของ diff กับ timestamp
 unsigned long difftimevalue = 0;
 // เป็นเวลาที่รับมาครั้งสุดท้าย
@@ -56,7 +56,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "170";
+const String version = "172";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -88,6 +88,7 @@ int checkconnectiontime = 0;
 int readpzemtime = 0;
 int gpsdisplaytime = 0;
 Configfile cfg("/config.cfg");
+String fulldate();
 void Converttime();
 // #include <WiFiUdp.h>
 
@@ -947,6 +948,10 @@ void readDHT()
 
     // readdhtstate = 0;
 }
+time_t realtime()
+{
+    return (time_t)(millis() / 1000) + difftimevalue + timezone;
+}
 String makeStatus()
 {
     int buffersize = 2000;
@@ -1018,7 +1023,7 @@ String makeStatus()
     doc["d8"] = digitalRead(D8);
     doc["fastport0status"] = configdata.fastport0status;
     doc["fastport1status"] = configdata.fastport1status;
-
+    doc["fulltime"] = fulldate();
     doc["datetime"] = formattedDate;
     doc["date"] = dayStamp;
     doc["time"] = timeStamp;
@@ -1072,7 +1077,7 @@ String makeStatus()
     doc["mills"] = millis();
     doc["flow"] = flow_frequency;
     doc["totalflow"] = totalflow_frequency;
-    doc["localtimestamp"] = (millis() / 1000) + difftimevalue;
+    doc["localtimestamp"] = realtime();
     doc["lasttimestart"] = timestamp;
     //  Serial.print(gps.location.lat(), 6);
     // Serial.print(F(","));
@@ -1447,7 +1452,9 @@ void printIPAddressOfHost(const char *host)
         Serial.flush();
         wifitimeout++;
         if (wifitimeout > 5 && cfg.getIntConfig("havetorestart"))
-            ESP.reset();
+        {
+            WiFi.reconnect();
+        }
     }
     Serial.print(host);
     Serial.print(" IP: ");
@@ -2044,14 +2051,11 @@ void checkconnectiontask()
     {
         Serial.println("Check connection");
         checkconnectiontime = 0;
-        int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
-        if (re != 200 && configdata.havetorestart)
+
+        if (WiFi.status() != WL_CONNECTED)
         {
-            ESP.restart();
-        }
-        else
-        {
-            WiFi.reconnect();
+            Serial.println("Connection has promble reconnect");
+            WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
         }
     }
 }
@@ -2709,6 +2713,25 @@ void fastcheckport()
         }
     }
 }
+
+String fulldate()
+{
+    time_t t = realtime();
+    struct tm *timeinfo = localtime(&t);
+
+    char buffer[80];
+
+    // Format the time as "Thursday, August 28, 2025 16:33:25"
+    // %A = Full weekday name
+    // %B = Full month name
+    // %d = Day of the month (padded)
+    // %Y = Year with century
+    // %H = Hour (24-hour)
+    // %M = Minute (padded)
+    // %S = Second (padded)
+    strftime(buffer, sizeof(buffer), "%A, %B %d, %Y %H:%M:%S", timeinfo);
+    return String(buffer);
+}
 void havefp()
 {
     if (configdata.havefastport)
@@ -2716,10 +2739,19 @@ void havefp()
         fastcheckport();
     }
 }
+/**
+ * @brief จะ return ture เมืออยู่ในช่วง 6 เช้าถึง 6 โมงเย็น
+ *
+ * @return boolean
+ */
 boolean checkDaytime()
 {
+    time_t now = realtime();
+
+    struct tm *timeinfo = localtime(&now);
+
     // จะส่งค่าออกมาถ้าเป็นช่วงกลางวัน
-    int h = timeClient.getHours();
+    int h = timeinfo->tm_hour;
     if (h >= 6 && h <= 18)
     {
         return true;
@@ -2759,6 +2791,26 @@ void updatetimefn()
     {
         updatetimecounter = 0;
         updateTime();
+    }
+}
+
+// Standalone function to check connectivity to 192.168.88.1 and reconnect if needed
+bool checkConnectivityToGateway()
+{
+    return checkAndReconnectToIP("192.168.88.1", 10000);
+}
+
+// Function to manually trigger connection check and reconnection
+void manualConnectionCheck()
+{
+    Serial.println("Manual connection check triggered");
+    if (checkConnectivityToGateway())
+    {
+        Serial.println("Manual connection check: SUCCESS");
+    }
+    else
+    {
+        Serial.println("Manual connection check: FAILED");
     }
 }
 void loop()

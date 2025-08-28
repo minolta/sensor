@@ -1,238 +1,169 @@
-# Connection Manager Library
+# Connectivity Check Library
 
-This library provides enhanced WiFi connection management for ESP8266 devices with automatic reconnection, connection status monitoring, and server ping functionality.
+This library provides functions to check connectivity to specific IP addresses and automatically reconnect WiFi if needed.
 
 ## Features
 
-- **Connection Status Monitoring**: Real-time WiFi connection status tracking
-- **Automatic Reconnection**: Configurable auto-reconnect with retry limits
-- **Server Ping**: Test connectivity to remote servers
-- **Connection Information**: Get detailed connection info (IP, MAC, RSSI, etc.)
-- **Configurable Settings**: Customizable reconnect intervals and attempt limits
-- **JSON Status Output**: Get connection status in JSON format for APIs
+- **Automatic WiFi reconnection**: Automatically detects WiFi disconnection and attempts to reconnect
+- **IP connectivity testing**: Tests connectivity to specific IP addresses using HTTP requests
+- **Configurable timeouts**: Adjustable timeout values for connection attempts
+- **Smart reconnection logic**: Disconnects and reconnects WiFi if IP connectivity fails
+- **Integration ready**: Easy to integrate with existing WiFi management code
 
-## Files
+## Functions
 
-- `connection_manager.h` - Header file with class definitions
-- `connection_manager.cpp` - Implementation file
-- `connection_example.cpp` - Usage examples
-- `checkconnection.h` - Original simple connection check (legacy)
-- `checkconnection.cpp` - Original implementation (legacy)
+### `checkAndReconnectToIP(String targetIP, int timeout)`
 
-## Quick Start
+Checks connectivity to a specific IP address and automatically reconnects WiFi if needed.
 
-### 1. Include the library
+**Parameters:**
+- `targetIP`: The IP address to test connectivity to (default: "192.168.88.1")
+- `timeout`: Timeout in milliseconds for connection attempts (default: 5000)
+
+**Returns:**
+- `true`: Successfully connected to the target IP
+- `false`: Failed to connect to the target IP even after reconnection attempts
+
+**Behavior:**
+1. Checks if WiFi is connected
+2. If WiFi is disconnected, attempts to reconnect
+3. Tests connectivity to the target IP using HTTP GET request
+4. If IP connectivity fails, disconnects and reconnects WiFi
+5. Retests IP connectivity after reconnection
+6. Returns success/failure status
+
+### `checkConnectivityToGateway()`
+
+Convenience function to check connectivity to the default gateway (192.168.88.1).
+
+**Returns:**
+- `true`: Successfully connected to 192.168.88.1
+- `false`: Failed to connect to 192.168.88.1
+
+### `manualConnectionCheck()`
+
+Manually triggers a connection check and provides detailed feedback.
+
+## Usage Examples
+
+### Basic Usage
 
 ```cpp
-#include "connection_manager.h"
-```
+#include "checkconnection.h"
 
-### 2. Create a ConnectionManager instance
-
-```cpp
-Configfile cfg("/config.cfg");
-ConnectionManager* connectionManager = new ConnectionManager(&cfg);
-```
-
-### 3. Configure settings
-
-```cpp
-connectionManager->setReconnectInterval(30000); // 30 seconds
-connectionManager->setMaxReconnectAttempts(5);
-connectionManager->enableAutoReconnect(true);
-```
-
-### 4. Connect to WiFi
-
-```cpp
-if (connectionManager->connect()) {
-    Serial.println("Connected successfully!");
-} else {
-    Serial.println("Connection failed!");
+void setup() {
+    // Your setup code here
 }
-```
 
-### 5. Monitor in loop
-
-```cpp
 void loop() {
-    connectionManager->update(); // Call regularly
-    
-    if (connectionManager->isDisconnected()) {
-        Serial.println("WiFi disconnected!");
+    // Check connectivity every 30 seconds
+    static unsigned long lastCheck = 0;
+    if (millis() - lastCheck > 30000) {
+        bool isConnected = checkAndReconnectToIP("192.168.88.1", 10000);
+        if (isConnected) {
+            Serial.println("Connection OK");
+        } else {
+            Serial.println("Connection failed");
+        }
+        lastCheck = millis();
     }
     
-    delay(1000);
+    // Your other code here
+    delay(100);
 }
 ```
 
-## API Reference
-
-### Connection Status Functions
-
-#### `ConnectionStatus getConnectionStatus()`
-Returns the current connection status:
-- `CONNECTED` - Successfully connected to WiFi
-- `DISCONNECTED` - Not connected to WiFi
-- `CONNECTING` - Currently attempting to connect
-- `CONNECTION_FAILED` - Connection attempt failed
-- `AP_MODE` - Device is in Access Point mode
-
-#### `bool isConnected()`
-Returns `true` if currently connected to WiFi.
-
-#### `bool isDisconnected()`
-Returns `true` if not connected to WiFi.
-
-#### `String getStatusString()`
-Returns a human-readable status string.
-
-### Connection Management Functions
-
-#### `bool connect()`
-Attempts to connect to WiFi using configured SSID and password.
-Returns `true` if successful.
-
-#### `bool reconnect()`
-Disconnects and attempts to reconnect to WiFi.
-Returns `true` if successful.
-
-#### `void disconnect()`
-Disconnects from WiFi.
-
-#### `void enableAutoReconnect(bool enable)`
-Enables or disables automatic reconnection.
-
-### Configuration Functions
-
-#### `void setReconnectInterval(unsigned long interval)`
-Sets the interval between reconnection attempts (in milliseconds).
-
-#### `void setMaxReconnectAttempts(int attempts)`
-Sets the maximum number of reconnection attempts before giving up.
-
-### Monitoring Functions
-
-#### `void update()`
-Updates connection status and handles auto-reconnection.
-Call this function regularly in your main loop.
-
-#### `void checkConnection()`
-Checks current connection status and triggers reconnection if needed.
-
-#### `bool pingServer(String serverUrl = "")`
-Pings a server to test connectivity.
-Returns `true` if ping is successful.
-
-### Utility Functions
-
-#### `String getLocalIP()`
-Returns the device's local IP address.
-
-#### `String getMacAddress()`
-Returns the device's MAC address.
-
-#### `int getRSSI()`
-Returns the WiFi signal strength (RSSI).
-
-#### `unsigned long getConnectionDuration()`
-Returns how long the device has been connected (in milliseconds).
-
-#### `int getFailedAttempts()`
-Returns the number of failed connection attempts.
-
-#### `ConnectionInfo getConnectionInfo()`
-Returns a structure with all connection information.
-
-## Integration with Existing Code
-
-### Replace the existing `checkconnectiontask()` function:
+### Integration with Existing Code
 
 ```cpp
-void enhancedCheckConnectionTask() {
-    static unsigned long lastCheck = 0;
-    unsigned long currentTime = millis();
-    
-    if (currentTime - lastCheck > 10000) { // Check every 10 seconds
-        lastCheck = currentTime;
+void checkconnectiontask() {
+    if (checkconnectiontime > configdata.checkconnectiontime) {
+        Serial.println("Check connection");
+        checkconnectiontime = 0;
         
-        connectionManager->update();
+        // Check connectivity to 192.168.88.1 and reconnect if needed
+        bool connectionOk = checkAndReconnectToIP("192.168.88.1", 10000);
         
-        if (connectionManager->isConnected()) {
-            if (!connectionManager->pingServer()) {
-                if (configdata.havetorestart) {
-                    ESP.restart();
-                }
+        if (connectionOk) {
+            Serial.println("Connection to 192.168.88.1 is OK");
+            // Only talk to server if connection is good
+            int re = talktoServer(WiFi.localIP().toString(), name, uptime, &cfg);
+            if (re != 200 && configdata.havetorestart) {
+                Serial.println("Server communication failed, but connection is OK");
             }
         } else {
-            connectionManager->reconnect();
+            Serial.println("Failed to establish connection to 192.168.88.1");
         }
     }
 }
 ```
 
-### Add to your main.cpp:
+### Manual Connection Check
 
 ```cpp
-// Add to global variables
-ConnectionManager* connectionManager = nullptr;
+// Call this function when you need to manually check connectivity
+void someEventHandler() {
+    manualConnectionCheck();
+}
+```
 
-// Add to setup()
-connectionManager = new ConnectionManager(&cfg);
-connectionManager->setReconnectInterval(30000);
-connectionManager->setMaxReconnectAttempts(5);
-connectionManager->enableAutoReconnect(true);
+### Custom IP Address
 
-// Add to loop()
-connectionManager->update();
+```cpp
+// Check connectivity to a different IP address
+bool isConnected = checkAndReconnectToIP("192.168.1.1", 8000);
 ```
 
 ## Configuration
 
-The ConnectionManager uses the following configuration keys from your config file:
+The library uses the following default values:
+- **Default target IP**: 192.168.88.1
+- **Default timeout**: 5000ms (5 seconds)
+- **WiFi reconnection delay**: 1000ms (1 second)
+- **Connection attempt delay**: 500ms
 
-- `ssid` - WiFi network name
-- `password` - WiFi password
-- `maxconnecttimeout` - Maximum connection timeout (seconds)
-- `talkurl` - Server URL for ping testing
+## Error Handling
 
-## Example Output
+The library provides comprehensive error handling:
 
-### Serial Output:
-```
-Attempting to connect to WiFi...
-SSID: MyWiFiNetwork
-WiFi connected successfully!
-HTTP Response code: 200
-Response: OK
-```
+1. **WiFi disconnection**: Automatically attempts reconnection
+2. **IP connectivity failure**: Disconnects and reconnects WiFi, then retests
+3. **Timeout handling**: Respects user-defined timeout values
+4. **Serial output**: Provides detailed feedback for debugging
 
-### JSON Status:
-```json
-{
-  "status": "Connected",
-  "ssid": "MyWiFiNetwork",
-  "ip": "192.168.1.100",
-  "mac": "AA:BB:CC:DD:EE:FF",
-  "rssi": -45,
-  "failed_attempts": 0,
-  "connection_duration": 3600000,
-  "auto_reconnect": true
-}
-```
+## Dependencies
+
+- ESP8266WiFi
+- ESP8266HTTPClient
+- Arduino.h
+
+## Notes
+
+- The library uses HTTP GET requests to test IP connectivity
+- WiFi reconnection attempts are limited to prevent infinite loops
+- All operations are non-blocking and respect timeout values
+- Serial output is used for debugging and status reporting
 
 ## Troubleshooting
 
-1. **Connection fails immediately**: Check SSID and password in config
-2. **Auto-reconnect not working**: Ensure `enableAutoReconnect(true)` is called
-3. **Server ping fails**: Check server URL and network connectivity
-4. **Memory issues**: Consider reducing reconnect interval or max attempts
+### Common Issues
 
-## Migration from Legacy Code
+1. **Connection always fails**: Check if the target IP is reachable from your network
+2. **WiFi reconnection loops**: Verify WiFi credentials and network availability
+3. **Timeout errors**: Increase timeout values for slower networks
 
-The original `checkconnection.h` and `checkconnection.cpp` files are still available for backward compatibility. To migrate:
+### Debug Output
 
-1. Replace `#include "checkconnection.h"` with `#include "connection_manager.h"`
-2. Replace `talktoServer()` calls with `connectionManager->pingServer()`
-3. Add `connectionManager->update()` to your main loop
-4. Use `connectionManager->getConnectionStatus()` instead of manual WiFi.status() checks 
+Enable Serial output to see detailed connection status:
+```
+Checking connectivity to 192.168.88.1
+Successfully connected to 192.168.88.1 (HTTP: 200)
+```
+
+Or for failures:
+```
+Failed to connect to 192.168.88.1 (HTTP: -1)
+Attempting to reconnect WiFi...
+WiFi reconnected after failure
+Successfully connected to 192.168.88.1 after reconnection (HTTP: 200)
+``` 

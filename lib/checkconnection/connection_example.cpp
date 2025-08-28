@@ -1,131 +1,128 @@
-#include "connection_manager.h"
-#include "Configfile.h"
-
-// Example usage of ConnectionManager
-// This file demonstrates how to use the connection status and reconnect functions
-
 /*
-Example usage in main.cpp:
+ * Example usage of the connectivity check functions
+ * This file demonstrates how to use the checkAndReconnectToIP function
+ * to monitor connectivity to a specific IP address and automatically reconnect if needed.
+ */
 
-#include "connection_manager.h"
+#include "checkconnection.h"
 
-// Global variables
-Configfile cfg("/config.cfg");
-ConnectionManager* connectionManager = nullptr;
-
-void setup() {
-    Serial.begin(9600);
+// Example 1: Basic connectivity check to 192.168.88.1
+void exampleBasicCheck() {
+    Serial.println("=== Basic Connectivity Check ===");
     
-    // Initialize config
-    cfg.loadConfig();
+    // Check connectivity to 192.168.88.1 with 10 second timeout
+    bool isConnected = checkAndReconnectToIP("192.168.88.1", 10000);
     
-    // Create connection manager
-    connectionManager = new ConnectionManager(&cfg);
-    
-    // Configure connection manager
-    connectionManager->setReconnectInterval(30000); // 30 seconds
-    connectionManager->setMaxReconnectAttempts(5);
-    connectionManager->enableAutoReconnect(true);
-    
-    // Initial connection
-    if (connectionManager->connect()) {
-        Serial.println("Initial connection successful");
+    if (isConnected) {
+        Serial.println("SUCCESS: Can connect to 192.168.88.1");
     } else {
-        Serial.println("Initial connection failed");
+        Serial.println("FAILED: Cannot connect to 192.168.88.1");
     }
 }
 
-void loop() {
-    // Update connection manager (call this regularly)
-    connectionManager->update();
-    
-    // Check connection status
-    if (connectionManager->isDisconnected()) {
-        Serial.println("WiFi disconnected!");
-        
-        // Manual reconnect if needed
-        if (connectionManager->reconnect()) {
-            Serial.println("Manual reconnect successful");
-        }
-    }
-    
-    // Get connection information
-    ConnectionInfo info = connectionManager->getConnectionInfo();
-    Serial.println("Status: " + connectionManager->getStatusString());
-    Serial.println("IP: " + info.localIP);
-    Serial.println("RSSI: " + String(info.rssi));
-    Serial.println("Failed attempts: " + String(info.failedAttempts));
-    
-    // Ping server to check connectivity
-    if (connectionManager->pingServer()) {
-        Serial.println("Server ping successful");
-    } else {
-        Serial.println("Server ping failed");
-    }
-    
-    delay(5000); // Check every 5 seconds
-}
-
-// Enhanced checkconnectiontask function using ConnectionManager
-void enhancedCheckConnectionTask() {
+// Example 2: Periodic connectivity monitoring
+void examplePeriodicMonitoring() {
     static unsigned long lastCheck = 0;
+    static const unsigned long checkInterval = 30000; // Check every 30 seconds
+    
     unsigned long currentTime = millis();
     
-    // Check every 10 seconds
-    if (currentTime - lastCheck > 10000) {
-        lastCheck = currentTime;
+    if (currentTime - lastCheck >= checkInterval) {
+        Serial.println("=== Periodic Connectivity Check ===");
         
-        // Update connection status
-        connectionManager->update();
+        bool isConnected = checkAndReconnectToIP("192.168.88.1", 5000);
         
-        // Check if we need to ping server
-        if (connectionManager->isConnected()) {
-            if (!connectionManager->pingServer()) {
-                Serial.println("Server ping failed, connection may be unstable");
-                
-                // Optionally restart if configured
-                if (configdata.havetorestart) {
-                    Serial.println("Restarting due to connection issues...");
-                    ESP.restart();
-                }
-            }
+        if (isConnected) {
+            Serial.println("Periodic check: Connection OK");
         } else {
-            Serial.println("WiFi not connected, attempting reconnect...");
-            connectionManager->reconnect();
+            Serial.println("Periodic check: Connection failed, reconnection attempted");
+        }
+        
+        lastCheck = currentTime;
+    }
+}
+
+// Example 3: Custom IP address monitoring
+void exampleCustomIPCheck() {
+    Serial.println("=== Custom IP Check ===");
+    
+    // Check connectivity to a different IP address
+    bool isConnected = checkAndReconnectToIP("192.168.1.1", 8000);
+    
+    if (isConnected) {
+        Serial.println("SUCCESS: Can connect to custom IP");
+    } else {
+        Serial.println("FAILED: Cannot connect to custom IP");
+    }
+}
+
+// Example 4: Integration with existing WiFi status checks
+void exampleWiFiIntegration() {
+    Serial.println("=== WiFi Integration Example ===");
+    
+    // First check WiFi status
+    if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("WiFi disconnected, attempting reconnection...");
+        WiFi.reconnect();
+        delay(2000);
+    }
+    
+    // Then check specific IP connectivity
+    if (WiFi.status() == WL_CONNECTED) {
+        bool isConnected = checkAndReconnectToIP("192.168.88.1", 5000);
+        
+        if (isConnected) {
+            Serial.println("WiFi and IP connectivity: OK");
+        } else {
+            Serial.println("WiFi OK but IP connectivity failed");
+        }
+    } else {
+        Serial.println("WiFi connection failed");
+    }
+}
+
+// Example 5: Error handling and retry logic
+void exampleWithRetryLogic() {
+    Serial.println("=== Retry Logic Example ===");
+    
+    const int maxRetries = 3;
+    int retryCount = 0;
+    bool connectionSuccess = false;
+    
+    while (retryCount < maxRetries && !connectionSuccess) {
+        Serial.println("Attempt " + String(retryCount + 1) + " of " + String(maxRetries));
+        
+        connectionSuccess = checkAndReconnectToIP("192.168.88.1", 8000);
+        
+        if (!connectionSuccess) {
+            retryCount++;
+            if (retryCount < maxRetries) {
+                Serial.println("Connection failed, waiting before retry...");
+                delay(5000); // Wait 5 seconds before retry
+            }
         }
     }
-}
-
-// Function to display connection status on OLED
-void displayConnectionStatus() {
-    if (oledok) {
-        ConnectionInfo info = connectionManager->getConnectionInfo();
-        
-        displayslot.head = "WiFi Status";
-        displayslot.description = connectionManager->getStatusString();
-        displayslot.description1 = info.localIP;
-        displayslot.foot = "RSSI: " + String(info.rssi) + "dBm";
-        displayslot.foot2 = "Attempts: " + String(info.failedAttempts);
-        
-        dd(); // Display function
+    
+    if (connectionSuccess) {
+        Serial.println("SUCCESS: Connection established after retries");
+    } else {
+        Serial.println("FAILED: All retry attempts exhausted");
     }
 }
 
-// Function to get connection status as JSON
-String getConnectionStatusJSON() {
-    ConnectionInfo info = connectionManager->getConnectionInfo();
-    
-    String json = "{";
-    json += "\"status\":\"" + connectionManager->getStatusString() + "\",";
-    json += "\"ssid\":\"" + info.ssid + "\",";
-    json += "\"ip\":\"" + info.localIP + "\",";
-    json += "\"mac\":\"" + info.macAddress + "\",";
-    json += "\"rssi\":" + String(info.rssi) + ",";
-    json += "\"failed_attempts\":" + String(info.failedAttempts) + ",";
-    json += "\"connection_duration\":" + String(info.connectionDuration) + ",";
-    json += "\"auto_reconnect\":" + String(info.autoReconnect ? "true" : "false");
-    json += "}";
-    
-    return json;
-}
-*/ 
+/*
+ * Usage in main loop:
+ * 
+ * void loop() {
+ *     // Check connectivity every 30 seconds
+ *     examplePeriodicMonitoring();
+ *     
+ *     // Or trigger manual check based on events
+ *     if (someEventOccurred) {
+ *         exampleBasicCheck();
+ *     }
+ *     
+ *     // Your other code here...
+ *     delay(100);
+ * }
+ */ 
