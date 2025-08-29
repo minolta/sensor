@@ -56,7 +56,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "172";
+const String version = "173";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -1079,6 +1079,7 @@ String makeStatus()
     doc["totalflow"] = totalflow_frequency;
     doc["localtimestamp"] = realtime();
     doc["lasttimestart"] = timestamp;
+    doc["fulldate"] = fulldate();
     //  Serial.print(gps.location.lat(), 6);
     // Serial.print(F(","));
     // Serial.print(gps.location.lng(), 6);

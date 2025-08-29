@@ -518,6 +518,10 @@ var t = document.getElementById("t");
     timestamp.innerHTML = o.localtimestamp
     
 
+      var fd = document.getElementById("fd"); 
+    fd.innerHTML = o.fulldate
+    
+
     } else if (xhr.readyState === 4) {
      console.log("could not fetch the data");
      }
@@ -587,6 +591,9 @@ New Config <input id=newconfigname> <input id=newvalue> <button  id=btn onClick=
   </tr>
   <tr>
     <td>timestamp</td><td><label id="timestamp"></label></td>
+  </tr>
+  <tr>
+    <td>Fulldate</td><td><label id="fd"></label></td>
   </tr>
  </table>
  <h1>Help</h1>
