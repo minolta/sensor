@@ -38,6 +38,7 @@
 #include "moveavg.h"
 #include "taskservice.h"
 int timezone = 25000;
+boolean dotState = false;
 // เป็นความต่างเวลาของ diff กับ timestamp
 unsigned long difftimevalue = 0;
 // เป็นเวลาที่รับมาครั้งสุดท้าย
@@ -62,8 +63,8 @@ const String version = "174";
 #define pingPin D1
 #define inPin D2
 #define jsonbuffersize 1500
-#define TMCLK D7
-#define TMDIO D6
+#define TMCLK D6
+#define TMDIO D7
 #define REALYPORT D7 // สำหรับยกน้ำออก
 // WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
 int isDisconnect = false; // สำหรับบอกสถานะว่า wifi หลุด
@@ -289,6 +290,7 @@ struct
     int fastport0time;
     int fastport1time;
     int updatetime = 3600;
+    int havetm = 0;
     String description;
     String updatetimestampurl;
 } configdata;
@@ -402,6 +404,7 @@ void loadconfigtoram()
     configdata.description = cfg.getConfig("description");
     configdata.updatetimestampurl = cfg.getConfig("updatetimestampurl", "http://192.168.88.191/timestamp");
     configdata.updatetime = cfg.getIntConfig("updatetimestamp", 3600);
+    configdata.havetm = cfg.getIntConfig("havetm", 0);
 }
 
 // water  limit
@@ -1410,6 +1413,7 @@ void inden()
     readpzemtime++;
     checkconnectiontime++;
     updatetimecounter++;
+    dotState = !dotState;
     if (apmode)
     {
         apmodetime++;
@@ -2585,7 +2589,13 @@ void setup()
 
         gps->start();
     }
-
+    if (configdata.havetm)
+    {
+        pinMode(D6, OUTPUT);
+        pinMode(D7, OUTPUT);
+        tm1.setBrightness(0x05); // 0-7
+        tm1.clear();
+    }
     updateTime();
     // setWiFiEvent();
 }
@@ -2814,6 +2824,28 @@ void manualConnectionCheck()
         Serial.println("Manual connection check: FAILED");
     }
 }
+
+void timetotm()
+{
+    if (configdata.havetm)
+    {
+        time_t t = realtime();
+        struct tm *timeinfo = localtime(&t);
+
+        int hh = timeinfo->tm_hour;
+        int mm = timeinfo->tm_min;
+
+        // แปลงเป็นเลข 4 หลัก HHMM
+        int displayTime = hh * 100 + mm;
+
+        // กะพริบจุดกลาง (ทุกครั้งที่เข้า loop ให้สลับ)
+
+        uint8_t dots = dotState ? 0b01000000 : 0b00000000;
+
+        tm1.showNumberDecEx(displayTime, dots, true);
+        Serial.printf("%02d:%02d\n", hh, mm);
+    }
+}
 void loop()
 {
     if (!configdata.stanalone)
@@ -2842,6 +2874,7 @@ void loop()
         displayGpsData();
         havefp();
         updatetimefn();
+        timetotm();
     }
     else
     {
