@@ -57,7 +57,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "175";
+const String version = "180";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -272,7 +272,7 @@ struct
     int flowlow = 10; // การไหลของน้ำ
     unsigned long flowchecktime = 5;
     int flowfaillimit = 5; // จับว่าน้ำไม่มีกี่ครั้งให้หยุดตามเวลาที่กำหนด
-    int flowfailtime = 60; // เวลาหยุดการการดูดน้ำก่อน
+    int  flowfailtime = 60; // เวลาหยุดการการดูดน้ำก่อน
     int havefastport = 0;
     int fastport1status = 0;
     int fastport0status = 0;
@@ -402,7 +402,7 @@ void loadconfigtoram()
     configdata.fastport0time = cfg.getIntConfig("fastport0time", 3);
     configdata.fastport1time = cfg.getIntConfig("fastport1time", 3);
     configdata.description = cfg.getConfig("description");
-    configdata.updatetimestampurl = cfg.getConfig("updatetimestampurl", "http://192.168.88.191/timestamp");
+    configdata.updatetimestampurl = cfg.getConfig("updatetimestampurl", "http://192.168.88.130/timestamp");
     configdata.updatetime = cfg.getIntConfig("updatetimestamp", 3600);
     configdata.havetm = cfg.getIntConfig("havetm", 0);
 }
@@ -641,36 +641,45 @@ void portcheck()
     {
 
         unsigned long t = millis();
-        if (ports[i].run == 1 && configdata.havewater && ports[i].flowchecktime <= t)
+        if (configdata.havewater)
         {
-            if (flow_frequency <= configdata.flowlow) // ดูค่าใน flow_frequency น้อยกว่าที่กำหนดหรือเปล่าถ้าน้อยปิดระบบเลย
+            if (ports[i].run == 1 && ports[i].flowchecktime <= t)
             {
-                // ถ่าไม่มีการไหลของน้ำเลยให้หยุด port เลย flow ต่อกับ D6
-                ports[i].run = 0;
-                ports[i].endtime = 0;
-                digitalWrite(ports[i].port, ports[i].defaultvalue);
-                ports[i].flowfailcount++;
-                if (ports[i].flowfailcount >= configdata.flowfaillimit)
+                if (flow_frequency <= configdata.flowlow) // ดูค่าใน flow_frequency น้อยกว่าที่กำหนดหรือเปล่าถ้าน้อยปิดระบบเลย
                 {
-                    String eeem = ports[i].flowfailcount + "";
-                    message = "Flow fail count is  " + eeem + " spend " + ports[i].flowfailtime / 1000;
-                    errormessage = message;
-                    ports[i].flowfailtime = t + configdata.flowfailtime * 1000; // กำหนดเวลาหยุดทำงาน
-                    ports[i].flowfailcount = 0;                                 // ถ้าน้ำมาแล้ว reset ใหม่
+                    // ถ่าไม่มีการไหลของน้ำเลยให้หยุด port เลย flow ต่อกับ D6
+                    ports[i].run = 0;
+                    ports[i].endtime = 0;
+                    digitalWrite(ports[i].port, ports[i].defaultvalue);
+                    ports[i].flowfailcount++;
+                    if (ports[i].flowfailcount >= configdata.flowfaillimit)
+                    {
+                        +"";
+                        errormessage = "Flow fail count is  " + String(ports[i].flowfailcount) + " spend " + String(ports[i].flowfailtime / 1000);
+                        ports[i].flowfailtime = t + configdata.flowfailtime * 1000; // กำหนดเวลาหยุดทำงาน
+                        ports[i].flowfailcount = 0;                                 // ถ้าน้ำมาแล้ว reset ใหม่
+                    }
+                    else
+                    {
+                        message = "Open pump but no flow off pump";
+                        errormessage = "Have flow " + String(flow_frequency) + " < " + String(configdata.flowlow) + " off pump ";
+                        Serial.println(message);
+                        flow_frequency = 0;
+                    }
                 }
-                message = "Open pump but no flow off pump";
-                Serial.println(message);
-                flow_frequency = 0;
-            }
-            else
-            {
-                flow_frequency = 0;
-                ports[i].flowfailcount = 0; // ถ้าน้ำมาแล้ว reset ใหม่
-                ports[i].flowfailtime = 0;  // ถ้าน้ำมาแล้ว reset ใหม่
+                else
+                {
+                    message = "Have flow " + String(flow_frequency) + " > " + String(configdata.flowlow) + " runok set next check ";
+                    errormessage = "";
+                    flow_frequency = 0;
 
-                ports[i].flowchecktime = t + (configdata.flowchecktime * 1000); // ปรับเวลาตรวจสอบรอบหน้า
-                message = "Have flow runok set next check ";
-                Serial.println(message);
+                    ports[i].flowfailcount = 0; // ถ้าน้ำมาแล้ว reset ใหม่
+                    ports[i].flowfailtime = 0;  // ถ้าน้ำมาแล้ว reset ใหม่
+
+                    ports[i].flowchecktime = t + (configdata.flowchecktime * 1000); // ปรับเวลาตรวจสอบรอบหน้า
+
+                    Serial.println(message);
+                }
             }
         }
         // end job
