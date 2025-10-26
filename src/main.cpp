@@ -57,7 +57,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "180";
+const String version = "182";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -145,6 +145,15 @@ float pf;
 // float s;
 float q;
 
+#define drySoil 590 // Example dry value (in air)
+#define wetSoil 273 // Example wet value (in cup of water)
+
+const int soisensorPin = A0; // Connect the sensor's AOUT pin to Arduino Analog pin A0
+int AirValue = 840;
+
+// WaterValue: The raw sensor reading when the probe is placed in a glass of water.
+// This value is treated as 100% moisture.
+int WaterValue = 470;
 // boolean checkconnect();
 void readSht();
 class Wifidata
@@ -272,7 +281,7 @@ struct
     int flowlow = 10; // การไหลของน้ำ
     unsigned long flowchecktime = 5;
     int flowfaillimit = 5; // จับว่าน้ำไม่มีกี่ครั้งให้หยุดตามเวลาที่กำหนด
-    int  flowfailtime = 60; // เวลาหยุดการการดูดน้ำก่อน
+    int flowfailtime = 60; // เวลาหยุดการการดูดน้ำก่อน
     int havefastport = 0;
     int fastport1status = 0;
     int fastport0status = 0;
@@ -289,6 +298,7 @@ struct
     int fastport1;
     int fastport0time;
     int fastport1time;
+    int havesoisensor;
     int updatetime = 3600;
     int havetm = 0;
     String description;
@@ -331,6 +341,30 @@ void setTimestamp(AsyncWebServerRequest *request)
 
     // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
 }
+
+void finddry(AsyncWebServerRequest *request)
+{
+
+    int dryvalue = analogRead(soisensorPin);
+    String s = "{\"airvalue\":" + String(dryvalue) + String("}");
+    cfg.addConfig("airvalue",dryvalue);
+    AirValue =  dryvalue;
+    request->send(200, "application/json", s);
+
+    // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
+}
+void findwet(AsyncWebServerRequest *request)
+{
+
+    int wetvalue = analogRead(soisensorPin);
+    String s = "{\"wetvalue\":" + String(wetvalue) + String("}");
+    cfg.addConfig("wetvalue",wetvalue);
+    WaterValue =  wetvalue;
+    request->send(200, "application/json", s);
+
+    // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
+}
+
 void loadconfigtoram()
 {
     Serial.println("Load config to ram");
@@ -405,6 +439,9 @@ void loadconfigtoram()
     configdata.updatetimestampurl = cfg.getConfig("updatetimestampurl", "http://192.168.88.130/timestamp");
     configdata.updatetime = cfg.getIntConfig("updatetimestamp", 3600);
     configdata.havetm = cfg.getIntConfig("havetm", 0);
+    configdata.havesoisensor = cfg.getIntConfig("havesoisensor", 0);
+    AirValue = cfg.getIntConfig("airvalue", 840);
+    WaterValue = cfg.getIntConfig("watervalue", 470);
 }
 
 // water  limit
@@ -1736,6 +1773,8 @@ void setHttp()
     // server.on("/setclosetime", runtimer); // time parameter to count
 
     server.on("/settimestamp", setTimestamp);
+    server.on("/findair", finddry);
+    server.on("/findwet", findwet);
     server.begin(); // เปิด TCP Server
     Serial.println("Server started");
     if (oledok)
@@ -2855,6 +2894,35 @@ void timetotm()
         Serial.printf("%02d:%02d\n", hh, mm);
     }
 }
+void havesoi()
+{
+    if (configdata.havesoisensor)
+    {
+        int moisture = analogRead(soisensorPin);
+        a0value=moisture;
+        Serial.print("Analog output: ");
+        Serial.println(moisture);
+        int moisturePercent = map(moisture, AirValue, WaterValue, 0, 100);
+        Serial.print("H ");
+        Serial.print(moisturePercent);
+        pfHum = moisturePercent;
+        Serial.println("%");
+        // Check the moisture level against calibrated thresholds
+        if (moisture < wetSoil + 20)
+        { // Slightly above the 'water' reading
+            Serial.println("Status: Soil is too wet");
+        }
+        else if (moisture >= wetSoil + 20 && moisture <= drySoil - 50)
+        {
+            Serial.println("Status: Soil moisture is perfect");
+        }
+        else
+        {
+            Serial.println("Status: Soil is too dry - time to water!");
+        }
+        delay(1000);
+    }
+}
 void loop()
 {
     if (!configdata.stanalone)
@@ -2884,6 +2952,7 @@ void loop()
         havefp();
         updatetimefn();
         timetotm();
+        havesoi();
     }
     else
     {

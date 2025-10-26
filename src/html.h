@@ -521,6 +521,8 @@ var t = document.getElementById("t");
       var fd = document.getElementById("fd"); 
     fd.innerHTML = o.fulldate
     
+    var a0 = document.getElementById("a0"); 
+    a0.innerHTML = o.a0
 
     } else if (xhr.readyState === 4) {
      console.log("could not fetch the data");
