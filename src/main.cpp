@@ -2900,27 +2900,27 @@ void havesoi()
     {
         int moisture = analogRead(soisensorPin);
         a0value=moisture;
-        Serial.print("Analog output: ");
-        Serial.println(moisture);
+        // Serial.print("Analog output: ");
+        // Serial.println(moisture);
         int moisturePercent = map(moisture, AirValue, WaterValue, 0, 100);
-        Serial.print("H ");
-        Serial.print(moisturePercent);
+        // Serial.print("H ");
+        // Serial.print(moisturePercent);
         pfHum = moisturePercent;
-        Serial.println("%");
+        // Serial.println("%");
         // Check the moisture level against calibrated thresholds
-        if (moisture < wetSoil + 20)
-        { // Slightly above the 'water' reading
-            Serial.println("Status: Soil is too wet");
-        }
-        else if (moisture >= wetSoil + 20 && moisture <= drySoil - 50)
-        {
-            Serial.println("Status: Soil moisture is perfect");
-        }
-        else
-        {
-            Serial.println("Status: Soil is too dry - time to water!");
-        }
-        delay(1000);
+        // if (moisture < wetSoil + 20)
+        // { // Slightly above the 'water' reading
+        //     Serial.println("Status: Soil is too wet");
+        // }
+        // else if (moisture >= wetSoil + 20 && moisture <= drySoil - 50)
+        // {
+        //     Serial.println("Status: Soil moisture is perfect");
+        // }
+        // else
+        // {
+        //     Serial.println("Status: Soil is too dry - time to water!");
+        // }
+        delay(100);
     }
 }
 void loop()
