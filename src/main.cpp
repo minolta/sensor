@@ -57,7 +57,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "182";
+const String version = "183";
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -70,6 +70,7 @@ const String version = "182";
 int isDisconnect = false; // สำหรับบอกสถานะว่า wifi หลุด
 char jsonChar[jsonbuffersize];
 long distance = 0;
+unsigned long nextreadsoi = 0;
 // ntp
 static const uint32_t GPSBaud = 9600;
 // สำหรับนับ จำนวนน้ำที่ผ่าน
@@ -301,6 +302,7 @@ struct
     int havesoisensor;
     int updatetime = 3600;
     int havetm = 0;
+    int nextreadsoi;
     String description;
     String updatetimestampurl;
 } configdata;
@@ -347,8 +349,8 @@ void finddry(AsyncWebServerRequest *request)
 
     int dryvalue = analogRead(soisensorPin);
     String s = "{\"airvalue\":" + String(dryvalue) + String("}");
-    cfg.addConfig("airvalue",dryvalue);
-    AirValue =  dryvalue;
+    cfg.addConfig("airvalue", dryvalue);
+    AirValue = dryvalue;
     request->send(200, "application/json", s);
 
     // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
@@ -358,8 +360,8 @@ void findwet(AsyncWebServerRequest *request)
 
     int wetvalue = analogRead(soisensorPin);
     String s = "{\"wetvalue\":" + String(wetvalue) + String("}");
-    cfg.addConfig("wetvalue",wetvalue);
-    WaterValue =  wetvalue;
+    cfg.addConfig("wetvalue", wetvalue);
+    WaterValue = wetvalue;
     request->send(200, "application/json", s);
 
     // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
@@ -442,6 +444,7 @@ void loadconfigtoram()
     configdata.havesoisensor = cfg.getIntConfig("havesoisensor", 0);
     AirValue = cfg.getIntConfig("airvalue", 840);
     WaterValue = cfg.getIntConfig("watervalue", 470);
+    configdata.nextreadsoi = cfg.getIntConfig("nextreadsoi",1000);
 }
 
 // water  limit
@@ -2645,6 +2648,7 @@ void setup()
         tm1.clear();
     }
     updateTime();
+    nextreadsoi = millis() + configdata.nextreadsoi;
     // setWiFiEvent();
 }
 void runs()
@@ -2896,31 +2900,18 @@ void timetotm()
 }
 void havesoi()
 {
-    if (configdata.havesoisensor)
+    if (configdata.havesoisensor && millis() >= nextreadsoi)
     {
         int moisture = analogRead(soisensorPin);
-        a0value=moisture;
-        // Serial.print("Analog output: ");
-        // Serial.println(moisture);
+        a0value = moisture;
+        Serial.print("Analog output: ");
+        Serial.println(moisture);
         int moisturePercent = map(moisture, AirValue, WaterValue, 0, 100);
-        // Serial.print("H ");
-        // Serial.print(moisturePercent);
+        Serial.print("H ");
+        Serial.print(moisturePercent);
         pfHum = moisturePercent;
-        // Serial.println("%");
-        // Check the moisture level against calibrated thresholds
-        // if (moisture < wetSoil + 20)
-        // { // Slightly above the 'water' reading
-        //     Serial.println("Status: Soil is too wet");
-        // }
-        // else if (moisture >= wetSoil + 20 && moisture <= drySoil - 50)
-        // {
-        //     Serial.println("Status: Soil moisture is perfect");
-        // }
-        // else
-        // {
-        //     Serial.println("Status: Soil is too dry - time to water!");
-        // }
-        delay(100);
+        Serial.println("%");
+        nextreadsoi = millis() + configdata.nextreadsoi;
     }
 }
 void loop()
