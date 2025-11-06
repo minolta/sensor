@@ -57,7 +57,9 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "183";
+const String version = "184";
+boolean findsoinow = false;
+void findwetair();
 #define xs 40
 #define ys 15
 #define pingPin D1
@@ -443,8 +445,8 @@ void loadconfigtoram()
     configdata.havetm = cfg.getIntConfig("havetm", 0);
     configdata.havesoisensor = cfg.getIntConfig("havesoisensor", 0);
     AirValue = cfg.getIntConfig("airvalue", 840);
-    WaterValue = cfg.getIntConfig("watervalue", 470);
-    configdata.nextreadsoi = cfg.getIntConfig("nextreadsoi",1000);
+    WaterValue = cfg.getIntConfig("wetvalue", 470);
+    configdata.nextreadsoi = cfg.getIntConfig("nextreadsoi", 1000);
 }
 
 // water  limit
@@ -1572,6 +1574,7 @@ void setHttp()
 
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send_P(200, "text/html", configfile_html, fillconfig); });
+
     //-------------------------------------------------------------------------------------------------------------------------
     server.on("/resetconfig", HTTP_GET, [](AsyncWebServerRequest *request)
               { 
@@ -1706,6 +1709,12 @@ void setHttp()
               {
         request->send(200, "application/json", "{\"reset\":\"ok\"}");
         ESP.restart(); });
+
+    server.on("/findsoi", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+                  findsoinow = true;
+                  request->send(200, "application/json", "{\"findsoi\":\"ok\",\"date\":\""+fulldate()+"\"}"); });
+
     server.on("/restart", HTTP_GET, [](AsyncWebServerRequest *request)
               {
         request->send(200, "application/json", "{\"reset\":\"ok\"}");
@@ -2364,6 +2373,11 @@ void havekey()
             Serial.println("Update time from ip ");
             updateTime();
         }
+        else if (k == 'w' || k == 'a')
+        {
+            Serial.println("Find wet and air value ");
+            findwetair();
+        }
     }
 }
 void readpzem()
@@ -2914,6 +2928,49 @@ void havesoi()
         nextreadsoi = millis() + configdata.nextreadsoi;
     }
 }
+
+void findwetair()
+{
+
+    if (findsoinow)
+    {
+        canuseled = 0;
+        MoveAvg wet(15);
+        MoveAvg air(15);
+
+        digitalWrite(2, 0);
+        for (int i = 0; i < 60; i++)
+        {
+            digitalWrite(2, !digitalRead(2));
+            delay(200);
+        }
+        for (int i = 0; i < 15; i++)
+        {
+            wet.pushValue(analogRead(A0));
+            delay(2000);
+            digitalWrite(2, !digitalRead(2));
+        }
+        WaterValue = wet.av();
+        cfg.addConfig("wetvalue", WaterValue);
+        digitalWrite(2, 0);
+        for (int i = 0; i < 60; i++)
+        {
+            digitalWrite(2, !digitalRead(2));
+            delay(200);
+        }
+        for (int i = 0; i < 15; i++)
+        {
+            air.pushValue(analogRead(A0));
+            delay(2000);
+            digitalWrite(2, !digitalRead(2));
+        }
+
+        AirValue = air.av();
+        cfg.addConfig("airvalue", AirValue);
+        canuseled = 1;
+        findsoinow = false;
+    }
+}
 void loop()
 {
     if (!configdata.stanalone)
@@ -2944,6 +3001,7 @@ void loop()
         updatetimefn();
         timetotm();
         havesoi();
+        findwetair();
     }
     else
     {
