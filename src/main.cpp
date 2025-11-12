@@ -57,7 +57,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "184";
+const String version = "187";
 boolean findsoinow = false;
 void findwetair();
 #define xs 40
@@ -1284,18 +1284,19 @@ void checkin()
     String payload = http.getString();                  // Get the response payload
     Serial.print(" Http Code:");
     Serial.println(httpCode); // Print HTTP return code
+    http.end(); // Close connection
     if (httpCode == 200)
     {
-        DynamicJsonDocument ddd(2048);
+        dy.clear();
         Serial.print(" Play load:");
         Serial.println(payload); // Print request response payload
-        deserializeJson(ddd, payload);
+        deserializeJson(dy, payload);
         // JsonObject obj = ddd.as<JsonObject>();
         // Serial.print("---------------------------------------------------------------");
         // Serial.println(obj);
         // Serial.print("---------------------------------------------------------------");
 
-        name = ddd["name"].as<String>();
+        name = dy["name"].as<String>();
         cfg.addConfig("name", name);
         if (oledok)
         {
@@ -1303,9 +1304,13 @@ void checkin()
             dd();
         }
     }
+    else if(httpCode==-1)
+    {
+        WiFi.reconnect();
+    }
     // Serial.print(" Play load:");
     // Serial.println(payload); // Print request response payload
-    http.end(); // Close connection
+   
 }
 
 void writeResponse(WiFiClient &client, JsonObject &json)
@@ -2362,7 +2367,7 @@ void havekey()
         }
         else if (k == 'c')
         {
-            getRtc();
+            checkin();
         }
         else if (k == 'o')
         {
