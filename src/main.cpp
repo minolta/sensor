@@ -37,7 +37,10 @@
 #include "gps.h"
 #include "moveavg.h"
 #include "taskservice.h"
+#include "memlog.h"
+#include "config_desc.h"
 int timezone = 25000;
+void readSoivalue();
 boolean dotState = false;
 // เป็นความต่างเวลาของ diff กับ timestamp
 unsigned long difftimevalue = 0;
@@ -57,7 +60,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "187";
+const String version = "202";
 boolean findsoinow = false;
 void findwetair();
 #define xs 40
@@ -277,6 +280,7 @@ struct
     int checkactivetimeout = 0;
     int apmodetimeout = 600;
     String checkinurl;
+    String checkintoken;
     int havepzem = 0;
     int readpzemtime = 1;
     int havegps = 0;
@@ -307,6 +311,7 @@ struct
     int nextreadsoi;
     String description;
     String updatetimestampurl;
+    int soienablepin = D5;
 } configdata;
 
 struct
@@ -353,6 +358,7 @@ void finddry(AsyncWebServerRequest *request)
     String s = "{\"airvalue\":" + String(dryvalue) + String("}");
     cfg.addConfig("airvalue", dryvalue);
     AirValue = dryvalue;
+    memlogAdd(MEMLOG_SOI, dryvalue, "cal air dry");
     request->send(200, "application/json", s);
 
     // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
@@ -364,6 +370,7 @@ void findwet(AsyncWebServerRequest *request)
     String s = "{\"wetvalue\":" + String(wetvalue) + String("}");
     cfg.addConfig("wetvalue", wetvalue);
     WaterValue = wetvalue;
+    memlogAdd(MEMLOG_SOI, wetvalue, "cal wet");
     request->send(200, "application/json", s);
 
     // หาเวลา diff เวลาเรียก time stamp จะเอา diff ไปบวกกับ millis() ทำให้ได้ค่าเวลาที่จริง
@@ -407,6 +414,8 @@ void loadconfigtoram()
     configdata.waterlimitvalue = cfg.getIntConfig("waterlimitvalue", 100000); // ช่วงเวลาที่ไม่เกินกำหนดสำหรับการใช้น้ำ
     configdata.wateridletime = cfg.getIntConfig("wateridletime", 60);         // เวลาที่ปั็มไม่ทำงานแล้วระบบจะถือว่าปิดการทำงานแล้ว
     configdata.wateroverlimit = cfg.getIntConfig("wateroverlimit", 3);        // เป็นจำนวนครั้งที่เกินแล้วตัดใหญ่เลย
+    configdata.waterlimittime = cfg.getIntConfig("waterlimittime", 300);
+    configdata.wateroverlimitvalue = cfg.getIntConfig("wateroverlimitvalue", 28800);
     wateruse = 0;                                                             // reset use water
 
     portconfig.D3value = cfg.getIntConfig("D3mode", 0);
@@ -419,7 +428,8 @@ void loadconfigtoram()
     portconfig.D7initvalue = cfg.getIntConfig("D7initvalue", 0);
     portconfig.D8value = cfg.getIntConfig("D8mode", 0);
     portconfig.D8initvalue = cfg.getIntConfig("D8initvalue", 0);
-    configdata.checkinurl = cfg.getConfig("checkinurl", "http://192.168.88.21:3333/rest/piserver/checkin");
+    configdata.checkinurl = cfg.getConfig("checkinurl", "http://192.168.88.5:888/rest/iot/checkin");
+    configdata.checkintoken = cfg.getConfig("checkintoken", "");
     configdata.checkactivetimeout = cfg.getIntConfig("checkactivetimeout", 600);
     configdata.apmodetimeout = cfg.getIntConfig("apmodetimeout", 60);
     configdata.havepzem = cfg.getIntConfig("havepzem", 0);
@@ -444,9 +454,11 @@ void loadconfigtoram()
     configdata.updatetime = cfg.getIntConfig("updatetimestamp", 3600);
     configdata.havetm = cfg.getIntConfig("havetm", 0);
     configdata.havesoisensor = cfg.getIntConfig("havesoisensor", 0);
-    AirValue = cfg.getIntConfig("airvalue", 840);
-    WaterValue = cfg.getIntConfig("wetvalue", 470);
-    configdata.nextreadsoi = cfg.getIntConfig("nextreadsoi", 1000);
+    AirValue = cfg.getIntConfig("airvalue", 900);
+    WaterValue = cfg.getIntConfig("wetvalue", 547);
+    configdata.nextreadsoi = cfg.getIntConfig("nextreadsoi", 1000 * 60 * 15);
+    configdata.soienablepin = getPort(cfg.getConfig("soienablepin", "D5"));
+    memlogSetSlots(cfg.getIntConfig("logslots", 16));
 }
 
 // water  limit
@@ -468,7 +480,6 @@ int watchdog = 0;
 const char *host = "endpoint.pixka.me:5002";
 char *checkinhost = "http://fw1.pixka.me:2222/checkin";
 // char *otahost = "fw1.pixka.me";
-const char *token = "a09f802999d3a35610d5b4a11924f8fb";
 int count = 0;
 // WiFiServer server(80); //กำหนดใช้งาน TCP Server ที่ Port 80
 //  ESP8266WebServer server(80);
@@ -547,7 +558,7 @@ void dd()
         display.clear();
         // print head
         display.setTextAlignment(TEXT_ALIGN_CENTER);
-        display.setFont(ArialMT_Plain_16);
+        display.setFont(ArialMT_Plain_10);
         display.drawString(xs + 22, ys, displayslot.head);
 
         display.setTextAlignment(TEXT_ALIGN_LEFT);
@@ -687,6 +698,7 @@ void portcheck()
         {
             if (ports[i].run == 1 && ports[i].flowchecktime <= t)
             {
+                memlogTask("flow", i);
                 if (flow_frequency <= configdata.flowlow) // ดูค่าใน flow_frequency น้อยกว่าที่กำหนดหรือเปล่าถ้าน้อยปิดระบบเลย
                 {
                     // ถ่าไม่มีการไหลของน้ำเลยให้หยุด port เลย flow ต่อกับ D6
@@ -696,8 +708,8 @@ void portcheck()
                     ports[i].flowfailcount++;
                     if (ports[i].flowfailcount >= configdata.flowfaillimit)
                     {
-                        +"";
                         errormessage = "Flow fail count is  " + String(ports[i].flowfailcount) + " spend " + String(ports[i].flowfailtime / 1000);
+                        memlogAdd(MEMLOG_ERROR, ports[i].flowfailcount, errormessage);
                         ports[i].flowfailtime = t + configdata.flowfailtime * 1000; // กำหนดเวลาหยุดทำงาน
                         ports[i].flowfailcount = 0;                                 // ถ้าน้ำมาแล้ว reset ใหม่
                     }
@@ -705,6 +717,7 @@ void portcheck()
                     {
                         message = "Open pump but no flow off pump";
                         errormessage = "Have flow " + String(flow_frequency) + " < " + String(configdata.flowlow) + " off pump ";
+                        memlogAdd(MEMLOG_ERROR, flow_frequency, errormessage);
                         Serial.println(message);
                         flow_frequency = 0;
                     }
@@ -736,6 +749,7 @@ void portcheck()
             ports[i].run = 0;
             ports[i].endtime = 0;
             digitalWrite(ports[i].port, ports[i].defaultvalue);
+            memlogTask("port", ports[i].port);
             Serial.println("End job");
         }
     }
@@ -899,6 +913,7 @@ void readPm()
 
     if (have)
     {
+        memlogTask("pm", pmdata.pm2_5);
         while (mySerial.available())
             mySerial.read();
         delay(1000); // ถ้ามีการอ่านให้
@@ -1212,6 +1227,12 @@ void stopfill()
 void ota()
 {
     Serial.println("OTA NOW ===================+++++++++++------------------");
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        message = "OTA skipped (no WiFi)";
+        memlogAdd(MEMLOG_OTA, -1, message);
+        return;
+    }
     if (oledok)
     {
         displayslot.description = "OTA";
@@ -1220,9 +1241,18 @@ void ota()
     WiFiClient client;
     Serial.print("OTAURL:");
 
-    String u = cfg.getConfig("otaurl", "http://192.168.88.21:2005/rest/fw/update/sensor/");
+    String u = cfg.getConfig("otaurl", "http://192.168.88.5:888/rest/fw/update/sensor/");
     String url = u + version;
     Serial.println(url);
+    const uint32_t otaSpace = ESP.getFreeSketchSpace();
+    Serial.printf("OTA free space: %u bytes\n", otaSpace);
+    if (otaSpace > 0 && otaSpace < 490000)
+    {
+        message = String("OTA skip: only ") + otaSpace + "B free";
+        memlogAdd(MEMLOG_OTA, -2, message);
+        Serial.println(F("OTA: not enough partition space (use 4M1M or 1M ldscript, USB flash once)"));
+        return;
+    }
     t_httpUpdate_return ret = ESPhttpUpdate.update(client, url);
     String error = ESPhttpUpdate.getLastErrorString();
 
@@ -1232,6 +1262,7 @@ void ota()
     case HTTP_UPDATE_FAILED:
         Serial.println("[update] Update failed. : " + ESPhttpUpdate.getLastErrorString());
         message = "update ERROR " + ESPhttpUpdate.getLastErrorString();
+        memlogAdd(MEMLOG_OTA, ESPhttpUpdate.getLastError(), message);
         break;
     case HTTP_UPDATE_NO_UPDATES:
         if (oledok)
@@ -1241,6 +1272,8 @@ void ota()
             dd();
         }
         Serial.println("[update] Update no Update.");
+        message = "OTA no update";
+        memlogAdd(MEMLOG_OTA, 0, message);
         break;
     case HTTP_UPDATE_OK:
         if (oledok)
@@ -1250,67 +1283,82 @@ void ota()
             dd();
         }
         Serial.println("[update] Update ok."); // may not called we reboot the ESP
+        memlogAdd(MEMLOG_OTA, 200, "OTA ok reboot");
         break;
     }
 }
 
 void checkin()
 {
-    Serial.println(" +++++++++++++++++++++ Check in now ++++++++++++++++++++++++++++++++++++");
-    DynamicJsonDocument dy(1024);
+    if (WiFi.status() != WL_CONNECTED)
+    {
+        Serial.println(F("checkin: WiFi not connected"));
+        message = "Checkin skipped (no WiFi)";
+        memlogAdd(MEMLOG_CHECKIN, -1, message);
+        return;
+    }
+    if (configdata.checkinurl.length() == 0)
+    {
+        Serial.println(F("checkin: checkinurl empty"));
+        message = "Checkin skipped (no URL)";
+        memlogAdd(MEMLOG_CHECKIN, -2, message);
+        return;
+    }
+
     if (oledok)
     {
         displayslot.description = "checkin";
         dd();
     }
-    dy["freemem"] = system_get_free_heap_size();
-    dy["version"] = version;
-    dy["name"] = name;
-    dy["ip"] = WiFi.localIP().toString();
-    dy["mac"] = WiFi.macAddress();
-    dy["ssid"] = WiFi.SSID();
-    dy["password"] = "";
-    char buf[1024];
-    serializeJsonPretty(dy, buf, 1024);
-    Serial.println(buf);
-    WiFiClient client;
-    // put your main code here, to run repeatedly:
-    HTTPClient http; // Declare object of class HTTPClient
-    // http.begin(client, configdata.checkinurl); // Specify request destination
-    http.begin(client, configdata.checkinurl); // Specify request destination
-    Serial.println(configdata.checkinurl);
-    http.addHeader("Content-Type", "application/json"); // Specify content-type header
-    int httpCode = http.POST(buf);                      // Send the request
-    String payload = http.getString();                  // Get the response payload
-    Serial.print(" Http Code:");
-    Serial.println(httpCode); // Print HTTP return code
-    http.end(); // Close connection
-    if (httpCode == 200)
-    {
-        dy.clear();
-        Serial.print(" Play load:");
-        Serial.println(payload); // Print request response payload
-        deserializeJson(dy, payload);
-        // JsonObject obj = ddd.as<JsonObject>();
-        // Serial.print("---------------------------------------------------------------");
-        // Serial.println(obj);
-        // Serial.print("---------------------------------------------------------------");
 
-        name = dy["name"].as<String>();
-        cfg.addConfig("name", name);
+    DynamicJsonDocument doc(768);
+    doc["freemem"] = system_get_free_heap_size();
+    doc["version"] = version;
+    doc["name"] = name;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["mac"] = WiFi.macAddress();
+    doc["ssid"] = WiFi.SSID();
+    doc["password"] = "";
+
+    char body[768];
+    const size_t n = serializeJson(doc, body, sizeof(body));
+    if (n >= sizeof(body))
+    {
+        Serial.println(F("checkin: request JSON too large for buffer"));
+        message = "Checkin payload buffer overflow";
+        memlogAdd(MEMLOG_CHECKIN, -3, message);
+        return;
+    }
+
+    WiFiClient client;
+    HTTPClient http;
+
+    Serial.printf("checkin POST (%u bytes) %s\n", (unsigned)n, configdata.checkinurl.c_str());
+    http.begin(client, configdata.checkinurl);
+    http.addHeader(F("Content-Type"), F("application/json"));
+    if (configdata.checkintoken.length() > 0)
+        http.addHeader(F("Authorization"), "Bearer " + configdata.checkintoken);
+    const int httpCode = http.POST(reinterpret_cast<uint8_t *>(body), n);
+    (void)http.getString(); // drain response (required before end / reuse)
+
+    if (httpCode == HTTP_CODE_OK)
+    {
         if (oledok)
         {
             displayslot.foot2 = "checkin ok";
             dd();
         }
+        message = "Check in ok";
+        memlogAdd(MEMLOG_CHECKIN, httpCode, message);
     }
-    else if(httpCode==-1)
+    else
     {
-        WiFi.reconnect();
+        message = "Checkin failed HTTP " + String(httpCode);
+        Serial.printf("checkin: HTTP error %d\n", httpCode);
+        memlogAdd(MEMLOG_CHECKIN, httpCode, message);
     }
-    // Serial.print(" Play load:");
-    // Serial.println(payload); // Print request response payload
-   
+
+    http.end();
 }
 
 void writeResponse(WiFiClient &client, JsonObject &json)
@@ -1534,9 +1582,9 @@ String fillconfig(const String &var)
         {
             String v = dy[keyValue.key()];
             String k = keyValue.key().c_str();
-            tr += "<tr><td>" + k + "</td><td> <label id=" + k + "value>" + v + "</label> </td> <td> <input id = " + k + " value =\"" + v + "\"></td><td><button id=btn onClick=\"setvalue(this,'" + k + "','" + v + "')\">Set</button></td><td><button id=btn onClick=\"remove('" + k + "')\">Remove</button></td></tr>";
+            tr += configRowHtml(k, v);
         }
-        tr += "<tr><td>heap</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
+        tr += "<tr><td>heap</td><td class=\"desc\">Free RAM now</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
 
         return tr;
     }
@@ -1547,6 +1595,30 @@ void setHttp()
 
     if (WiFi.status() != WL_CONNECTED)
         return; // ออกเลยถ้าไม่ต่อ wifi
+
+    server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send_P(200, "text/html", logs_html); });
+    server.on("/logs.json", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        const size_t cap = memlogJsonCapacity();
+        char *buf = (char *)malloc(cap);
+        if (buf == nullptr)
+        {
+            request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"nomem\"}");
+            return;
+        }
+        if (memlogWriteJson(buf, cap, version.c_str()) == 0)
+        {
+            free(buf);
+            request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"json\"}");
+            return;
+        }
+        request->send(200, "application/json", buf);
+        free(buf); });
+    server.on("/logs/clear", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        memlogClear();
+        request->send(200, "application/json", "{\"ok\":1}"); });
                 // server.on("/dht", DHTtoJSON);
                 // server.on("/pressure", PressuretoJSON);
                 // server.on("/ktype", KtypetoJSON);
@@ -1574,9 +1646,6 @@ void setHttp()
         request->send(404, "text/plain", "");
     }
                          request->send(404); });
-    server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send_P(200, "text/html", configfile_html, fillconfig); });
-
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send_P(200, "text/html", configfile_html, fillconfig); });
 
@@ -1707,7 +1776,7 @@ void setHttp()
     // server.on("/status", status);
     // server.on("/reset", reset);
     server.on("/checkin", HTTP_GET, [](AsyncWebServerRequest *request)
-              { checkin();
+              { checkintime = configdata.checkintime+1;
                 request->send(200, "application/json", "{\"Check in\":\"ok\"}"); });
 
     server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -1883,30 +1952,42 @@ MoveAvg tavg(16);
 
 void readSht()
 {
-
-    if (hservice != NULL)
+    if (hservice == NULL)
+        return;
+    if (!hservice->isReady() && !hservice->init())
     {
-        hservice->read();
-        havg.pushValue(hservice->geth());
-        pfHum = havg.getTotal() / havg.getSize();
-        tavg.pushValue(hservice->gett());
-        pfTemp = tavg.getTotal() / tavg.getSize();
+        memlogAdd(MEMLOG_SHT, -1, "SHT init fail");
+        return;
     }
+    hservice->read();
+    if (!hservice->readstatus())
+    {
+        memlogAdd(MEMLOG_SHT, -1, "SHT read fail");
+        return;
+    }
+    havg.pushValue(hservice->geth());
+    pfHum = havg.getTotal() / havg.getSize();
+    tavg.pushValue(hservice->gett());
+    pfTemp = tavg.getTotal() / tavg.getSize();
+    char logmsg[28];
+    snprintf(logmsg, sizeof(logmsg), "T=%d H=%d", (int)pfTemp, (int)pfHum);
+    memlogAdd(MEMLOG_SHT, (int)pfHum, logmsg);
 }
 void setSht()
 {
-    // D1,D2
-    // Wire.begin();
     if (hservice == NULL)
         hservice = new Htask();
 
     if (hservice->init())
     {
-        Serial.print("*********************** SHT init(): success ************************\n");
+        Serial.println(F("SHT init ok"));
+        memlogAdd(MEMLOG_SHT, 0, "SHT init ok");
+        readSht();
     }
     else
     {
-        Serial.print("XXXXXXXXXXXXXXXXXXXX SHT init(): failed XXXXXXXXXXXXXXXXXXXXXXX\n");
+        Serial.println(F("SHT init failed"));
+        memlogAdd(MEMLOG_SHT, -1, "SHT init fail");
     }
 }
 time_t timeSinceEpoch;
@@ -1924,6 +2005,12 @@ void readGps()
         if (gps != NULL)
         {
             gps->read();
+            static unsigned long lastGpsLog = 0;
+            if (millis() - lastGpsLog >= 10000)
+            {
+                memlogTask("gpsRd");
+                lastGpsLog = millis();
+            }
         }
     }
 }
@@ -1931,6 +2018,7 @@ void displayGpsData()
 {
     if (gpsdisplaytime > 10 && configdata.havegps)
     {
+        memlogTask("gps");
         Serial.print("GPS:");
         gpsdisplaytime = 0;
         if (gps != NULL)
@@ -2066,18 +2154,20 @@ void runstanalone()
 
 void displaySht()
 {
-    char buf[255];
-    sprintf(buf, "H:%.2f", pfHum);
+    char buf[16];
+    int h10 = (int)(pfHum * 10 + 0.5f);
+    int t10 = (int)(pfTemp * 10 + 0.5f);
+    snprintf(buf, sizeof(buf), "H:%d.%d", h10 / 10, h10 % 10);
     displayslot.description1 = String(buf);
-    sprintf(buf, "T:%.2f", pfTemp);
+    snprintf(buf, sizeof(buf), "T:%d.%d", t10 / 10, t10 % 10);
     displayslot.description = String(buf);
 }
 void checkintask()
 {
 
-    if (checkintime > configdata.checkintime && fordisplay <= 0)
+    if (checkintime > configdata.checkintime)
     {
-        Serial.println(" +++++++++++++++++++++ Check in now ++++++++++++++++++++++++++++++++++++");
+        memlogTask("checkin");
         checkintime = 0;
         checkin();
     }
@@ -2086,6 +2176,7 @@ void displaytmptask()
 {
     if (displaytmp > 30 && configdata.haveds)
     {
+        memlogTask("dispTmp", (int)tmpvalue);
         if (oledok)
         {
             displayslot.description = "Tmp now";
@@ -2102,6 +2193,7 @@ void apmodetask()
 {
     if (configdata.havetorestart && apmodetime > configdata.apmodetimeout && fordisplay <= 0)
     {
+        memlogTask("apRestart");
         if (oledok)
         {
             display.clear();
@@ -2119,11 +2211,13 @@ void checkconnectiontask()
 
     if (checkconnectiontime > configdata.checkconnectiontime)
     {
+        memlogTask("conn", WiFi.status());
         Serial.println("Check connection");
         checkconnectiontime = 0;
 
         if (WiFi.status() != WL_CONNECTED)
         {
+            memlogTask("reconn");
             Serial.println("Connection has promble reconnect");
             WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
         }
@@ -2133,6 +2227,7 @@ void otatask()
 {
     if (otatime > configdata.otatime)
     {
+        memlogTask("ota");
         otatime = 0;
         ota();
         settime();
@@ -2142,6 +2237,7 @@ void dhttask()
 {
     if (readdhttime > configdata.readdhttime && configdata.havedht)
     {
+        memlogTask("dht");
         Serial.println("Read DHT");
         readdhttime = 0;
         message = "Read DHT";
@@ -2152,6 +2248,7 @@ void dsreadtask()
 {
     if (readdstime > configdata.readdstime && configdata.haveds)
     {
+        memlogTask("ds18");
         readdstime = 0;
         readTmp();
     }
@@ -2160,27 +2257,27 @@ void shtreadtask()
 {
     if (configdata.havesht && readshtcount > configdata.readshttime)
     {
+        memlogTask("sht");
         readshtcount = 0;
-
         readSht();
 
         if (displayshtcount > 20)
         {
             displayshtcount = 0;
+            memlogTask("shtDisp");
             displaySht();
         }
     }
 }
 void porttask()
 {
-
     portcheck();
 }
 void ntptask()
 {
     if (ntptime > configdata.ntpupdatetime)
     {
-
+        memlogTask("ntp");
         updateNTP();
         ntptime = 0;
         Serial.print("Update time:");
@@ -2197,7 +2294,7 @@ void rtctask()
 {
     if (configdata.havertc && rtctime > configdata.rtctimeupdate && fordisplay <= 0)
     {
-
+        memlogTask("rtc");
         readRTC();
         rtctime = 0;
     }
@@ -2206,6 +2303,7 @@ void pmtask()
 {
     if (configdata.havepmsensor && fordisplay <= 0)
     {
+        memlogTask("pmTsk");
         readPm();
     }
 }
@@ -2216,6 +2314,7 @@ void distancetask()
         readdistance = 0;
         Serial.println("Update Distance");
         distance = ma();
+        memlogTask("sonic", distance);
         if (oledok)
         {
             displayslot.description = "Distance";
@@ -2228,6 +2327,7 @@ void countertask()
 {
     if (kt.getSec() >= 1 && displaycounter > 0 && fordisplay <= 0)
     {
+        memlogTask("timer", kt.getSec());
         Serial.print("Count:");
         Serial.println(kt.getSec());
         if (oledok)
@@ -2241,6 +2341,7 @@ void countertask()
     }
     if (kt.getSec() == 1)
     {
+        memlogTask("tmrEnd");
         if (oledok)
         {
             displayslot.head = "SiriFarm";
@@ -2257,14 +2358,16 @@ void makestatustask()
 }
 void a0task()
 {
-    if (configdata.havea0 && reada0time > configdata.reada0time && fordisplay <= 0)
+    if (configdata.havea0 && reada0time > configdata.reada0time)
     {
+        memlogTask("a0");
         reada0time = 0;
         Serial.println("Update A0");
         reada0();
     }
     if (configdata.havea0 && checkintime % 30 == 0)
     {
+        memlogTask("a0Dsp", (int)a0value);
         if (oledok)
         {
             displayslot.description = "A0";
@@ -2276,13 +2379,15 @@ void a0task()
 }
 void watertask()
 {
-    // ยังไม่ใช้ตอนนี้
-    //  if (configdata.havewater && flow_frequency > 0)
-    //  {
-    //      Serial.printf("\nWater %d\n", flow_frequency);
-    //      // flow_frequency = 0;
-    //      // displayTOTM((fordisplay * 0.0022) + a);
-    //  }
+    if (configdata.havewater && flow_frequency > 0)
+    {
+        static int lastFlow = -1;
+        if (flow_frequency != lastFlow)
+        {
+            memlogTask("water", flow_frequency);
+            lastFlow = flow_frequency;
+        }
+    }
 }
 void loadtask()
 {
@@ -2295,6 +2400,12 @@ void oledtask()
 {
     if (oledok)
     {
+        static unsigned long lastOledLog = 0;
+        if (millis() - lastOledLog >= 30000)
+        {
+            memlogTask("oled");
+            lastOledLog = millis();
+        }
         if (!ledstatus)
         {
             displayslot.foot = ".";
@@ -2311,8 +2422,15 @@ void waterlimittask()
 {
     if (configdata.havewaterlimit)
     {
+        static unsigned long lastWLmtLog = 0;
+        if (millis() - lastWLmtLog >= 60000)
+        {
+            memlogTask("wLmt", wateruse);
+            lastWLmtLog = millis();
+        }
         if (wateruse >= configdata.waterlimitvalue)
         {
+            memlogTask("wLimit", wateruse);
             waterlimitime = configdata.waterlimittime; // ให้ทำการตัดปั๊มออกจากระบบ
             wateruse = 0;                              // หยุดรอไม่ใช้งานละ
             currentwateroverlimit++;                   // เพิ่มจำนวนการใช้น้ำเกินเข้าระบบ
@@ -2330,11 +2448,14 @@ void waterlimittask()
         // ถ้ามีการใช้น้ำเกินกำหนดหรือว่าท่อแตกหรืออะไรซํกอย่างระบบจะตัดหรือยก relay
         if (currentwateroverlimit >= configdata.wateroverlimitvalue)
         {
+            memlogTask("wOver", currentwateroverlimit);
             waterlimitime = configdata.waterlimittime;
             digitalWrite(REALYPORT, 1); // สั่งระบบยก relay
         }
         if (idlewaterlimit >= configdata.wateridletime && waterlimitime <= 0)
         {
+            if (wateruse > 0 || currentwateroverlimit > 0)
+                memlogTask("wIdle");
             wateruse = 0;              // ไม่มีการใช้น้ำแล้ว
             currentwateroverlimit = 0; // ถ้ามีการหยุดใช้น้ำแล้วก็ยกเลิกการน้ำใช้น้ำเกิน
         }
@@ -2349,6 +2470,7 @@ void havekey()
     if (Serial.available())
     {
         char k = Serial.read();
+        memlogTask("key", k);
         Serial.printf("Key is %c\n", k);
         if (k == 'w')
         {
@@ -2399,6 +2521,7 @@ void readpzem()
         float s = v * i;
         q = sqrt(pow(s, 2) - pow(p, 2));
         readpzemtime = 0;
+        memlogTask("pzem", (int)v);
     }
 }
 String filllist(const String &var)
@@ -2441,9 +2564,9 @@ String filllist(const String &var)
             // String k = keyValue.key().c_str();
             String v = keyValue.value().as<const char *>();
             String k = keyValue.key().c_str();
-            tr += "<tr><td>" + k + "</td><td> <label id=" + k + "value>" + v + "</label> </td> <td> <input id = " + k + " value =\"" + v + "\"></td><td><button id=btn onClick=\"setvalue(this,'" + k + "','" + v + "')\">Set</button></td><td><button id=btn onClick=\"remove('" + k + "')\">Remove</button></td></tr>\n";
+            tr += configRowHtml(k, v) + "\n";
         }
-        tr += "<tr><td>heap</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
+        tr += "<tr><td>heap</td><td class=\"desc\">Free RAM now</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
     }
 
     return tr;
@@ -2475,6 +2598,30 @@ int getSeconds()
 }
 void setstanalonehttp()
 {
+
+    server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send_P(200, "text/html", logs_html); });
+    server.on("/logs.json", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        const size_t cap = memlogJsonCapacity();
+        char *buf = (char *)malloc(cap);
+        if (buf == nullptr)
+        {
+            request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"nomem\"}");
+            return;
+        }
+        if (memlogWriteJson(buf, cap, version.c_str()) == 0)
+        {
+            free(buf);
+            request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"json\"}");
+            return;
+        }
+        request->send(200, "application/json", buf);
+        free(buf); });
+    server.on("/logs/clear", HTTP_GET, [](AsyncWebServerRequest *request)
+              {
+        memlogClear();
+        request->send(200, "application/json", "{\"ok\":1}"); });
 
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
               { request->send_P(200, "text/html", configfile_html, fillconfig); });
@@ -2576,6 +2723,11 @@ void setup()
         initConfig();
     }
     loadconfigtoram();
+    if (configdata.havesht || configdata.haveoled)
+    {
+        Wire.begin(D2, D1);
+        Wire.setClock(100000);
+    }
     setport();
     if (cfg.getIntConfig("haveoled"))
     {
@@ -2595,6 +2747,7 @@ void setup()
     if (configdata.havesht)
     {
         setSht();
+        hservice->setreadNext(configdata.readshttime > 0 ? configdata.readshttime : 60);
     }
 
     if (configdata.havefastport)
@@ -2631,11 +2784,6 @@ void setup()
         settime();
         ota();
         checkin();
-        if (hservice == NULL)
-            hservice = new Htask();
-
-        hservice->init();
-        hservice->setreadNext(10);
     }
     else
     {
@@ -2643,12 +2791,13 @@ void setup()
         gpsservice->start();
         gpsservice->settimezone(7);
         timeservice->setGps(gpsservice);
-        hservice->init();
-        hservice->setreadNext(15);
+        if (configdata.havesht)
+        {
+            hservice->setreadNext(15);
+            taskservice->setHtask(hservice);
+        }
         taskservice->setJobService(js);
         taskservice->setTimeService(timeservice);
-        taskservice->setHtask(hservice);
-
         js->setTimeService(timeservice);
         js->load(JOBFILE);
     }
@@ -2667,27 +2816,44 @@ void setup()
         tm1.clear();
     }
     updateTime();
-    nextreadsoi = millis() + configdata.nextreadsoi;
+    if (configdata.havesoisensor)
+    {
+        pinMode(configdata.soienablepin, OUTPUT);
+        readSoivalue();
+        nextreadsoi = millis() + configdata.nextreadsoi;
+    }
     // setWiFiEvent();
 }
 void runs()
 {
+    static unsigned long lastRunLog = 0;
+    if (millis() - lastRunLog >= 60000)
+    {
+        memlogTask("runs");
+        lastRunLog = millis();
+    }
+
     Foundjob *timejobs = js->loadjobByt();
     js->printFound("Time jobs:", timejobs);
 
-    if (timejobs != NULL)
+    if (timejobs != NULL && configdata.havesht && hservice != NULL && hservice->isReady())
     {
+        memlogTask("runJob", js->getsize());
         Foundjob *alljob = js->loadjobByh(hservice->read(), timejobs);
         js->printFound("All jobs:", alljob);
         taskservice->run(alljob);
         taskservice->updateExce();
-        // delay(500);
         js->freeFoundjobs(alljob);
+        js->freeFoundjobs(timejobs);
+    }
+    else if (timejobs != NULL)
+    {
         js->freeFoundjobs(timejobs);
     }
 
     gpsservice->read();
-    hservice->readInterval();
+    if (configdata.havesht && hservice != NULL && hservice->isReady())
+        hservice->readInterval();
     // run stan alone
 }
 // มีการเข้ามาใน haveinsensor true แสดงว่าเกิด interrup sensor 1
@@ -2735,6 +2901,7 @@ void fastcheckport()
         { // ถ้าเวลาที่กำหนด น้อยกว่าหรือเท่ากับเวลาตรวจสอบจริง ละ อ่านค่ายังได้เท่าเดิมหรือมีข้อมูลเข้ามาใช้เปลียน status เป็น 1
 
             configdata.fastport0status = 1;
+            memlogTask("fp0", 1);
             // digitalWrite(D3, 1);
             configdata.fastport0nextcheck = 0;                                                      // reset ไปเลยเพื่อนให้เข้า start loop ใหม่
             configdata.fastport0statusendtime = millis() + (configdata.fastport0statustime * 1000); // เวลาแสดงต่อไปจะกลับไปเป็น 0
@@ -2774,6 +2941,7 @@ void fastcheckport()
         { // ถ้าเวลาที่กำหนด น้อยกว่าหรือเท่ากับเวลาตรวจสอบจริง ละ อ่านค่ายังได้เท่าเดิมหรือมีข้อมูลเข้ามาใช้เปลียน status เป็น 1
 
             configdata.fastport1status = true;
+            memlogTask("fp1", 1);
             configdata.fastport1nextcheck = 0;                                                      // reset ไปเลยเพื่อนให้เข้า start loop ใหม่
             configdata.fastport1statusendtime = millis() + (configdata.fastport1statustime * 1000); // เวลาแสดงต่อไปจะกลับไปเป็น 0
             Serial.print(" In condition port  set fastport 0 status to 1 and next 0 in " + String(configdata.fastport1statusendtime));
@@ -2818,6 +2986,12 @@ void havefp()
 {
     if (configdata.havefastport)
     {
+        static unsigned long lastFpLog = 0;
+        if (millis() - lastFpLog >= 30000)
+        {
+            memlogTask("fp");
+            lastFpLog = millis();
+        }
         fastcheckport();
     }
 }
@@ -2871,6 +3045,7 @@ void updatetimefn()
 {
     if (updatetimecounter > configdata.updatetime)
     {
+        memlogTask("timeUp");
         updatetimecounter = 0;
         updateTime();
     }
@@ -2905,6 +3080,12 @@ void timetotm()
 
         int hh = timeinfo->tm_hour;
         int mm = timeinfo->tm_min;
+        static int lastMin = -1;
+        if (mm != lastMin)
+        {
+            memlogTask("tm", hh * 100 + mm);
+            lastMin = mm;
+        }
 
         // แปลงเป็นเลข 4 หลัก HHMM
         int displayTime = hh * 100 + mm;
@@ -2917,19 +3098,31 @@ void timetotm()
         Serial.printf("%02d:%02d\n", hh, mm);
     }
 }
+void readSoivalue()
+{
+    digitalWrite(configdata.soienablepin, HIGH);
+    delay(500);
+    int moisture = analogRead(soisensorPin);
+    digitalWrite(configdata.soienablepin, LOW);
+    a0value = moisture;
+    Serial.print("Analog output: ");
+    Serial.println(moisture);
+    int moisturePercent = map(moisture, AirValue, WaterValue, 0, 100);
+    Serial.print("H ");
+    Serial.print(moisturePercent);
+    pfHum = moisturePercent;
+    Serial.println("%");
+
+    char logmsg[28];
+    snprintf(logmsg, sizeof(logmsg), "pct=%d raw=%d", moisturePercent, moisture);
+    memlogAdd(MEMLOG_SOI, moisturePercent, logmsg);
+}
 void havesoi()
 {
     if (configdata.havesoisensor && millis() >= nextreadsoi)
     {
-        int moisture = analogRead(soisensorPin);
-        a0value = moisture;
-        Serial.print("Analog output: ");
-        Serial.println(moisture);
-        int moisturePercent = map(moisture, AirValue, WaterValue, 0, 100);
-        Serial.print("H ");
-        Serial.print(moisturePercent);
-        pfHum = moisturePercent;
-        Serial.println("%");
+        memlogTask("soi");
+        readSoivalue();
         nextreadsoi = millis() + configdata.nextreadsoi;
     }
 }
@@ -2939,6 +3132,8 @@ void findwetair()
 
     if (findsoinow)
     {
+        memlogTask("findSoi");
+        memlogAdd(MEMLOG_SOI, 0, "cal findsoi start");
         canuseled = 0;
         MoveAvg wet(15);
         MoveAvg air(15);
@@ -2974,6 +3169,9 @@ void findwetair()
         cfg.addConfig("airvalue", AirValue);
         canuseled = 1;
         findsoinow = false;
+        char logmsg[28];
+        snprintf(logmsg, sizeof(logmsg), "cal wet=%d air=%d", WaterValue, AirValue);
+        memlogAdd(MEMLOG_SOI, WaterValue, logmsg);
     }
 }
 void loop()

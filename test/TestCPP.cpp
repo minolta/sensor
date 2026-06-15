@@ -47,6 +47,7 @@
 // #include <stdio.h>
 #include "gps.h"
 #include "taskservice.h"
+#include "test_checkin.h"
 void runs();
 GPS *gpsservice = new GPS();
 TimeService *timeservice = new TimeService();
@@ -388,54 +389,6 @@ void ota()
     Serial.println("[update] Update ok."); // may not called we reboot the ESP
     break;
   }
-}
-void testCheckin()
-{
-  WiFi.begin("forpi", "04qwerty");
-  while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
-  {
-    Serial.print(".");
-    delay(1000);
-  }
-  Serial.println(" +++++++++++++++++++++ Check in now ++++++++++++++++++++++++++++++++++++");
-  DynamicJsonDocument dy(1024);
-
-  dy["freemem"] = system_get_free_heap_size();
-  dy["version"] = 1;
-  dy["name"] = "for test";
-  dy["ip"] = "10.10.10.1";
-  dy["mac"] = "ff:ff:ff:ff:ff";
-  dy["ssid"] = WiFi.SSID();
-  dy["password"] = "";
-  char buf[1024];
-  serializeJsonPretty(dy, buf, 1024);
-  WiFiClient client;
-  Serial.println(buf);
-  // put your main code here, to run repeatedly:
-  HTTPClient http;
-  String url = "http://fw1.pixka.me:3333/checkin"; // Declare object of class HTTPClient
-  http.begin(client, url);                         // Specify request destination
-  Serial.println(url);
-  http.addHeader("Content-Type", "application/json"); // Specify content-type header
-  int httpCode = http.POST(buf);                      // Send the request
-  String payload = http.getString();                  // Get the response payload
-  Serial.print(" Http Code:");
-  Serial.println(httpCode); // Print HTTP return code
-  if (httpCode == 200)
-  {
-    DynamicJsonDocument ddd(2048);
-    Serial.print(" Play load:");
-    Serial.println(payload); // Print request response payload
-    deserializeJson(ddd, payload);
-    JsonObject obj = dy.as<JsonObject>();
-    Serial.print("---------------------------------------------------------------");
-    Serial.println(obj);
-    Serial.print("---------------------------------------------------------------");
-    String name = obj["pidevice"]["name"].as<String>();
-  }
-  // Serial.print(" Play load:");
-  // Serial.println(payload); // Print request response payload
-  http.end(); // Close connection
 }
 void checkconn()
 {
@@ -1442,11 +1395,13 @@ void setup()
   js->load(JOBFILE);
   Serial.println("Setup ok");
   UNITY_BEGIN();
-  RUN_TEST(testDaytime);
+  RUN_TEST(test_checkin_payload_fields);
+  RUN_TEST(test_checkin_post_ok);
   pinMode(D3,OUTPUT);
     pinMode(D2,OUTPUT);
   digitalWrite(D3,0);
   digitalWrite(D2,0);
+  // RUN_TEST(testDaytime);
   // RUN_TEST(checkconn);
   // RUN_TEST(testCheckin);
   // RUN_TEST(testSetConfig);

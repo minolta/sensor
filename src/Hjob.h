@@ -2,21 +2,28 @@
 #define HJOB_H
 #include "SHTSensor.h"
 
-// เป็น class สำหรับ run
+// SHT on D1=SCL, D2=SDA (same bus as SSD1306 OLED)
+#ifndef SHT_SDA_PIN
+#define SHT_SDA_PIN D2
+#endif
+#ifndef SHT_SCL_PIN
+#define SHT_SCL_PIN D1
+#endif
+
 struct Hdata
 {
     float t = 0;
     float h = 0;
-    /* data */
 };
 
 class Htask
 {
-
-    SHTSensor *sht;
-    float t, h;
+    SHTSensor *sht = NULL;
+    float t = 0;
+    float h = 0;
     bool readok = false;
-    unsigned long nextreadtime = 0; // บอกว่าเวลาในการอ่านกี่นาที
+    bool inited = false;
+    unsigned long nextreadtime = 0;
     int intervalread = 0;
 
 public:
@@ -24,94 +31,113 @@ public:
     {
         sht = p;
     }
+
+    bool isReady() const
+    {
+        return inited;
+    }
+
     int init()
     {
-        Wire.begin();
+        if (inited)
+            return true;
+
+        Wire.begin(SHT_SDA_PIN, SHT_SCL_PIN);
+        Wire.setClock(100000);
+        delay(20);
+
         if (sht == NULL)
             sht = new SHTSensor();
+
         if (sht->init())
         {
+            sht->setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM);
+            inited = true;
+            readok = true;
+            h = sht->getHumidity();
+            t = sht->getTemperature();
 #ifdef HDEBUG
-            Serial.println("\n Sensor is ok");
+            Serial.println("\n SHT sensor ok");
 #endif
-            sht->setAccuracy(SHTSensor::SHT_ACCURACY_MEDIUM); // only supported by SHT3x
             return true;
         }
-        else
-        {
-            Serial.println("Sht ERROR");
-        }
 
+        inited = false;
+        readok = false;
+        Serial.println(F("SHT init fail (check D1/D2 wiring, havesht=1)"));
         return false;
     }
+
     bool readstatus()
     {
         return readok;
     }
+
     void setreadNext(int nextreadsec)
     {
         intervalread = nextreadsec;
-        nextreadtime = intervalread * 1000 + millis(); // เวลาอ่านต่อไป
+        nextreadtime = (unsigned long)intervalread * 1000UL + millis();
     }
+
     void readInterval(Hdata *p)
     {
         if (millis() > nextreadtime)
         {
-            nextreadtime = intervalread * 1000 + millis();
-            return read(p);
+            nextreadtime = (unsigned long)intervalread * 1000UL + millis();
+            read(p);
         }
-
         p = NULL;
     }
+
     float readInterval()
     {
+        if (!inited)
+            return -100;
         if (millis() > nextreadtime)
         {
-            nextreadtime = intervalread * 1000 + millis();
+            nextreadtime = (unsigned long)intervalread * 1000UL + millis();
             return read();
         }
-
         return -100;
     }
+
     float read()
     {
+        if (!inited || sht == NULL)
+        {
+            readok = false;
+            return -200;
+        }
+
         if (sht->readSample())
         {
             readok = true;
             h = sht->getHumidity();
             t = sht->getTemperature();
 #ifdef HDEBUG
-            Serial.printf("\n H value H:%f T:%f ", h, t);
+            Serial.printf("\n H:%f T:%f ", h, t);
 #endif
         }
         else
         {
             h = -200;
             t = -200;
-#ifdef HDEBUG
-            Serial.println("\n Can not read\n");
-#endif
             readok = false;
+#ifdef HDEBUG
+            Serial.println(F("\n SHT read fail"));
+#endif
         }
 
         return h;
     }
+
     void read(Hdata *d)
     {
-        if (sht->readSample())
+        read();
+        if (d != NULL && readok)
         {
-            readok = true;
-            h = sht->getHumidity();
-            t = sht->getTemperature();
             d->h = h;
             d->t = t;
-        }
-        else
-        {
-            h = -200;
-            t = -200;
-            readok = false;
-            d = NULL;
         }
     }
 
