@@ -115,3 +115,32 @@ String configRowHtml(const String &k, const String &v)
            "','" + v + "')\">Save</button></td><td><button class=\"btn btn-rm\" type=\"button\" onClick=\"remove('" +
            k + "')\">Del</button></td></tr>";
 }
+
+size_t configDescWriteJson(char *buf, size_t cap)
+{
+    if (buf == nullptr || cap < 8)
+        return 0;
+
+    char *p = buf;
+    char *end = buf + cap;
+    int n = snprintf(p, (size_t)(end - p), "{");
+    if (n <= 0)
+        return 0;
+    p += n;
+
+    const size_t cnt = sizeof(CONFIG_DESC) / sizeof(CONFIG_DESC[0]);
+    for (size_t i = 0; i < cnt; i++)
+    {
+        n = snprintf(p, (size_t)(end - p), "%s\"%s\":\"%s\"",
+                     i ? "," : "", CONFIG_DESC[i].key, CONFIG_DESC[i].desc);
+        if (n <= 0 || p + n >= end)
+            break;
+        p += n;
+    }
+
+    n = snprintf(p, (size_t)(end - p), "}");
+    if (n <= 0 || p + n >= end)
+        return 0;
+    p += n;
+    return (size_t)(p - buf);
+}

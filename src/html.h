@@ -292,11 +292,11 @@ const char configfile_html[] PROGMEM = R"rawliteral(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 *{box-sizing:border-box}
-body{font-family:Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:16px;font-size:14px;color:#1a2b3c;background:linear-gradient(160deg,#e8f4fc 0%%,#f5f7fa 45%%,#eef2ff 100%%);min-height:100vh}
+body{font-family:Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:16px;font-size:14px;color:#1a2b3c;background:#f5f7fa;background:linear-gradient(160deg,#e8f4fc 0%,#f5f7fa 45%,#eef2ff 100%);min-height:100vh}
 .wrap{max-width:720px;margin:0 auto}
-.hdr{background:linear-gradient(135deg,#1b5e20 0%%,#2e7d32 55%%,#43a047 100%%);color:#fff;padding:18px 20px;border-radius:14px 14px 0 0;box-shadow:0 4px 14px rgba(27,94,32,.25)}
-.hdr h1{margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.02em}
-.hdr p{margin:6px 0 0;opacity:.92;font-size:.85rem}
+.hdr{background-color:#2e7d32;background:linear-gradient(135deg,#1b5e20 0%,#2e7d32 55%,#43a047 100%);color:#fff;padding:18px 20px;border-radius:14px 14px 0 0;box-shadow:0 4px 14px rgba(27,94,32,.25)}
+.hdr h1{margin:0;font-size:1.35rem;font-weight:600;letter-spacing:.02em;color:#fff}
+.hdr p{margin:6px 0 0;opacity:.92;font-size:.85rem;color:#fff}
 .nav{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
 .nav a{display:inline-block;padding:7px 14px;background:rgba(255,255,255,.18);color:#fff;text-decoration:none;border-radius:999px;font-size:.82rem;border:1px solid rgba(255,255,255,.35);transition:background .15s}
 .nav a:hover{background:rgba(255,255,255,.32)}
@@ -305,13 +305,14 @@ body{font-family:Segoe UI,Roboto,Arial,sans-serif;margin:0;padding:16px;font-siz
 .sec{margin:0 0 10px;font-size:1rem;font-weight:600;color:#1b5e20;display:flex;align-items:center;gap:8px}
 .sec:before{content:'';width:4px;height:18px;background:#43a047;border-radius:2px}
 .tbl-wrap{overflow-x:auto;border-radius:10px;border:1px solid #e3eaf0;margin:8px 0 14px}
-table{width:100%%;border-collapse:collapse;background:#fff;font-size:.82rem}
+table{width:100%;border-collapse:collapse;background:#fff;font-size:.82rem}
 #customers td,#customers th,#status td,#status th{padding:10px 12px;text-align:left;border-bottom:1px solid #edf1f5;vertical-align:middle}
-#customers tr:first-child td,#status tr:first-child td{background:linear-gradient(90deg,#2e7d32,#388e3c);color:#fff;font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;border:none}
-#customers tr:not(:first-child):nth-child(even),#status tr:not(:first-child):nth-child(even){background:#f8fafb}
-#customers tr:not(:first-child):hover,#status tr:not(:first-child):hover{background:#e8f5e9}
-#customers td:first-child,#status td:first-child{font-weight:600;color:#37474f;white-space:nowrap}
-.desc{font-size:.75rem;color:#607d8b;line-height:1.35;max-width:220px}
+#customers thead th,#status tr:first-child td,#status tr:first-child th{background-color:#2e7d32;background:linear-gradient(90deg,#2e7d32,#388e3c);color:#fff;font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;border:none}
+#customers tbody tr:nth-child(even),#status tr:not(:first-child):nth-child(even){background:#f8fafb}
+#customers tbody tr:hover,#status tr:not(:first-child):hover{background:#e8f5e9}
+#customers tbody td:first-child,#status tr:not(:first-child) td:first-child{font-weight:600;color:#37474f;white-space:nowrap}
+#customers tbody td.desc{color:#607d8b}
+.desc{font-size:.75rem;line-height:1.35;max-width:220px}
 label.val{display:inline-block;padding:4px 8px;background:#f1f5f9;border-radius:6px;color:#1565c0;font-family:Consolas,monospace;font-size:.78rem;word-break:break-all;max-width:180px}
 input[type=text]{padding:8px 10px;border:1px solid #cfd8dc;border-radius:8px;font-size:.82rem;min-width:100px;transition:border-color .15s,box-shadow .15s;background:#fafbfc}
 input[type=text]:focus{outline:none;border-color:#43a047;box-shadow:0 0 0 3px rgba(67,160,71,.15);background:#fff}
@@ -358,20 +359,60 @@ function remove(config)
  });
     xhr.send();
 }
+function escHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;');
+}
+function makeConfigRow(k,v,desc){
+  k=String(k);
+  v=String(v);
+  desc=desc||'Custom config key';
+  var tr=document.createElement('tr');
+  var td0=document.createElement('td'); td0.textContent=k;
+  var td1=document.createElement('td'); td1.className='desc'; td1.textContent=desc;
+  var td2=document.createElement('td');
+  var lbl=document.createElement('label'); lbl.className='val'; lbl.id=k+'value'; lbl.textContent=v;
+  td2.appendChild(lbl);
+  var td3=document.createElement('td');
+  var inp=document.createElement('input'); inp.id=k; inp.type='text'; inp.value=v;
+  td3.appendChild(inp);
+  var td4=document.createElement('td');
+  var btnSave=document.createElement('button');
+  btnSave.className='btn btn-set'; btnSave.type='button'; btnSave.textContent='Save';
+  btnSave.onclick=function(){setvalue(this,k,'');};
+  td4.appendChild(btnSave);
+  var td5=document.createElement('td');
+  var btnDel=document.createElement('button');
+  btnDel.className='btn btn-rm'; btnDel.type='button'; btnDel.textContent='Del';
+  btnDel.onclick=function(){remove(k);};
+  td5.appendChild(btnDel);
+  tr.appendChild(td0); tr.appendChild(td1); tr.appendChild(td2);
+  tr.appendChild(td3); tr.appendChild(td4); tr.appendChild(td5);
+  return tr;
+}
+function insertConfigRow(k,v,desc){
+  var rows=document.getElementById('cfgrows');
+  if(!rows)return;
+  var tr=makeConfigRow(k,v,desc);
+  var last=rows.lastElementChild;
+  if(last&&last.cells&&last.cells[0]&&last.cells[0].textContent.trim()==='heap')
+    rows.insertBefore(tr,last);
+  else
+    rows.appendChild(tr);
+}
 function add()
 {
   var xhr = new XMLHttpRequest();
   var input = document.getElementById('newconfigname');
   var value = document.getElementById('newvalue');
-  xhr.open("GET", "/setconfig?configname="+input.value+"&value="+value.value, true); 
+  xhr.open("GET", "/setconfig?configname="+encodeURIComponent(input.value)+"&value="+encodeURIComponent(value.value), true); 
   xhr.addEventListener("readystatechange", () => {
      console.log(xhr.readystate);
     if (xhr.readyState === 4 && xhr.status === 200) {
      console.log(xhr.responseText);
      var o =  JSON.parse(xhr.responseText);
-     var t = document.getElementById('customers');
-     var row = t.insertRow();
-     row.innerHTML = "<td>"+o.setconfig+"</td><td class=\"desc\">Custom key</td><td><label class=\"val\">"+o.value+"</label></td><td><input value=\""+o.value+"\"></td><td></td><td></td>";
+     insertConfigRow(o.setconfig,o.value,'Custom config key');
+     input.value='';
+     value.value='';
      }
  });
   xhr.send();
@@ -398,6 +439,36 @@ function setvalue(element,configname,value) {
   xhr.send();
 }
 
+function loadConfigTable(){
+  var rows=document.getElementById('cfgrows');
+  if(!rows)return;
+  fetch('/config').then(function(r){
+    if(!r.ok)throw new Error('config '+r.status);
+    return r.text();
+  }).then(function(text){
+    if(!text||!text.trim())throw new Error('empty config response');
+    var cfg=JSON.parse(text);
+    return fetch('/configdesc.json').then(function(r){
+      return r.ok?r.json():{};
+    }).catch(function(){return{};}).then(function(desc){
+      var keys=Object.keys(cfg).sort(),i,k,v;
+      rows.innerHTML='';
+      for(i=0;i<keys.length;i++){
+        k=keys[i];
+        v=String(cfg[k]);
+        rows.appendChild(makeConfigRow(k,v,desc[k]));
+      }
+      var heapTr=document.createElement('tr');
+      heapTr.innerHTML='<td>heap</td><td class="desc">Free RAM now</td><td colspan="4"><span id="cfgheap">-</span></td>';
+      rows.appendChild(heapTr);
+    });
+  }).catch(function(e){
+    rows.innerHTML='<tr><td colspan="6">Failed to load config ('+escHtml(String(e))+' )</td></tr>';
+  });
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadConfigTable);
+else loadConfigTable();
+
 setInterval(function(){
   var x=new XMLHttpRequest();
   x.open("GET","/",true);
@@ -406,9 +477,10 @@ setInterval(function(){
     var o=JSON.parse(x.responseText);
     var m={name:"name",version:"version",heap:"heap",uptime:"uptime",d1:"d1",d2:"d2",d3:"d3",d4:"d4",d5:"d5",d6:"d6",d7:"d7",d8:"d8",a0:"a0",t:"t",h:"h",flow:"flow",message:"message",errormessage:"errormessage",timestamp:"localtimestamp",fd:"fulldate"};
     for(var i in m){var e=document.getElementById(i);if(e&&o[m[i]]!=null)e.innerHTML=o[m[i]];}
+    var hp=document.getElementById('cfgheap');if(hp&&o.heap!=null)hp.innerHTML=o.heap;
   };
   x.send();
-},500);
+},3000);
 </script>
 </head><body>
 <div class="wrap">
@@ -421,8 +493,8 @@ setInterval(function(){
 <div class="sec">Parameters</div>
 <div class="tbl-wrap">
 <table id="customers">
-<tr><td>Parameter</td><td>Description</td><td>Value</td><td>New value</td><td></td><td></td></tr>
-%CONFIG%
+<thead><tr><th>Parameter</th><th>Description</th><th>Value</th><th>New value</th><th></th><th></th></tr></thead>
+<tbody id="cfgrows"><tr><td colspan="6">Loading config...</td></tr></tbody>
 </table>
 </div>
 <div class="toolbar">
@@ -456,7 +528,7 @@ const char logs_html[] PROGMEM = R"rawliteral(
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 body{font-family:Arial,sans-serif;font-size:12px;margin:8px;max-width:640px}
-table{border-collapse:collapse;width:100%%}td,th{border:1px solid #ccc;padding:3px 5px;font-size:11px;text-align:left}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:3px 5px;font-size:11px;text-align:left}
 th{background:#4CAF50;color:#fff}.c{color:#060}.e{color:#c00}.o{color:#06c}.s{color:#684}.h{color:#609}.t{color:#666}
 #btn{font-size:11px;padding:3px 8px;margin:4px 0}
 #refresh{font-size:11px;color:#666}

@@ -39,6 +39,7 @@
 #include "taskservice.h"
 #include "memlog.h"
 #include "config_desc.h"
+#include "config_desc_json.h"
 int timezone = 25000;
 void readSoivalue();
 boolean dotState = false;
@@ -60,7 +61,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "202";
+const String version = "209";
 boolean findsoinow = false;
 void findwetair();
 #define xs 40
@@ -68,12 +69,14 @@ void findwetair();
 #define pingPin D1
 #define inPin D2
 #define jsonbuffersize 1500
+#define statusJsonBufSize 2800
 #define TMCLK D6
 #define TMDIO D7
 #define REALYPORT D7 // สำหรับยกน้ำออก
 // WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
 int isDisconnect = false; // สำหรับบอกสถานะว่า wifi หลุด
 char jsonChar[jsonbuffersize];
+static char g_statusJsonBuf[statusJsonBufSize];
 long distance = 0;
 unsigned long nextreadsoi = 0;
 // ntp
@@ -454,8 +457,8 @@ void loadconfigtoram()
     configdata.updatetime = cfg.getIntConfig("updatetimestamp", 3600);
     configdata.havetm = cfg.getIntConfig("havetm", 0);
     configdata.havesoisensor = cfg.getIntConfig("havesoisensor", 0);
-    AirValue = cfg.getIntConfig("airvalue", 900);
-    WaterValue = cfg.getIntConfig("wetvalue", 547);
+    AirValue = cfg.getIntConfig("airvalue", 850);
+    WaterValue = cfg.getIntConfig("wetvalue", 536);
     configdata.nextreadsoi = cfg.getIntConfig("nextreadsoi", 1000 * 60 * 15);
     configdata.soienablepin = getPort(cfg.getConfig("soienablepin", "D5"));
     memlogSetSlots(cfg.getIntConfig("logslots", 16));
@@ -1021,9 +1024,19 @@ time_t realtime()
 {
     return (time_t)(millis() / 1000) + difftimevalue + timezone;
 }
+size_t makeStatusJson(char *buf, size_t cap);
 String makeStatus()
 {
-    int buffersize = 2500;
+    makeStatusJson(g_statusJsonBuf, sizeof(g_statusJsonBuf));
+    return String(g_statusJsonBuf);
+}
+
+size_t makeStatusJson(char *buf, size_t cap)
+{
+    if (buf == nullptr || cap < 128)
+        return 0;
+
+    const int buffersize = (cap > 2600) ? 2600 : (int)cap - 1;
     cfg.setbuffer(configdata.jsonbuffer);
     DynamicJsonDocument doc(buffersize);
     doc["description"] = configdata.description;
@@ -1155,9 +1168,8 @@ String makeStatus()
     if (configdata.havegps)
     {
     }
-    char buf[buffersize];
-    serializeJsonPretty(doc, buf, buffersize);
-    return String(buf);
+    const size_t n = serializeJson(doc, buf, cap);
+    return (n > 0) ? n : 0;
 }
 
 boolean addTorun(int port, int delay, int value, int wait)
@@ -1179,10 +1191,16 @@ boolean addTorun(int port, int delay, int value, int wait)
             ports[i].run = 1;
             digitalWrite(ports[i].port, value);
             Serial.printf("Set port %d %ld\n", ports[i].run, ports[i].endtime);
+            char logmsg[28];
+            snprintf(logmsg, sizeof(logmsg), "run ON p%d %ds", port, delay);
+            memlogAdd(MEMLOG_TASK, value, logmsg);
             return true;
         }
     }
 
+    char logmsg[28];
+    snprintf(logmsg, sizeof(logmsg), "run block p%d", port);
+    memlogAdd(MEMLOG_TASK, -1, logmsg);
     return false;
 }
 
@@ -1570,26 +1588,39 @@ void printIPAddressOfHost(const char *host)
     Serial.println(resolvedIP);
 }
 
-String fillconfig(const String &var)
+static void sendConfigJson(AsyncWebServerRequest *request)
 {
-    // Serial.println(var);
-    if (var == "CONFIG")
+    File f = LittleFS.open("/config.cfg", "r");
+    if (!f)
     {
-        DynamicJsonDocument dy = cfg.getAll();
-        JsonObject documentRoot = dy.as<JsonObject>();
-        String tr = "";
-        for (JsonPair keyValue : documentRoot)
-        {
-            String v = dy[keyValue.key()];
-            String k = keyValue.key().c_str();
-            tr += configRowHtml(k, v);
-        }
-        tr += "<tr><td>heap</td><td class=\"desc\">Free RAM now</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
-
-        return tr;
+        request->send(500, "application/json", "{}");
+        return;
     }
-    return String();
+    if (f.size() == 0)
+    {
+        f.close();
+        request->send(200, "application/json", "{}");
+        return;
+    }
+
+    AsyncResponseStream *response = request->beginResponseStream("application/json");
+    uint8_t buf[256];
+    while (f.available())
+    {
+        const size_t n = f.read(buf, sizeof(buf));
+        if (n == 0)
+            break;
+        response->write(buf, n);
+    }
+    f.close();
+    request->send(response);
 }
+
+static void sendConfigDescJson(AsyncWebServerRequest *request)
+{
+    request->send_P(200, "application/json", CONFIG_DESC_JSON);
+}
+
 void setHttp()
 {
 
@@ -1600,21 +1631,14 @@ void setHttp()
               { request->send_P(200, "text/html", logs_html); });
     server.on("/logs.json", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-        const size_t cap = memlogJsonCapacity();
-        char *buf = (char *)malloc(cap);
-        if (buf == nullptr)
-        {
-            request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"nomem\"}");
-            return;
-        }
+        char *buf = memlogJsonBuffer();
+        const size_t cap = memlogJsonBufferSize();
         if (memlogWriteJson(buf, cap, version.c_str()) == 0)
         {
-            free(buf);
             request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"json\"}");
             return;
         }
-        request->send(200, "application/json", buf);
-        free(buf); });
+        request->send(200, "application/json", buf); });
     server.on("/logs/clear", HTTP_GET, [](AsyncWebServerRequest *request)
               {
         memlogClear();
@@ -1647,7 +1671,9 @@ void setHttp()
     }
                          request->send(404); });
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send_P(200, "text/html", configfile_html, fillconfig); });
+              { request->send_P(200, "text/html", configfile_html); });
+    server.on("/configdesc.json", HTTP_GET, [](AsyncWebServerRequest *request)
+              { sendConfigDescJson(request); });
 
     //-------------------------------------------------------------------------------------------------------------------------
     server.on("/resetconfig", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -1672,15 +1698,11 @@ void setHttp()
   request->send(200, "application/json", "{\"remove\":\"" + v + "\"}"); });
     //-------------------------------------------------------------------------------------------------------------------------
     server.on("/config", HTTP_GET, [](AsyncWebServerRequest *request)
-              { 
-                DynamicJsonDocument dd  = cfg.getAll();
-                char buf[jsonbuffersize];
-                serializeJsonPretty(dd,buf,jsonbuffersize);
-                request->send(200, "application/json", buf); });
+              { sendConfigJson(request); });
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-                  String status = makeStatus();
-                  AsyncWebServerResponse *response = request->beginResponse(200, "application/json; charset=utf-8", status);
+                  makeStatusJson(g_statusJsonBuf, sizeof(g_statusJsonBuf));
+                  AsyncWebServerResponse *response = request->beginResponse(200, "application/json; charset=utf-8", g_statusJsonBuf);
                   response->addHeader("Access-Control-Allow-Origin", "*");
                   response->addHeader("Access-Control-Max-Age", "10000");
                   response->addHeader("Access-Control-Allow-Methods", "PUT,POST,GET,OPTIONS");
@@ -1966,9 +1988,12 @@ void readSht()
         return;
     }
     havg.pushValue(hservice->geth());
-    pfHum = havg.getTotal() / havg.getSize();
+    // pfHum = havg.getTotal() / havg.getSize();
+    pfHum = hservice->geth();
     tavg.pushValue(hservice->gett());
-    pfTemp = tavg.getTotal() / tavg.getSize();
+    // pfTemp = tavg.getTotal() / tavg.getSize();
+    pfTemp = hservice->gett();
+
     char logmsg[28];
     snprintf(logmsg, sizeof(logmsg), "T=%d H=%d", (int)pfTemp, (int)pfHum);
     memlogAdd(MEMLOG_SHT, (int)pfHum, logmsg);
@@ -2352,7 +2377,6 @@ void makestatustask()
 {
     if (makestatuscount > 15000 && fordisplay <= 0)
     {
-        makeStatus();
         makestatuscount = 0;
     }
 }
@@ -2546,27 +2570,7 @@ String filllist(const String &var)
     }
     if (var == "CONFIG")
     {
-        Configfile cfg = Configfile("/config.cfg");
-        cfg.setbuffer(2024);
-        cfg.openFile();
-
-        // cfg.load();
-        DynamicJsonDocument dy = cfg.getAll();
-
-        JsonObject documentRoot = dy.as<JsonObject>();
-        serializeJsonPretty(documentRoot, Serial);
-        for (JsonPair keyValue : documentRoot)
-        {
-            Serial.println(keyValue.key().c_str());
-            Serial.println(keyValue.value().as<const char *>());
-
-            // String v = dy[keyValue.key()];
-            // String k = keyValue.key().c_str();
-            String v = keyValue.value().as<const char *>();
-            String k = keyValue.key().c_str();
-            tr += configRowHtml(k, v) + "\n";
-        }
-        tr += "<tr><td>heap</td><td class=\"desc\">Free RAM now</td><td colspan=4>" + String(ESP.getFreeHeap()) + "</td></tr>";
+        return String("<tr><td colspan=\"11\"><a href=\"/setconfigwww\">Open config page</a></td></tr>");
     }
 
     return tr;
@@ -2603,28 +2607,23 @@ void setstanalonehttp()
               { request->send_P(200, "text/html", logs_html); });
     server.on("/logs.json", HTTP_GET, [](AsyncWebServerRequest *request)
               {
-        const size_t cap = memlogJsonCapacity();
-        char *buf = (char *)malloc(cap);
-        if (buf == nullptr)
-        {
-            request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"nomem\"}");
-            return;
-        }
+        char *buf = memlogJsonBuffer();
+        const size_t cap = memlogJsonBufferSize();
         if (memlogWriteJson(buf, cap, version.c_str()) == 0)
         {
-            free(buf);
             request->send(500, "application/json", "{\"logs\":[],\"count\":0,\"max\":0,\"heap\":0,\"error\":\"json\"}");
             return;
         }
-        request->send(200, "application/json", buf);
-        free(buf); });
+        request->send(200, "application/json", buf); });
     server.on("/logs/clear", HTTP_GET, [](AsyncWebServerRequest *request)
               {
         memlogClear();
         request->send(200, "application/json", "{\"ok\":1}"); });
 
     server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send_P(200, "text/html", configfile_html, fillconfig); });
+              { request->send_P(200, "text/html", configfile_html); });
+    server.on("/configdesc.json", HTTP_GET, [](AsyncWebServerRequest *request)
+              { sendConfigDescJson(request); });
     //-------------------------------------------------------------------------------------------------------------------------
     server.on("/resetconfig", HTTP_GET, [](AsyncWebServerRequest *request)
               { 
@@ -2648,11 +2647,7 @@ void setstanalonehttp()
   request->send(200, "application/json", "{\"remove\":\"" + v + "\"}"); });
     //-------------------------------------------------------------------------------------------------------------------------
     server.on("/config", HTTP_GET, [](AsyncWebServerRequest *request)
-              { 
-                DynamicJsonDocument dd  = cfg.getAll();
-                char buf[jsonbuffersize];
-                serializeJsonPretty(dd,buf,jsonbuffersize);
-                request->send(200, "application/json", buf); });
+              { sendConfigJson(request); });
 
     server.on("/deletejob", HTTP_GET, [](AsyncWebServerRequest *request)
               { 

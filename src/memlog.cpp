@@ -1,5 +1,4 @@
 #include "memlog.h"
-#include <ArduinoJson.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,6 +6,7 @@
 #define MEMLOG_SLOTS_MIN 4
 #define MEMLOG_SLOTS_MAX 48
 #define MEMLOG_SLOTS_DEFAULT 16
+#define MEMLOG_TASK_MIN_MS 500
 
 struct MemLogEntry
 {
@@ -20,6 +20,8 @@ static MemLogEntry *_log = nullptr;
 static uint8_t _maxSlots = MEMLOG_SLOTS_DEFAULT;
 static uint8_t _idx = 0;
 static uint8_t _count = 0;
+static char _jsonBuf[MEMLOG_JSON_BUF_MAX];
+static uint32_t _lastTaskLogMs = 0;
 
 static void memlogEnsure()
 {
@@ -60,8 +62,18 @@ uint8_t memlogMaxSlots()
 size_t memlogJsonCapacity()
 {
     memlogEnsure();
-    // ~90 bytes per log entry in JSON + metadata
-    return 144 + (size_t)_maxSlots * 96;
+    const size_t need = 144 + (size_t)_maxSlots * 96;
+    return need < MEMLOG_JSON_BUF_MAX ? need : MEMLOG_JSON_BUF_MAX;
+}
+
+char *memlogJsonBuffer()
+{
+    return _jsonBuf;
+}
+
+size_t memlogJsonBufferSize()
+{
+    return sizeof(_jsonBuf);
 }
 
 void memlogAdd(MemLogType type, int code, const char *msg)
@@ -86,6 +98,10 @@ void memlogAdd(MemLogType type, int code, const String &msg)
 
 void memlogTask(const char *name, int code)
 {
+    const uint32_t now = millis();
+    if (code == 0 && (now - _lastTaskLogMs) < MEMLOG_TASK_MIN_MS)
+        return;
+    _lastTaskLogMs = now;
     memlogAdd(MEMLOG_TASK, code, name);
 }
 
@@ -121,6 +137,24 @@ static const char *memlogTypeName(uint8_t type)
     }
 }
 
+static char *appendJsonString(char *p, char *end, const char *s)
+{
+    if (s == nullptr)
+        s = "";
+    while (*s && p < end - 1)
+    {
+        if (*s == '"' || *s == '\\')
+        {
+            if (p + 2 >= end)
+                break;
+            *p++ = '\\';
+        }
+        *p++ = *s++;
+    }
+    *p = '\0';
+    return p;
+}
+
 size_t memlogWriteJson(char *buf, size_t cap, const char *fwVersion)
 {
     memlogEnsure();
@@ -130,33 +164,35 @@ size_t memlogWriteJson(char *buf, size_t cap, const char *fwVersion)
     if (fwVersion == nullptr)
         fwVersion = "";
 
-    const size_t docSize = memlogJsonCapacity();
-    DynamicJsonDocument doc(docSize);
-    doc["version"] = fwVersion;
-    doc["count"] = _count;
-    doc["max"] = _maxSlots;
-    doc["heap"] = ESP.getFreeHeap();
-    JsonArray arr = doc.createNestedArray("logs");
-    const uint8_t oldest = (_count < _maxSlots) ? 0 : _idx;
+    char *p = buf;
+    char *end = buf + cap;
+    int n = snprintf(p, (size_t)(end - p),
+                     "{\"version\":\"%s\",\"count\":%u,\"max\":%u,\"heap\":%u,\"logs\":[",
+                     fwVersion, _count, _maxSlots, ESP.getFreeHeap());
+    if (n <= 0 || (size_t)n >= cap)
+        return 0;
+    p += n;
 
+    const uint8_t oldest = (_count < _maxSlots) ? 0 : _idx;
     for (uint8_t i = 0; i < _count; i++)
     {
         const MemLogEntry &e = _log[(oldest + i) % _maxSlots];
-        JsonObject o = arr.createNestedObject();
-        if (o.isNull())
+        n = snprintf(p, (size_t)(end - p), "%s{\"t\":%u,\"type\":\"%s\",\"code\":%d,\"msg\":\"",
+                     i ? "," : "", e.uptime, memlogTypeName(e.type), e.code);
+        if (n <= 0 || p + n >= end)
             break;
-        o["t"] = e.uptime;
-        o["type"] = memlogTypeName(e.type);
-        o["code"] = e.code;
-        o["msg"] = e.msg;
+        p += n;
+        p = appendJsonString(p, end, e.msg);
+        if (p + 2 >= end)
+            break;
+        *p++ = '"';
+        *p++ = '}';
+        *p = '\0';
     }
 
-    const size_t n = serializeJson(doc, buf, cap);
-    if (n > 0)
-        return n;
-
-    // Fallback if pool or output buffer too small
-    return (size_t)snprintf(buf, cap,
-                            "{\"logs\":[],\"version\":\"%s\",\"count\":%u,\"max\":%u,\"heap\":%u}",
-                            fwVersion, _count, _maxSlots, ESP.getFreeHeap());
+    n = snprintf(p, (size_t)(end - p), "]}");
+    if (n <= 0 || p + n >= end)
+        return 0;
+    p += n;
+    return (size_t)(p - buf);
 }

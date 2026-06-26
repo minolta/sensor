@@ -4,6 +4,7 @@
 #include "timeservice.h"
 #include "gps.h"
 #include "hjob.h"
+#include "memlog.h"
 class Task
 {
     Espjob *job;
@@ -238,6 +239,9 @@ public:
         unsigned long waittime = job->waittime;
         p->setWaittime(job->waittime + r);
         digitalWrite(job->port, job->out);
+        char logmsg[28];
+        snprintf(logmsg, sizeof(logmsg), "job %d run", job->id);
+        memlogAdd(MEMLOG_TASK, job->id, logmsg);
     }
     void deleteTask(Task *p)
     {

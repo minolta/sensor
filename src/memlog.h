@@ -13,9 +13,13 @@ enum MemLogType : uint8_t
     MEMLOG_TASK = 6,
 };
 
+#define MEMLOG_JSON_BUF_MAX 5120
+
 void memlogSetSlots(uint8_t n);
 uint8_t memlogMaxSlots();
 size_t memlogJsonCapacity();
+char *memlogJsonBuffer();
+size_t memlogJsonBufferSize();
 void memlogAdd(MemLogType type, int code, const char *msg);
 void memlogAdd(MemLogType type, int code, const String &msg);
 void memlogTask(const char *name, int code = 0);
