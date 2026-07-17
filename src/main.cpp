@@ -10,6 +10,7 @@
 #include <SPI.h>
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
 #include "checkconnection.h"
 #include <ESP8266httpUpdate.h>
 #include <Wire.h>
@@ -61,7 +62,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "209";
+const String version = "213";
 boolean findsoinow = false;
 void findwetair();
 #define xs 40
@@ -281,6 +282,7 @@ struct
     int maxconnecttimeout = 10;
     int jsonbuffer = 1500;
     int checkactivetimeout = 0;
+    String pinghost;
     int apmodetimeout = 600;
     String checkinurl;
     String checkintoken;
@@ -434,6 +436,7 @@ void loadconfigtoram()
     configdata.checkinurl = cfg.getConfig("checkinurl", "http://192.168.88.5:888/rest/iot/checkin");
     configdata.checkintoken = cfg.getConfig("checkintoken", "");
     configdata.checkactivetimeout = cfg.getIntConfig("checkactivetimeout", 600);
+    configdata.pinghost = cfg.getConfig("pinghost", "");
     configdata.apmodetimeout = cfg.getIntConfig("apmodetimeout", 60);
     configdata.havepzem = cfg.getIntConfig("havepzem", 0);
     configdata.readpzemtime = cfg.getIntConfig("readpzemtime", 1);
@@ -536,7 +539,14 @@ int readshtcount = 0;
 // int ktcCLK = D5;
 
 // MAX6675 ktc(ktcCLK, ktcCS, ktcSO);
-// ESP8266WiFiMulti WiFiMulti;
+static ESP8266WiFiMulti wifiMultiObj;
+static ESP8266WiFiMulti *wifiMulti = &wifiMultiObj;
+static const int MAX_WIFI_NETWORKS = 5;
+static void loadWifiMultiFromConfig();
+static void resetWifiMulti();
+static String trimConfig(const String &s);
+static bool connectOneWifi(const String &ssid, const String &pass, int timeoutSec);
+static bool connectAllConfiguredWifi();
 Runjob *runservice;
 float ktypevalue = 0;
 Ticker flipper;
@@ -1308,11 +1318,14 @@ void ota()
 
 void checkin()
 {
+    static int checkinFails = 0;
+
     if (WiFi.status() != WL_CONNECTED)
     {
         Serial.println(F("checkin: WiFi not connected"));
         message = "Checkin skipped (no WiFi)";
         memlogAdd(MEMLOG_CHECKIN, -1, message);
+        reconnectWifiNow();
         return;
     }
     if (configdata.checkinurl.length() == 0)
@@ -1361,6 +1374,7 @@ void checkin()
 
     if (httpCode == HTTP_CODE_OK)
     {
+        checkinFails = 0;
         if (oledok)
         {
             displayslot.foot2 = "checkin ok";
@@ -1374,6 +1388,12 @@ void checkin()
         message = "Checkin failed HTTP " + String(httpCode);
         Serial.printf("checkin: HTTP error %d\n", httpCode);
         memlogAdd(MEMLOG_CHECKIN, httpCode, message);
+        checkinFails++;
+        if (checkinFails >= 2)
+        {
+            checkinFails = 0;
+            reconnectWifiNow();
+        }
     }
 
     http.end();
@@ -1580,7 +1600,7 @@ void printIPAddressOfHost(const char *host)
         wifitimeout++;
         if (wifitimeout > 5 && cfg.getIntConfig("havetorestart"))
         {
-            WiFi.reconnect();
+            reconnectWifiNow();
         }
     }
     Serial.print(host);
@@ -1620,6 +1640,8 @@ static void sendConfigDescJson(AsyncWebServerRequest *request)
 {
     request->send_P(200, "application/json", CONFIG_DESC_JSON);
 }
+
+static void handlePingRequest(AsyncWebServerRequest *request);
 
 void setHttp()
 {
@@ -1801,6 +1823,9 @@ void setHttp()
               { checkintime = configdata.checkintime+1;
                 request->send(200, "application/json", "{\"Check in\":\"ok\"}"); });
 
+    server.on("/ping", HTTP_GET, [](AsyncWebServerRequest *request)
+              { handlePingRequest(request); });
+
     server.on("/reset", HTTP_GET, [](AsyncWebServerRequest *request)
               {
         request->send(200, "application/json", "{\"reset\":\"ok\"}");
@@ -1900,51 +1925,181 @@ void Apmoderun()
     ap.run();
 }
 int disconnecttimeout = 0;
+
+static String trimConfig(const String &s)
+{
+    String t = s;
+    t.trim();
+    return t;
+}
+
+static void resetWifiMulti()
+{
+    wifiMulti->cleanAPlist();
+    wifiMulti->~ESP8266WiFiMulti();
+    new (&wifiMultiObj) ESP8266WiFiMulti();
+    wifiMulti = &wifiMultiObj;
+}
+
+static void loadWifiMultiFromConfig()
+{
+    resetWifiMulti();
+    for (int i = 0; i < MAX_WIFI_NETWORKS; i++)
+    {
+        String ssidKey = (i == 0) ? String("ssid") : String("ssid") + String(i + 1);
+        String passKey = (i == 0) ? String("password") : String("password") + String(i + 1);
+        String ssid = trimConfig(cfg.getConfig(ssidKey, (i == 0) ? "forpi" : ""));
+        if (ssid.length() == 0 || ssid == "0")
+            continue;
+        String pass = trimConfig(cfg.getConfig(passKey, (i == 0) ? "04qwerty" : ""));
+        if (wifiMulti->addAP(ssid.c_str(), pass.c_str()))
+            Serial.printf("WiFi list %d: %s\n", i + 1, ssid.c_str());
+        else
+            Serial.printf("WiFi skip %d: %s\n", i + 1, ssid.c_str());
+    }
+}
+
+static bool connectOneWifi(const String &ssid, const String &pass, int timeoutSec)
+{
+    if (ssid.length() == 0)
+        return false;
+    Serial.printf("WiFi try: %s\n", ssid.c_str());
+    WiFi.disconnect();
+    delay(200);
+    WiFi.begin(ssid.c_str(), pass.c_str());
+    int n = 0;
+    const int maxTry = timeoutSec * 2;
+    while (WiFi.status() != WL_CONNECTED && n < maxTry)
+    {
+        delay(500);
+        n++;
+        yield();
+    }
+    if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0))
+    {
+        Serial.print(F("Connected IP: "));
+        Serial.println(WiFi.localIP());
+        return true;
+    }
+    return false;
+}
+
+static bool connectAllConfiguredWifi()
+{
+    WiFi.mode(WIFI_STA);
+    WiFi.persistent(false);
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
+    WiFi.disconnect(true);
+    delay(300);
+
+    loadWifiMultiFromConfig();
+
+    if (wifiMulti->run(20000) == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0))
+    {
+        Serial.print(F("WiFiMulti connected: "));
+        Serial.println(WiFi.SSID());
+        return true;
+    }
+
+    Serial.println(F("WiFiMulti failed, try each SSID in order"));
+    for (int i = 0; i < MAX_WIFI_NETWORKS; i++)
+    {
+        String ssidKey = (i == 0) ? String("ssid") : String("ssid") + String(i + 1);
+        String passKey = (i == 0) ? String("password") : String("password") + String(i + 1);
+        String ssid = trimConfig(cfg.getConfig(ssidKey, (i == 0) ? "forpi" : ""));
+        if (ssid.length() == 0 || ssid == "0")
+            continue;
+        String pass = trimConfig(cfg.getConfig(passKey, (i == 0) ? "04qwerty" : ""));
+        if (connectOneWifi(ssid, pass, 25))
+            return true;
+    }
+    return false;
+}
+
+bool reconnectWifiNow()
+{
+    memlogTask("reconn");
+    Serial.println(F("reconnectWifiNow"));
+    if (connectAllConfiguredWifi())
+    {
+        isDisconnect = false;
+        wifitimeout = 0;
+        memlogAdd(MEMLOG_CHECKIN, 0, "WiFi reconnected");
+        return true;
+    }
+    isDisconnect = true;
+    memlogAdd(MEMLOG_ERROR, -1, "WiFi reconnect fail");
+    return false;
+}
+
+static String connectionPingTarget()
+{
+    if (configdata.pinghost.length() > 0)
+        return configdata.pinghost;
+    IPAddress gw = WiFi.gatewayIP();
+    if (gw != IPAddress(0, 0, 0, 0))
+        return gw.toString();
+    return String("192.168.88.1");
+}
+
+static void handlePingRequest(AsyncWebServerRequest *request)
+{
+    String target = connectionPingTarget();
+    if (request->hasParam("host"))
+        target = request->getParam("host")->value();
+    const bool doReconnect = request->hasParam("reconnect") &&
+                             request->getParam("reconnect")->value() == "1";
+    const bool ok = doReconnect ? checkAndReconnectToIP(target, 8000) : pingTarget(target, 8000);
+
+    char buf[320];
+    snprintf(buf, sizeof(buf),
+             "{\"ok\":%d,\"target\":\"%s\",\"reconnect\":%d,\"wifi\":%d,\"ssid\":\"%s\",\"ip\":\"%s\",\"gateway\":\"%s\",\"rssi\":%d}",
+             ok ? 1 : 0,
+             target.c_str(),
+             doReconnect ? 1 : 0,
+             WiFi.status(),
+             WiFi.SSID().c_str(),
+             WiFi.localIP().toString().c_str(),
+             WiFi.gatewayIP().toString().c_str(),
+             WiFi.RSSI());
+    request->send(200, "application/json", buf);
+}
+
 void connect()
 {
 
-    // WiFi.mode(WIFI_STA);
     Serial.println();
-    Serial.println("-----------------------------------------------");
-    Serial.println(cfg.getConfig("ssid", "forpi"));
-    Serial.println(cfg.getConfig("password", "04qwerty"));
     Serial.println("-----------------------------------------------");
     if (oledok)
     {
-        displayslot.description = "Connect to ";
+        displayslot.description = "Connect WiFi";
         displayslot.description1 = cfg.getConfig("ssid");
         dd();
     }
-    WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
-    // WiFiMulti.addAP(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
     Serial.print("connect.");
     int ft = 0;
-    // display.clear();
-    while (WiFi.status() != WL_CONNECTED) // รอการเชื่อมต่อ
+    bool connected = false;
+    while (!connected && ft <= configdata.maxconnecttimeout)
     {
-        delay(250);
         if (oledok)
         {
             displayslot.foot = "connect";
-            displayslot.foot2 = "/";
+            displayslot.foot2 = (ft & 1) ? "/" : "\\";
             dd();
         }
-        delay(250);
-        if (oledok)
+        connected = connectAllConfiguredWifi();
+        if (!connected)
         {
-            displayslot.foot = "connect";
-            displayslot.foot2 = "\\";
-            dd();
+            ft++;
+            delay(1000);
+            Serial.print(".");
         }
+    }
 
-        ft++;
-        if (ft > configdata.maxconnecttimeout)
-        {
-            Serial.println("Connect main wifi timeout");
-            apmode = 1;
-            break;
-        }
-        Serial.print(".");
+    if (!connected)
+    {
+        Serial.println("Connect main wifi timeout");
+        apmode = 1;
     }
 
     if (apmode)
@@ -1954,7 +2109,10 @@ void connect()
     else
     {
 
+        WiFi.setSleepMode(WIFI_NONE_SLEEP);
         Serial.println(WiFi.localIP()); // แสดงหมายเลข IP ของ Server
+        Serial.print("Connected SSID: ");
+        Serial.println(WiFi.SSID());
         String ip = WiFi.localIP().toString();
         String mac = WiFi.macAddress();
         Serial.println(mac); // แสดงหมายเลข IP ของ Server
@@ -2233,6 +2391,7 @@ void apmodetask()
 }
 void checkconnectiontask()
 {
+    static int connHealthFails = 0;
 
     if (checkconnectiontime > configdata.checkconnectiontime)
     {
@@ -2240,11 +2399,23 @@ void checkconnectiontask()
         Serial.println("Check connection");
         checkconnectiontime = 0;
 
-        if (WiFi.status() != WL_CONNECTED)
+        const String target = connectionPingTarget();
+        Serial.printf("Ping target: %s\n", target.c_str());
+        const bool ok = checkAndReconnectToIP(target, 8000);
+        if (ok)
         {
-            memlogTask("reconn");
-            Serial.println("Connection has promble reconnect");
-            WiFi.begin(cfg.getConfig("ssid", "forpi").c_str(), cfg.getConfig("password", "04qwerty").c_str());
+            connHealthFails = 0;
+            isDisconnect = false;
+        }
+        else
+        {
+            connHealthFails++;
+            isDisconnect = true;
+            char msg[32];
+            snprintf(msg, sizeof(msg), "conn fail x%d", connHealthFails);
+            memlogAdd(MEMLOG_ERROR, connHealthFails, msg);
+            if (connHealthFails >= 3 && configdata.havetorestart)
+                ESP.restart();
         }
     }
 }
@@ -2508,8 +2679,18 @@ void havekey()
         }
         else if (k == 'f')
         {
-            int r = WiFi.reconnect();
-            Serial.printf("REconnect %s  = %d \n", cfg.getConfig("talkurl").c_str(), r);
+            bool ok = reconnectWifiNow();
+            Serial.printf("REconnect %s\n", ok ? WiFi.SSID().c_str() : "fail");
+        }
+        else if (k == 'p')
+        {
+            const String target = connectionPingTarget();
+            const bool ok = pingTarget(target, 8000);
+            Serial.printf("Ping %s = %s (gw %s ip %s)\n",
+                          target.c_str(),
+                          ok ? "OK" : "FAIL",
+                          WiFi.gatewayIP().toString().c_str(),
+                          WiFi.localIP().toString().c_str());
         }
         else if (k == 'c')
         {

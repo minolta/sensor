@@ -4,6 +4,8 @@
 #include <ESP8266WiFi.h>
 #ifndef CHECKCONNECTION_H
 #define CHECKCONNECTION_H
-int talktoServer(String ip, String name, long uptime,Configfile *p);
+int talktoServer(String ip, String name, long uptime, Configfile *p);
+bool reconnectWifiNow();
+bool pingTarget(const String &target, int timeoutMs = 8000);
 bool checkAndReconnectToIP(String targetIP = "192.168.88.1", int timeout = 5000);
 #endif
