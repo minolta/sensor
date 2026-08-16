@@ -63,7 +63,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "214";
+const String version = "218";
 boolean findsoinow = false;
 void findwetair();
 #define xs 40
@@ -286,8 +286,12 @@ struct {
   int stanalone = 0;
   int flowlow = 10; // การไหลของน้ำ
   unsigned long flowchecktime = 5;
-  int flowfaillimit = 5; // จับว่าน้ำไม่มีกี่ครั้งให้หยุดตามเวลาที่กำหนด
-  int flowfailtime = 60; // เวลาหยุดการการดูดน้ำก่อน
+  int flowfaillimit = 5;             // จับว่าน้ำไม่มีกี่ครั้งให้หยุดตามเวลาที่กำหนด
+  int flowfailtime = 60;             // เวลาหยุดการการดูดน้ำก่อน
+  int flowlimittims = 3;             // จำนวนครั้งที่การไหลไม่เกินกำหนด
+  int flowfailcount = 3;             // จำนวนครั้งที่น้ำไม่ไหล (default 3)
+  int waterlimtwaitovertimes = 1200; // เวลาหยุดดูดน้ำเมื่อใช้น้ำไม่เกินกำหนด (วินาที)
+  int flowwaittimes = 1200; // เวลาหยุดดูดน้ำเมื่อน้ำไม่ไหล (วินาที, default 1200)
   int havefastport = 0;
   int fastport1status = 0;
   int fastport0status = 0;
@@ -453,6 +457,13 @@ void loadconfigtoram() {
   configdata.flowchecktime = cfg.getIntConfig("flowchecktime", 10);
   configdata.flowfaillimit = cfg.getIntConfig("flowfaillimit", 5); // ครั้งที่สูบไม่ขึ้น
   configdata.flowfailtime = cfg.getIntConfig("flowfailtime", 60); // เวลาหยุดสูบน้ำ
+  configdata.flowlimittims = cfg.getIntConfig("flowlimittims", 3);
+  configdata.flowfailcount =
+      cfg.getIntConfig("flowfailcount", configdata.flowlimittims);
+  configdata.waterlimtwaitovertimes =
+      cfg.getIntConfig("waterlimtwaitovertimes", 1200);
+  configdata.flowwaittimes =
+      cfg.getIntConfig("flowwaittimes", configdata.waterlimtwaitovertimes);
   configdata.fastport0statustime = cfg.getIntConfig("fastport0statustime", 5);
   configdata.fastport1statustime = cfg.getIntConfig("fastport1statustime", 5);
   configdata.fastport0time = cfg.getIntConfig("fastport0time", 3);
@@ -694,14 +705,24 @@ void portcheck() {
           ports[i].endtime = 0;
           digitalWrite(ports[i].port, ports[i].defaultvalue);
           ports[i].flowfailcount++;
-          if (ports[i].flowfailcount >= configdata.flowfaillimit) {
+          int limitTims =
+              configdata.flowfailcount > 0
+                  ? configdata.flowfailcount
+                  : (configdata.flowlimittims > 0 ? configdata.flowlimittims
+                                                  : 3);
+          int waitOverSec = configdata.flowwaittimes > 0
+                                ? configdata.flowwaittimes
+                                : (configdata.waterlimtwaitovertimes > 0
+                                       ? configdata.waterlimtwaitovertimes
+                                       : 1200);
+          if (ports[i].flowfailcount >= limitTims) {
             errormessage = "Flow fail count is  " +
                            String(ports[i].flowfailcount) + " spend " +
-                           String(ports[i].flowfailtime / 1000);
+                           String(waitOverSec);
             memlogAdd(MEMLOG_ERROR, ports[i].flowfailcount, errormessage);
             ports[i].flowfailtime =
-                t + configdata.flowfailtime * 1000; // กำหนดเวลาหยุดทำงาน
-            ports[i].flowfailcount = 0;             // ถ้าน้ำมาแล้ว reset ใหม่
+                t + ((unsigned long)waitOverSec * 1000); // กำหนดเวลาหยุดทำงาน
+            ports[i].flowfailcount = 0; // reset count for next attempt
           } else {
             message = "Open pump but no flow off pump";
             errormessage = "Have flow " + String(flow_frequency) + " < " +
@@ -1119,25 +1140,33 @@ boolean addTorun(int port, int delay, int value, int wait) {
   if (delay > counttime)
     counttime = delay;
   for (int i = 0; i < ioport; i++) {
-    if (ports[i].port == port &&
-        ports[i].flowfailtime <= t) // ถ้า flowfailtime น้อยกว่าหรือเท่ากับ t ให้ set
-                                    // port ได้แต่ถ้ายังไม่ครบกำหนดให้หยุด set port ก่อน
-    {
-      unsigned long t = millis();
-      ports[i].value = value;
-      // if (ports[i].delay < delay)
-      ports[i].delay = delay;
-      ports[i].endtime = t + (delay * 1000); // บอกเวลาหยุดทำงาน
-      ports[i].flowchecktime =
-          t + (configdata.flowchecktime * 1000); // บอกเวลาให้ตรวจสอบน้ำไหล
-      ports[i].waittime = wait;
-      ports[i].run = 1;
-      digitalWrite(ports[i].port, value);
-      Serial.printf("Set port %d %ld\n", ports[i].run, ports[i].endtime);
-      char logmsg[28];
-      snprintf(logmsg, sizeof(logmsg), "run ON p%d %ds", port, delay);
-      memlogAdd(MEMLOG_TASK, value, logmsg);
-      return true;
+    if (ports[i].port == port) {
+      if (ports[i].flowfailtime > 0 && t >= ports[i].flowfailtime) {
+        // Expiration of wait period: reset flowfailtime and flowfailcount to
+        // retry
+        ports[i].flowfailtime = 0;
+        ports[i].flowfailcount = 0;
+      }
+      if (ports[i].flowfailtime <=
+          t) // ถ้า flowfailtime น้อยกว่าหรือเท่ากับ t ให้ set
+             // port ได้แต่ถ้ายังไม่ครบกำหนดให้หยุด set port ก่อน
+      {
+        unsigned long t = millis();
+        ports[i].value = value;
+        // if (ports[i].delay < delay)
+        ports[i].delay = delay;
+        ports[i].endtime = t + (delay * 1000); // บอกเวลาหยุดทำงาน
+        ports[i].flowchecktime =
+            t + (configdata.flowchecktime * 1000); // บอกเวลาให้ตรวจสอบน้ำไหล
+        ports[i].waittime = wait;
+        ports[i].run = 1;
+        digitalWrite(ports[i].port, value);
+        Serial.printf("Set port %d %ld\n", ports[i].run, ports[i].endtime);
+        char logmsg[28];
+        snprintf(logmsg, sizeof(logmsg), "run ON p%d %ds", port, delay);
+        memlogAdd(MEMLOG_TASK, value, logmsg);
+        return true;
+      }
     }
   }
 
@@ -1463,7 +1492,10 @@ void inden() {
     digitalWrite(b_led, ledstatus);
   }
   // ถ้ามีการหยุดปั๊มให้
-  if (waterlimitime >= 0)
+  if (configdata.havewaterlimit) {
+    idlewaterlimit++;
+  }
+  if (waterlimitime > 0)
     waterlimitime--;
 
   kt.run();
@@ -1769,7 +1801,8 @@ void setHttp() {
     server.on("/openwater", HTTP_GET, [](AsyncWebServerRequest *request) {
       if (request->hasArg("w")) {
         int watertorefill = request->arg("w").toInt();
-        fordisplay = watertorefill / 0.0022; // จะแสดงว่าระบบจะต้องเติมน้ำเข้าไปเท่าไหร่
+        fordisplay =
+            watertorefill / 0.0022; // จะแสดงว่าระบบจะต้องเติมน้ำเข้าไปเท่าไหร่
         // เปิดน้ำเปิด Sonenoi
         digitalWrite(D1, 1);
         Serial.printf("Open water %d", fordisplay);
@@ -2148,9 +2181,16 @@ void initConfig() {
 void setupwater() {
   String p = cfg.getConfig("flowinterrrupport", "D6");
   int pt = getPort(p);
-  pinMode(getPort(p), INPUT);
-  // pinMode(D6, INPUT);
-  attachInterrupt(pt, flow, RISING); // Setup Interrupt
+  pinMode(pt, INPUT);
+  if (configdata.havewaterlimit) {
+    attachInterrupt(pt, waterlimitinterrup, RISING);
+  } else {
+    attachInterrupt(pt, flow, RISING); // Setup Interrupt
+  }
+  pinMode(waterlimitport, OUTPUT);
+  digitalWrite(waterlimitport, 0);
+  pinMode(REALYPORT, OUTPUT);
+  digitalWrite(REALYPORT, 0);
   Serial.println("Setup Interrup  for water ...");
 }
 void setupntp() {
@@ -2413,7 +2453,7 @@ void waterlimittask() {
       currentwateroverlimit++;                   // เพิ่มจำนวนการใช้น้ำเกินเข้าระบบ
     }
 
-    if (waterlimitime >= 0) {
+    if (waterlimitime > 0) {
       digitalWrite(waterlimitport,
                    1); // เปิดระบบตัดน้ำแล้วระบบจะทำการลดค่า limit ไปเรื่อยๆ
     } else {
@@ -2421,7 +2461,10 @@ void waterlimittask() {
     }
 
     // ถ้ามีการใช้น้ำเกินกำหนดหรือว่าท่อแตกหรืออะไรซํกอย่างระบบจะตัดหรือยก relay
-    if (currentwateroverlimit >= configdata.wateroverlimitvalue) {
+    static bool overLimitTripped = false;
+    if (currentwateroverlimit >= configdata.wateroverlimitvalue &&
+        !overLimitTripped) {
+      overLimitTripped = true;
       memlogTask("wOver", currentwateroverlimit);
       waterlimitime = configdata.waterlimittime;
       digitalWrite(REALYPORT, 1); // สั่งระบบยก relay
@@ -2431,6 +2474,7 @@ void waterlimittask() {
         memlogTask("wIdle");
       wateruse = 0;              // ไม่มีการใช้น้ำแล้ว
       currentwateroverlimit = 0; // ถ้ามีการหยุดใช้น้ำแล้วก็ยกเลิกการน้ำใช้น้ำเกิน
+      overLimitTripped = false;
     }
   }
 }

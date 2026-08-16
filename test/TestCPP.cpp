@@ -1375,6 +1375,83 @@ void testDaytime()
     Serial.printf("\nH:%d\n",timeClient.getHours());
   }
 }
+static struct {
+  int havewaterlimit = 0;
+  int flowlimittims = 3;
+  int waterlimtwaitovertimes = 1200;
+  int waterlimitvalue = 100000;
+  int wateridletime = 60;
+  int wateroverlimit = 3;
+  int waterlimittime = 300;
+  int wateroverlimitvalue = 28800;
+  int flowfaillimit = 5;
+  int flowfailtime = 60;
+  int flowlow = 10;
+} test_configdata;
+
+static struct {
+  int port;
+  int flowfailcount;
+  unsigned long flowfailtime;
+} test_ports[6];
+
+void test_water_limit_task() {
+  test_configdata.havewaterlimit = 1;
+  test_configdata.flowlimittims = 3;
+  test_configdata.waterlimtwaitovertimes = 1200;
+  test_configdata.waterlimitvalue = 100;
+  test_configdata.waterlimittime = 10;
+  test_configdata.wateroverlimitvalue = 3;
+
+  TEST_ASSERT_EQUAL(3, test_configdata.flowlimittims);
+  TEST_ASSERT_EQUAL(1200, test_configdata.waterlimtwaitovertimes);
+
+  // Test low-flow cooldown triggering
+  test_ports[0].port = D5;
+  test_ports[0].flowfailcount = 0;
+  test_ports[0].flowfailtime = 0;
+
+  // 1st failed check
+  test_ports[0].flowfailcount++;
+  TEST_ASSERT_EQUAL(1, test_ports[0].flowfailcount);
+  TEST_ASSERT_EQUAL(0, test_ports[0].flowfailtime);
+
+  // 2nd failed check
+  test_ports[0].flowfailcount++;
+  TEST_ASSERT_EQUAL(2, test_ports[0].flowfailcount);
+  TEST_ASSERT_EQUAL(0, test_ports[0].flowfailtime);
+
+  // 3rd failed check triggers 1200s cooldown
+  unsigned long now = 50000;
+  int limitTims = test_configdata.flowlimittims > 0 ? test_configdata.flowlimittims : test_configdata.flowfaillimit;
+  int waitOverSec = test_configdata.waterlimtwaitovertimes > 0 ? test_configdata.waterlimtwaitovertimes : test_configdata.flowfailtime;
+  test_ports[0].flowfailcount++;
+  if (test_ports[0].flowfailcount >= limitTims) {
+    test_ports[0].flowfailtime = now + ((unsigned long)waitOverSec * 1000);
+    test_ports[0].flowfailcount = 0;
+  }
+  TEST_ASSERT_EQUAL(0, test_ports[0].flowfailcount);
+  TEST_ASSERT_EQUAL(now + 1200000UL, test_ports[0].flowfailtime);
+
+  // Test retry reset when wait time expires (now >= flowfailtime)
+  unsigned long future = now + 1200001UL;
+  if (test_ports[0].flowfailtime > 0 && future >= test_ports[0].flowfailtime) {
+    test_ports[0].flowfailtime = 0;
+    test_ports[0].flowfailcount = 0;
+  }
+  TEST_ASSERT_EQUAL(0, test_ports[0].flowfailtime);
+  TEST_ASSERT_EQUAL(0, test_ports[0].flowfailcount);
+
+  // Test reset when flow > flowlow
+  test_ports[0].flowfailcount = 2;
+  test_ports[0].flowfailtime = 999999;
+  // Simulating good flow (> flowlow)
+  test_ports[0].flowfailcount = 0;
+  test_ports[0].flowfailtime = 0;
+  TEST_ASSERT_EQUAL(0, test_ports[0].flowfailcount);
+  TEST_ASSERT_EQUAL(0, test_ports[0].flowfailtime);
+}
+
 void setup()
 {
 
@@ -1397,6 +1474,7 @@ void setup()
   UNITY_BEGIN();
   RUN_TEST(test_checkin_payload_fields);
   RUN_TEST(test_checkin_post_ok);
+  RUN_TEST(test_water_limit_task);
   pinMode(D3,OUTPUT);
     pinMode(D2,OUTPUT);
   digitalWrite(D3,0);

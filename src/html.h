@@ -451,6 +451,36 @@ function setvalue(element,configname,value) {
   xhr.send();
 }
 
+function exportConfig(){
+  fetch('/config').then(function(r){return r.blob();}).then(function(b){
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = 'config.json';
+    a.click();
+  }).catch(function(e){alert('Export failed: '+e);});
+}
+function importConfig(evt){
+  var file = evt.target.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      var data = JSON.parse(e.target.result);
+      var keys = Object.keys(data);
+      var promises = keys.map(function(k){
+        return fetch('/setconfig?configname='+encodeURIComponent(k)+'&value='+encodeURIComponent(data[k]));
+      });
+      Promise.all(promises).then(function(){
+        alert('Config imported successfully');
+        loadConfigTable();
+      }).catch(function(err){alert('Import error: '+err);});
+    } catch(err) {
+      alert('Invalid JSON file format');
+    }
+  };
+  reader.readAsText(file);
+}
+
 function loadConfigTable(){
   var rows=document.getElementById('cfgrows');
   if(!rows)return;
@@ -605,6 +635,9 @@ else initPage();
 <input id=newconfigname placeholder="configname" type="text">
 <input id=newvalue placeholder="value" type="text">
 <button class="btn btn-add" type="button" onClick="add()">+ Add</button>
+<button class="btn btn-add" type="button" onClick="exportConfig()">Export Config</button>
+<button class="btn btn-add" type="button" onClick="document.getElementById('importFile').click()">Import Config</button>
+<input type="file" id="importFile" style="display:none" accept=".json,.cfg,.txt" onChange="importConfig(event)">
 </div>
 <div class="footer-actions">
 <button class="btn btn-reset" type="button" onClick="deleteallconfig()">Reset all</button>
