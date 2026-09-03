@@ -39,6 +39,10 @@ static const ConfigDescItem CONFIG_DESC[] = {
     {"otatime", "OTA check interval seconds (default 600)"},
     {"updatetimestampurl", "URL to sync device timestamp"},
     {"updatetimestamp", "Timestamp sync interval seconds"},
+    {"D1mode", "D1 pin mode: 0=INPUT 1=OUTPUT"},
+    {"D1initvalue", "D1 initial output: 0=LOW 1=HIGH"},
+    {"D2mode", "D2 pin mode: 0=INPUT 1=OUTPUT"},
+    {"D2initvalue", "D2 initial output: 0=LOW 1=HIGH"},
     {"D3mode", "D3 pin mode: 0=INPUT 1=OUTPUT"},
     {"D3initvalue", "D3 initial output: 0=LOW 1=HIGH"},
     {"D5mode", "D5 pin mode: 0=INPUT 1=OUTPUT"},
@@ -98,6 +102,14 @@ static const ConfigDescItem CONFIG_DESC[] = {
     {"soienablepin", "GPIO to power soil sensor (e.g. D5)"},
     {"airvalue", "A0 raw value in dry air (/finddry)"},
     {"wetvalue", "A0 raw value in water (/findwet)"},
+    {"haveir", "1 = enable IR transmitter for MPPFA-09CRN1 AC"},
+    {"irpin", "GPIO pin for IR transmitter (e.g. D4, D3, D1)"},
+    {"irledpin", "GPIO pin for IR transmitter LED (e.g. D4, D3, D1)"},
+    {"actemp", "Target AC temperature (17-30, default 25)"},
+    {"acmode", "AC mode: 0=Auto 1=Cool 2=Dry 3=Fan 4=Heat"},
+    {"acfan", "AC fan speed: 0=Auto 1=Min 2=Med 3=Max"},
+    {"acswing", "AC swing mode: 0=off 1=on"},
+    {"actimer", "AC off-timer duration in minutes"},
 };
 
 static const char DESC_DEFAULT[] = "Custom config key";

@@ -31,6 +31,7 @@
 #include <ESP8266httpUpdate.h>
 #include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <IRremoteESP8266.h>
 #include <NTPClient.h>
 #include <PZEM004Tv30.h>
 #include <SPI.h>
@@ -40,6 +41,7 @@
 #include <TinyGPSPlus.h>
 #include <WiFiUdp.h>
 #include <Wire.h>
+#include <ir_Midea.h>
 #include <time.h>
 
 int timezone = 25000;
@@ -63,7 +65,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "218";
+const String version = "221";
 boolean findsoinow = false;
 void findwetair();
 #define xs 40
@@ -75,6 +77,7 @@ void findwetair();
 #define TMCLK D6
 #define TMDIO D7
 #define REALYPORT D7 // สำหรับยกน้ำออก
+#define b_led 2      // 1 for ESP-01, 2 for ESP-12
 // WiFiEventHandler gotIpEventHandler, disconnectedEventHandler;
 int isDisconnect = false; // สำหรับบอกสถานะว่า wifi หลุด
 char jsonChar[jsonbuffersize];
@@ -182,6 +185,10 @@ public:
   float t;
 };
 struct {
+  int D1value = OUTPUT;
+  int D1initvalue = 0;
+  int D2value = OUTPUT;
+  int D2initvalue = 0;
   int D3value = OUTPUT;
   int D3initvalue = 0;
   int D5value = OUTPUT;
@@ -317,6 +324,15 @@ struct {
   String description;
   String updatetimestampurl;
   int soienablepin = D5;
+  int haveir = 0;
+  int irpin = D4;
+  int irledpin = D4;
+  int acpower = 0;
+  int actemp = 25;
+  int acmode = 1;
+  int acfan = 0;
+  int acswing = 0;
+  int actimer = 0;
 } configdata;
 
 struct {
@@ -427,6 +443,10 @@ void loadconfigtoram() {
       cfg.getIntConfig("wateroverlimitvalue", 28800);
   wateruse = 0; // reset use water
 
+  portconfig.D1value = cfg.getIntConfig("D1mode", 1);
+  portconfig.D1initvalue = cfg.getIntConfig("D1initvalue", 0);
+  portconfig.D2value = cfg.getIntConfig("D2mode", 1);
+  portconfig.D2initvalue = cfg.getIntConfig("D2initvalue", 0);
   portconfig.D3value = cfg.getIntConfig("D3mode", 0);
   portconfig.D3initvalue = cfg.getIntConfig("D3initvalue", 0);
   portconfig.D5value = cfg.getIntConfig("D5mode", 0);
@@ -478,6 +498,21 @@ void loadconfigtoram() {
   WaterValue = cfg.getIntConfig("wetvalue", 536);
   configdata.nextreadsoi = cfg.getIntConfig("nextreadsoi", 1000 * 60 * 15);
   configdata.soienablepin = getPort(cfg.getConfig("soienablepin", "D5"));
+  configdata.haveir = cfg.getIntConfig("haveir", 0);
+  configdata.irledpin =
+      getPort(cfg.getConfig("irledpin", cfg.getConfig("irpin", "D4")));
+  if (configdata.irledpin < 0)
+    configdata.irledpin = D4;
+  configdata.irpin = configdata.irledpin;
+  if (configdata.haveir || configdata.irledpin == b_led) {
+    digitalWrite(b_led, HIGH);
+  }
+  configdata.actemp = cfg.getIntConfig("actemp", 25);
+  configdata.acmode = cfg.getIntConfig("acmode", 1);
+  configdata.acfan = cfg.getIntConfig("acfan", 0);
+  configdata.acswing = cfg.getIntConfig("acswing", 0);
+  configdata.actimer = cfg.getIntConfig("actimer", 0);
+  configdata.acpower = cfg.getIntConfig("acpower", 0);
   memlogSetSlots(cfg.getIntConfig("logslots", 16));
 }
 
@@ -649,6 +684,8 @@ int getPort(String p) {
     return D1;
   } else if (p == "D2") {
     return D2;
+  } else if (p == "D3") {
+    return D3;
   } else if (p == "D5") {
     return D5;
   } else if (p == "D6") {
@@ -1039,6 +1076,15 @@ size_t makeStatusJson(char *buf, size_t cap) {
   doc["havetortc"] = configdata.havertc;
   doc["havesonic"] = configdata.havesonic;
   doc["havefastport"] = configdata.havefastport;
+  doc["haveir"] = configdata.haveir;
+  doc["irpin"] = configdata.irledpin;
+  doc["irledpin"] = configdata.irledpin;
+  doc["acpower"] = configdata.acpower;
+  doc["actemp"] = configdata.actemp;
+  doc["acmode"] = configdata.acmode;
+  doc["acfan"] = configdata.acfan;
+  doc["acswing"] = configdata.acswing;
+  doc["actimer"] = configdata.actimer;
   doc["distance"] = distance;
   doc["config.wifitimeout"] = configdata.wifitimeout;
   doc["config.checkintime"] = configdata.checkintime;
@@ -1050,10 +1096,14 @@ size_t makeStatusJson(char *buf, size_t cap) {
     doc["distance"] = "-1";
   }
   doc["tmp"] = tmpvalue;
+  doc["D1config"] = portconfig.D1value;
+  doc["D1init"] = portconfig.D1initvalue;
+  doc["D2config"] = portconfig.D2value;
+  doc["D2init"] = portconfig.D2initvalue;
   doc["D5config"] = portconfig.D5value;
   doc["D5init"] = portconfig.D5initvalue;
   doc["D3init"] = portconfig.D3initvalue;
-  doc["D3config"] = portconfig.D5value;
+  doc["D3config"] = portconfig.D3value;
   doc["D6config"] = portconfig.D6value;
   doc["D6init"] = portconfig.D6initvalue;
   doc["D7config"] = portconfig.D7value;
@@ -1487,7 +1537,7 @@ void inden() {
   if (counttime > 0)
     counttime--;
 
-  if (!readdhtstate && canuseled) {
+  if (!readdhtstate && canuseled && !configdata.haveir && (configdata.irledpin != b_led)) {
     ledstatus = !digitalRead(b_led);
     digitalWrite(b_led, ledstatus);
   }
@@ -1558,6 +1608,178 @@ static void sendConfigDescJson(AsyncWebServerRequest *request) {
 
 static void handlePingRequest(AsyncWebServerRequest *request);
 
+static IRMideaAC *acServer = nullptr;
+static int acServerPin = -1;
+
+void sendMideaACCommand(bool power, int temp, int mode, int fan, int swing = -1,
+                        int timerMins = -1) {
+  int pin = configdata.irledpin;
+  if (pin < 0)
+    pin = D4;
+  if (acServer == nullptr || acServerPin != pin) {
+    if (acServer != nullptr)
+      delete acServer;
+    acServer = new IRMideaAC(pin);
+    acServer->begin();
+    acServerPin = pin;
+  }
+
+  acServer->setPower(power);
+  if (temp < 17)
+    temp = 17;
+  if (temp > 30)
+    temp = 30;
+  acServer->setTemp(temp);
+
+  switch (mode) {
+  case 0:
+    acServer->setMode(kMideaACAuto);
+    break;
+  case 1:
+    acServer->setMode(kMideaACCool);
+    break;
+  case 2:
+    acServer->setMode(kMideaACDry);
+    break;
+  case 3:
+    acServer->setMode(kMideaACFan);
+    break;
+  case 4:
+    acServer->setMode(kMideaACHeat);
+    break;
+  default:
+    acServer->setMode(kMideaACCool);
+    break;
+  }
+
+  switch (fan) {
+  case 0:
+    acServer->setFan(kMideaACFanAuto);
+    break;
+  case 1:
+    acServer->setFan(kMideaACFanLow);
+    break;
+  case 2:
+    acServer->setFan(kMideaACFanMed);
+    break;
+  case 3:
+    acServer->setFan(kMideaACFanHigh);
+    break;
+  default:
+    acServer->setFan(kMideaACFanAuto);
+    break;
+  }
+
+  if (swing >= 0) {
+    configdata.acswing = swing ? 1 : 0;
+  }
+  if (configdata.acswing) {
+    acServer->setSwingVToggle(true);
+  } else {
+    acServer->setSwingVToggle(false);
+  }
+
+  if (timerMins >= 0) {
+    configdata.actimer = timerMins;
+    if (timerMins > 0) {
+      acServer->setOffTimer(timerMins);
+    } else {
+      acServer->setOffTimer(0);
+    }
+  }
+
+  acServer->send();
+  configdata.acpower = power ? 1 : 0;
+  configdata.actemp = temp;
+  configdata.acmode = mode;
+  configdata.acfan = fan;
+  cfg.addConfig("acpower", configdata.acpower);
+  cfg.addConfig("actemp", configdata.actemp);
+  cfg.addConfig("acmode", configdata.acmode);
+  cfg.addConfig("acfan", configdata.acfan);
+  cfg.addConfig("acswing", configdata.acswing);
+  cfg.addConfig("actimer", configdata.actimer);
+}
+
+void handleACControl(AsyncWebServerRequest *request) {
+  bool power = configdata.acpower != 0;
+  int temp = configdata.actemp;
+  int mode = configdata.acmode;
+  int fan = configdata.acfan;
+  int swing = configdata.acswing;
+  int timerMins = -1;
+
+  if (request->hasArg("power")) {
+    String pVal = request->arg("power");
+    if (pVal == "1" || pVal == "on" || pVal == "true")
+      power = true;
+    else if (pVal == "0" || pVal == "off" || pVal == "false")
+      power = false;
+  }
+  if (request->hasArg("temp")) {
+    temp = request->arg("temp").toInt();
+  } else if (request->hasArg("tmp")) {
+    temp = request->arg("tmp").toInt();
+  } else if (request->hasArg("t")) {
+    temp = request->arg("t").toInt();
+  }
+  if (request->hasArg("mode")) {
+    mode = request->arg("mode").toInt();
+  } else if (request->hasArg("m")) {
+    mode = request->arg("m").toInt();
+  }
+  if (request->hasArg("fan")) {
+    fan = request->arg("fan").toInt();
+  } else if (request->hasArg("f")) {
+    fan = request->arg("f").toInt();
+  }
+  if (request->hasArg("swing")) {
+    String sVal = request->arg("swing");
+    if (sVal == "1" || sVal == "on" || sVal == "true")
+      swing = 1;
+    else if (sVal == "0" || sVal == "off" || sVal == "false")
+      swing = 0;
+    else
+      swing = sVal.toInt();
+  } else if (request->hasArg("sw")) {
+    String sVal = request->arg("sw");
+    if (sVal == "1" || sVal == "on" || sVal == "true")
+      swing = 1;
+    else if (sVal == "0" || sVal == "off" || sVal == "false")
+      swing = 0;
+    else
+      swing = sVal.toInt();
+  } else if (request->hasArg("s")) {
+    String sVal = request->arg("s");
+    if (sVal == "1" || sVal == "on" || sVal == "true")
+      swing = 1;
+    else if (sVal == "0" || sVal == "off" || sVal == "false")
+      swing = 0;
+    else
+      swing = sVal.toInt();
+  }
+  if (request->hasArg("timer")) {
+    timerMins = request->arg("timer").toInt();
+  } else if (request->hasArg("offtimer")) {
+    timerMins = request->arg("offtimer").toInt();
+  } else if (request->hasArg("timerof")) {
+    timerMins = request->arg("timerof").toInt();
+  } else if (request->hasArg("tmr")) {
+    timerMins = request->arg("tmr").toInt();
+  } else if (request->hasArg("tm")) {
+    timerMins = request->arg("tm").toInt();
+  }
+
+  sendMideaACCommand(power, temp, mode, fan, swing, timerMins);
+
+  String resp = "{\"status\":\"ok\",\"power\":" + String(power ? 1 : 0) +
+                ",\"temp\":" + String(temp) + ",\"mode\":" + String(mode) +
+                ",\"fan\":" + String(fan) +
+                ",\"swing\":" + String(configdata.acswing) +
+                ",\"timer\":" + String(configdata.actimer) + "}";
+  request->send(200, "application/json", resp);
+}
+
 void setHttp() {
 
   if (WiFi.status() != WL_CONNECTED)
@@ -1608,6 +1830,9 @@ void setHttp() {
     request->send(404);
   });
   server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send_P(200, "text/html", configfile_html);
+  });
+  server.on("/setwwwconfig", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", configfile_html);
   });
   server.on("/configdesc.json", HTTP_GET, [](AsyncWebServerRequest *request) {
@@ -1830,6 +2055,84 @@ void setHttp() {
   server.on("/settimestamp", setTimestamp);
   server.on("/findair", finddry);
   server.on("/findwet", findwet);
+  server.on("/ac", handleACControl);
+  server.on("/midea", handleACControl);
+  server.on("/setair", handleACControl);
+  server.on("/settemp", handleACControl);
+
+  server.on("/ac/on", [](AsyncWebServerRequest *request) {
+    sendMideaACCommand(true, configdata.actemp, configdata.acmode,
+                       configdata.acfan);
+    request->send(200, "application/json", "{\"status\":\"ok\",\"power\":1}");
+  });
+  server.on("/onair", [](AsyncWebServerRequest *request) {
+    int temp = configdata.actemp;
+    int swing = configdata.acswing;
+    int timerMins = -1;
+
+    if (request->hasArg("temp")) {
+      temp = request->arg("temp").toInt();
+    } else if (request->hasArg("tmp")) {
+      temp = request->arg("tmp").toInt();
+    } else if (request->hasArg("t")) {
+      temp = request->arg("t").toInt();
+    }
+    if (request->hasArg("swing")) {
+      String sVal = request->arg("swing");
+      if (sVal == "1" || sVal == "on" || sVal == "true")
+        swing = 1;
+      else if (sVal == "0" || sVal == "off" || sVal == "false")
+        swing = 0;
+      else
+        swing = sVal.toInt();
+    } else if (request->hasArg("sw")) {
+      String sVal = request->arg("sw");
+      if (sVal == "1" || sVal == "on" || sVal == "true")
+        swing = 1;
+      else if (sVal == "0" || sVal == "off" || sVal == "false")
+        swing = 0;
+      else
+        swing = sVal.toInt();
+    } else if (request->hasArg("s")) {
+      String sVal = request->arg("s");
+      if (sVal == "1" || sVal == "on" || sVal == "true")
+        swing = 1;
+      else if (sVal == "0" || sVal == "off" || sVal == "false")
+        swing = 0;
+      else
+        swing = sVal.toInt();
+    }
+    if (request->hasArg("timer")) {
+      timerMins = request->arg("timer").toInt();
+    } else if (request->hasArg("offtimer")) {
+      timerMins = request->arg("offtimer").toInt();
+    } else if (request->hasArg("timerof")) {
+      timerMins = request->arg("timerof").toInt();
+    } else if (request->hasArg("tmr")) {
+      timerMins = request->arg("tmr").toInt();
+    } else if (request->hasArg("tm")) {
+      timerMins = request->arg("tm").toInt();
+    }
+
+    sendMideaACCommand(true, temp, configdata.acmode, configdata.acfan, swing,
+                       timerMins);
+
+    String resp = "{\"status\":\"ok\",\"power\":1,\"temp\":" + String(temp) +
+                  ",\"swing\":" + String(configdata.acswing) +
+                  ",\"timer\":" + String(configdata.actimer) + "}";
+    request->send(200, "application/json", resp);
+  });
+
+  server.on("/ac/off", [](AsyncWebServerRequest *request) {
+    sendMideaACCommand(false, configdata.actemp, configdata.acmode,
+                       configdata.acfan);
+    request->send(200, "application/json", "{\"status\":\"ok\",\"power\":0}");
+  });
+  server.on("/offair", [](AsyncWebServerRequest *request) {
+    sendMideaACCommand(false, configdata.actemp, configdata.acmode,
+                       configdata.acfan);
+    request->send(200, "application/json", "{\"status\":\"ok\",\"power\":0}");
+  });
   server.begin(); // เปิด TCP Server
   Serial.println("Server started");
   if (oledok) {
@@ -2594,6 +2897,9 @@ void setstanalonehttp() {
   });
 
   server.on("/setconfigwww", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send_P(200, "text/html", configfile_html);
+  });
+  server.on("/setwwwconfig", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", configfile_html);
   });
   server.on("/configdesc.json", HTTP_GET, [](AsyncWebServerRequest *request) {

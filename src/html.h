@@ -583,6 +583,29 @@ function pollStatus(){
   x.onerror=setOffline;
   x.send();
 }
+function sendOnAir(){
+  var tmp = document.getElementById('ac_tmp').value || 25;
+  var timer = document.getElementById('ac_timer').value || 0;
+  var swing = document.getElementById('ac_swing').value || 0;
+  var url = '/onair?tmp=' + encodeURIComponent(tmp) + '&timer=' + encodeURIComponent(timer) + '&swing=' + encodeURIComponent(swing);
+  var msg = document.getElementById('ac_status_msg');
+  if(msg) msg.textContent = 'Sending ON AIR...';
+  fetch(url).then(function(r){ return r.json(); }).then(function(d){
+    if(msg) msg.textContent = 'ON AIR sent! Temp: ' + d.temp + '°C | Timer: ' + d.timer + 'm | Swing: ' + (d.swing ? 'ON' : 'OFF');
+  }).catch(function(e){
+    if(msg) msg.textContent = 'Error: ' + e;
+  });
+}
+function sendOffAir(){
+  var url = '/offair';
+  var msg = document.getElementById('ac_status_msg');
+  if(msg) msg.textContent = 'Sending OFF AIR...';
+  fetch(url).then(function(r){ return r.json(); }).then(function(d){
+    if(msg) msg.textContent = 'OFF AIR sent successfully!';
+  }).catch(function(e){
+    if(msg) msg.textContent = 'Error: ' + e;
+  });
+}
 function setOffline(){
   var b=document.getElementById('onlineBadge');
   if(b){b.className='badge offline';b.textContent='Offline';}
@@ -623,6 +646,27 @@ else initPage();
 </div>
 </section>
 <section class="panel config">
+<h2>Air Conditioner Control (Midea IR)</h2>
+<div class="toolbar" style="margin-top:0;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+  <div>
+    <label style="display:block;font-size:.65rem;color:#64748b;margin-bottom:4px">Target Temp (°C)</label>
+    <input id="ac_tmp" type="text" value="25" style="width:75px">
+  </div>
+  <div>
+    <label style="display:block;font-size:.65rem;color:#64748b;margin-bottom:4px">Off-Timer (Mins)</label>
+    <input id="ac_timer" type="text" value="0" placeholder="0=off" style="width:85px">
+  </div>
+  <div>
+    <label style="display:block;font-size:.65rem;color:#64748b;margin-bottom:4px">Swing</label>
+    <select id="ac_swing" style="padding:7px 10px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#e2e8f0;font-size:.78rem">
+      <option value="0">OFF</option>
+      <option value="1">ON</option>
+    </select>
+  </div>
+  <button class="btn" style="background:#10b981;color:#fff;padding:8px 16px" type="button" onclick="sendOnAir()">ON AIR</button>
+  <button class="btn" style="background:#ef4444;color:#fff;padding:8px 16px" type="button" onclick="sendOffAir()">OFF AIR</button>
+</div>
+<div id="ac_status_msg" style="margin-bottom:14px;font-size:.78rem;color:#38bdf8;font-family:Consolas,monospace"></div>
 <h2>System Configuration</h2>
 <div class="tbl-wrap">
 <table id="customers">
