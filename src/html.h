@@ -481,6 +481,14 @@ function importConfig(evt){
   reader.readAsText(file);
 }
 
+function triggerOTA(){
+  if(!confirm('Trigger Direct OTA update now?')) return;
+  fetch('/ota').then(function(r){ return r.json(); }).then(function(d){
+    alert('OTA triggered: ' + (d.message || 'Started'));
+  }).catch(function(e){
+    alert('OTA request failed: ' + e);
+  });
+}
 function loadConfigTable(){
   var rows=document.getElementById('cfgrows');
   if(!rows)return;
@@ -509,6 +517,18 @@ function fmtVal(v,unit){
   if(v===null||v===undefined||v==='')return '—';
   if(typeof v==='number'&&isNaN(v))return '—';
   return unit?(v+' '+unit):String(v);
+}
+function fmtUptime(sec){
+  sec=Number(sec)||0;
+  var d=Math.floor(sec/86400); sec%=86400;
+  var h=Math.floor(sec/3600); sec%=3600;
+  var m=Math.floor(sec/60); var s=sec%60;
+  var p=[];
+  if(d>0)p.push(d+'d');
+  if(h>0||d>0)p.push(h+'h');
+  if(m>0||h>0||d>0)p.push(m+'m');
+  p.push(s+'s');
+  return p.join(' ');
 }
 function buildTelemetry(){
   var g=document.getElementById('telGrid');
@@ -549,7 +569,7 @@ function updateStatus(o){
   var b=document.getElementById('onlineBadge');
   if(n)n.textContent=('name' in o&&o.name!=='')?o.name:(('description' in o)?o.description:'—');
   if(v&&'version' in o)v.textContent=o.version;
-  if(u&&'uptime' in o)u.textContent=o.uptime;
+  if(u&&'uptime' in o)u.textContent=fmtUptime(o.uptime);
   if(h&&'heap' in o)h.textContent=o.heap;
   if(b){b.className='badge online';b.textContent='Online';}
   var tel=[
@@ -569,7 +589,11 @@ function updateStatus(o){
   ];
   for(i=0;i<live.length;i++){
     el=document.getElementById('lv_'+live[i][0]);
-    if(el&&live[i][1] in o)el.textContent=String(o[live[i][1]]);
+    if(el&&live[i][1] in o){
+      var val=o[live[i][1]];
+      if(live[i][0]==='uptime')val=fmtUptime(val);
+      el.textContent=String(val);
+    }
   }
 }
 function pollStatus(){
@@ -634,7 +658,7 @@ else initPage();
 <div><label>UPTIME</label><span id="devUptime">—</span></div>
 <div><label>FREE HEAP</label><span id="devHeap">—</span></div>
 </div>
-<div class="navlinks"><a href="/">Status JSON</a><a href="/ping">Ping test</a></div>
+<div class="navlinks"><a href="/">Status JSON</a><a href="/ping">Ping test</a><a href="#" onclick="triggerOTA();return false;">Direct OTA</a></div>
 </header>
 <div class="main-grid">
 <section class="panel telemetry">
@@ -681,6 +705,7 @@ else initPage();
 <button class="btn btn-add" type="button" onClick="add()">+ Add</button>
 <button class="btn btn-add" type="button" onClick="exportConfig()">Export Config</button>
 <button class="btn btn-add" type="button" onClick="document.getElementById('importFile').click()">Import Config</button>
+<button class="btn btn-add" style="background:#7c3aed;color:#fff;" type="button" onClick="triggerOTA()">Direct OTA</button>
 <input type="file" id="importFile" style="display:none" accept=".json,.cfg,.txt" onChange="importConfig(event)">
 </div>
 <div class="footer-actions">

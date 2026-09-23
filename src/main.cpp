@@ -65,7 +65,7 @@ Htask *hservice = new Htask();
 // The serial connection to the GPS device
 PZEM004Tv30 pzem(&Serial);
 SoftwareSerial ss(RXPin, TXPin);
-const String version = "221";
+const String version = "222";
 boolean findsoinow = false;
 void findwetair();
 #define xs 40
@@ -1537,7 +1537,8 @@ void inden() {
   if (counttime > 0)
     counttime--;
 
-  if (!readdhtstate && canuseled && !configdata.haveir && (configdata.irledpin != b_led)) {
+  if (!readdhtstate && canuseled && !configdata.haveir &&
+      (configdata.irledpin != b_led)) {
     ledstatus = !digitalRead(b_led);
     digitalWrite(b_led, ledstatus);
   }
@@ -1988,10 +1989,15 @@ void setHttp() {
     request->send(200, "application/json", "{\"reset\":\"ok\"}");
     ESP.restart();
   });
+  server.on("/ota", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"OTA update triggered\"}");
+    ota();
+  });
+  server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"OTA update triggered\"}");
+    ota();
+  });
   //-------------------------------------------------------------------------------------------------------------------------
-  // server.on("/restart", reset);
-  // server.on("/setp", setValue2);
-  // server.on("/update", ota);
   // server.on("/timer", runtimer);
   server.on("/timer", HTTP_GET, [](AsyncWebServerRequest *request) {
     DynamicJsonDocument doc(jsonbuffersize);
@@ -2901,6 +2907,14 @@ void setstanalonehttp() {
   });
   server.on("/setwwwconfig", HTTP_GET, [](AsyncWebServerRequest *request) {
     request->send_P(200, "text/html", configfile_html);
+  });
+  server.on("/ota", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"OTA update triggered\"}");
+    ota();
+  });
+  server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "application/json", "{\"status\":\"ok\",\"message\":\"OTA update triggered\"}");
+    ota();
   });
   server.on("/configdesc.json", HTTP_GET, [](AsyncWebServerRequest *request) {
     sendConfigDescJson(request);
